@@ -491,6 +491,7 @@ static void ftdi_execute_pathmove(struct jtag_command *cmd)
 					ftdi_jtag_mode);
 			bit_count = 0;
 		}
+
 	}
 	tap_set_end_state(tap_get_state());
 }
@@ -668,6 +669,7 @@ static void ftdi_execute_stableclocks(struct jtag_command *cmd)
 
 static void ftdi_execute_command(struct jtag_command *cmd)
 {
+	int i;
 	switch (cmd->type) {
 		case JTAG_RESET:
 #if BUILD_FTDI_OSCAN1 == 1
@@ -678,7 +680,8 @@ static void ftdi_execute_command(struct jtag_command *cmd)
 			ftdi_execute_runtest(cmd);
 			break;
 		case JTAG_TLR_RESET:
-			ftdi_execute_statemove(cmd);
+			for (i = 0; i < 5; i++)
+				ftdi_execute_statemove(cmd);
 #if BUILD_FTDI_OSCAN1 == 1
 			oscan1_reset_online_activate(); /* put the target back into OSCAN1 mode */
 #endif
@@ -804,6 +807,7 @@ static int ftdi_quit(void)
 }
 
 #if BUILD_FTDI_OSCAN1 == 1
+static int oscan1_ignore_tlr_rst;
 static void oscan1_mpsse_clock_data(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_offset, uint8_t *in,
 		     unsigned in_offset, unsigned length, uint8_t mode)
 {
@@ -846,12 +850,12 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 {
 	static const uint8_t zero;
 	static const uint8_t one = 1;
+	uint8_t old_tmsbit = 1;
 
 	LOG_DEBUG_IO("oscan1_mpsse_clock_tms_cs: %sout %d bits, tdi=%d", in ? "in" : "", length, tdi);
-
 	for (unsigned i = 0; i < length; i++) {
 		int bitnum;
-		uint8_t tmsbit;
+		uint8_t tmsbit = 1;
 		uint8_t tdibit;
 
 		/* OSCAN1 uses 3 separate clocks */
@@ -862,6 +866,9 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 		/* drive TMSC to desired TMS value */
 		bitnum = out_offset + i;
 		tmsbit = ((out[bitnum/8] >> (bitnum%8)) & 0x1);
+		if (tmsbit == 1 && old_tmsbit == 1 && oscan1_ignore_tlr_rst == 1)
+			continue;
+		old_tmsbit = tmsbit;
 
 		if (tdibit == tmsbit) {
 			/* Can squash into a single MPSSE command */
@@ -876,6 +883,7 @@ static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out,
 		/* drive another TCK without driving TMSC (TDO cycle) */
 		mpsse_clock_tms_cs(mpsse_ctx, &zero, 0, in, in_offset+i, 1, false, mode);
 	}
+	oscan1_ignore_tlr_rst = 0;
 }
 
 
@@ -894,6 +902,29 @@ static void oscan1_set_tck_tms_tdi(struct signal *tck, char tckvalue, struct sig
 	ftdi_set_signal(tck, tckvalue);
 }
 
+static void oscan1_run_sequence(uint32_t *sequence, size_t size)
+{
+	struct signal *tck = find_signal_by_name("TCK");
+	struct signal *tdi = find_signal_by_name("TDI");
+	struct signal *tms = find_signal_by_name("TMS");
+	struct signal *tdo = find_signal_by_name("TDO");
+
+	uint16_t tdovalue;
+
+	int i, j;
+
+	for (i = 0; i < size; i += 2) {
+		uint32_t val = sequence[i];
+		uint32_t cnt = sequence[i + 1];
+		for (j = 0; j < cnt; j++) {
+			oscan1_set_tck_tms_tdi(tck, '0', tms, '1', tdi, val & 0x1 ? '1' : '0');
+			oscan1_set_tck_tms_tdi(tck, '1', tms, '1', tdi, val & 0x1 ? '1' : '0');
+			val >>= 1;
+		}
+	}
+	ftdi_get_signal(tdo, &tdovalue);
+}
+
 static void oscan1_reset_online_activate(void)
 {
 	/* After TAP reset, the OSCAN1-to-JTAG adapter is in offline and
@@ -905,12 +936,12 @@ static void oscan1_reset_online_activate(void)
 	struct signal *tms = find_signal_by_name("TMS");
 	struct signal *tdo = find_signal_by_name("TDO");
 	uint16_t tdovalue;
-
 	static const struct {
 	  int8_t tck;
 	  int8_t tms;
 	  int8_t tdi;
 	} sequence[] = {
+
 	  /* TCK=0, TMS=1, TDI=0 (drive TMSC to 0 baseline) */
 	  {'0', '1', '0'},
 
@@ -1016,8 +1047,6 @@ static void oscan1_reset_online_activate(void)
 	  /* TCK=1, TMS=1, TDI=0 (rising edge TCK... CP bit3==0) */
 	  {'1', '1', '0'},
 	};
-
-
 	if (!oscan1_mode)
 		return;
 
@@ -1041,10 +1070,47 @@ static void oscan1_reset_online_activate(void)
 		LOG_ERROR("Can't run cJTAG online/activate escape sequences: TDO signal is not defined");
 		return;
 	}
-
 	/* Send the sequence to the adapter */
-	for (size_t i = 0; i < sizeof(sequence)/sizeof(sequence[0]); i++)
-		oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
+	uint32_t tms_sequence[] = {
+		0xFFFFFFFF, 3, /* TLR-RST */
+		0x1A, 5, /* ZBS #1 */
+		0x0D, 4, /* ZBS #2 */
+		0x19, 5, /* LOCK */
+		0x61, 7, /* CMD2-3 SCNFMT */
+		0x1801, 14, /* CMD2-9 OSCAN1 */
+		0x0, 4,  /* CP */
+
+		/* OScan 1 mode on from this time*/
+		0x00000010, 32,
+		0x00000120, 13, /* CMD2-9 */
+
+		/* 0x00090010, 24,  CMD2-2 */
+		0x10, 9,
+		/* 0x00, 6, CNFG0 */
+		0x12, 9, /* CMD2 - 0 */
+
+		0x10, 12 /* CR-Scan SDR */
+	};
+	uint32_t to_normal_seq[] = {
+		0x12, 9, /* TO RTI */
+		0x00, 4, /* CP */
+		0x12090, 21  /* ZBS IR, EXIT */
+	};
+	uint8_t check_out[8] = {0x00};
+
+	oscan1_ignore_tlr_rst = 0;
+	oscan1_run_sequence(tms_sequence, sizeof(tms_sequence)/sizeof(tms_sequence[0]));
+
+	/* Now in SDR */
+	oscan1_mpsse_clock_data(mpsse_ctx, NULL, 0, check_out, 0, 32, ftdi_jtag_mode);
+	oscan1_run_sequence(to_normal_seq, sizeof(to_normal_seq)/sizeof(to_normal_seq[0]));
+
+	if (check_out[0] != 0x9) {
+		LOG_INFO("hbird_debugger: This TAP's version is too old, trying use async sequence to handshake..");
+		for (size_t i = 0; i < sizeof(sequence)/sizeof(sequence[0]); i++)
+			oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
+	} else
+		oscan1_ignore_tlr_rst = 1;
 
 	ftdi_get_signal(tdo, &tdovalue);  /* Just to force a flush */
 }
