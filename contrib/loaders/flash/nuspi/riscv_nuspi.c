@@ -92,26 +92,18 @@
 #define NUSPI_ENDIAN_LSB			(1)
 
 /* Timeouts we use, in number of status checks. */
-#define TIMEOUT						(1000)
+#define TIMEOUT						(2000)
 
 #define NUSPI_FLAGS_32B_DAT			(1 << 0)
 
 /* #define DEBUG to make the return error codes provide enough information to
  * reconstruct the stack from where the error occurred. This is not enabled
  * usually to reduce the program size. */
-#ifdef DEBUG
 #define ERROR_STACK(x)				(x)
 #define ERROR_NUSPI_TXWM_WAIT		(0x10)
 #define ERROR_NUSPI_TX				(0x100)
 #define ERROR_NUSPI_RX				(0x1000)
 #define ERROR_NUSPI_WIP				(0x50000)
-#else
-#define ERROR_STACK(x)				(0)
-#define ERROR_NUSPI_TXWM_WAIT		(1)
-#define ERROR_NUSPI_TX				(1)
-#define ERROR_NUSPI_RX				(1)
-#define ERROR_NUSPI_WIP				(1)
-#endif
 
 #define ERROR_OK					(0)
 

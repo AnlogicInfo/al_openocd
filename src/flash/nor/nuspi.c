@@ -116,6 +116,7 @@
 #define SPIFLASH_EXIT_4BYTE			(0xE9)
 #define SPIFLASH_ENABLE_RESET		(0x66)
 #define SPIFLASH_RESET_DEVICE		(0x99)
+#define SPIFLASH_WRITE_STATUS1		(0x01)
 
 #define NUSPI_CSMODE_AUTO			(0)
 #define NUSPI_CSMODE_HOLD			(2)
@@ -370,10 +371,29 @@ static int nuspi_wip(struct flash_bank *bank, int timeout)
 
 static int nuspi_reset(struct flash_bank *bank)
 {
-	uint32_t temp;
+	/* Clear Rx FIFO */
+	uint32_t value;
+	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
+	if(nuspi_info->nuspi_flags & NUSPI_FLAGS_32B_DAT) {
+		while (1) {
+			if (nuspi_read_reg(bank, &value, NUSPI_REG_STATUS) != ERROR_OK)
+				return ERROR_FAIL;
+			if (value & NUSPI_STAT_RXEMPTY)
+				break;
+			if (nuspi_read_reg(bank, &value, NUSPI_REG_RXDATA) != ERROR_OK)
+				return ERROR_FAIL;
+		}
+	} else {
+		while (1) {
+			if (nuspi_read_reg(bank, &value, NUSPI_REG_RXDATA) != ERROR_OK)
+				return ERROR_FAIL;
+			if (value >> 31)
+				break;
+		}
+	}
 	if (nuspi_write_reg(bank, NUSPI_REG_SCKMODE, 0x0) != ERROR_OK)
 		return ERROR_FAIL;
-	if (nuspi_write_reg(bank, NUSPI_REG_FORCE, 0x1) != ERROR_OK)
+	if (nuspi_write_reg(bank, NUSPI_REG_FORCE, 0x3) != ERROR_OK)
 		return ERROR_FAIL;
 	if (nuspi_write_reg(bank, NUSPI_REG_FCTRL, 0x0) != ERROR_OK)
 		return ERROR_FAIL;
@@ -383,20 +403,28 @@ static int nuspi_reset(struct flash_bank *bank)
 		return ERROR_FAIL;
 	if (nuspi_write_reg(bank, NUSPI_REG_RXEDGE, 0x0) != ERROR_OK)
 		return ERROR_FAIL;
+	return ERROR_OK;
+}
 
+static int nuspi_set_xip_read_cmd(struct flash_bank *bank)
+{
+	uint32_t temp;
+	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 	if (nuspi_read_reg(bank, &temp, NUSPI_REG_FFMT) != ERROR_OK)
 		return ERROR_FAIL;
 	temp &= ~(0x7 << 1);
 	temp &= ~(0xF << 4);
 	temp &= ~(0xFF << 16);
+	temp |= NUSPI_INSN_PAD_CNT(0);
 	if (bank->size  > 0x1000000) {
 		temp |= NUSPI_INSN_ADDR_LEN(4);
-		temp |= NUSPI_INSN_PAD_CNT(0);
-		temp |= NUSPI_INSN_CMD_CODE(SPIFLASH_4BYTE_FAST_READ);
 	} else {
 		temp |= NUSPI_INSN_ADDR_LEN(3);
-		temp |= NUSPI_INSN_PAD_CNT(0);
-		temp |= NUSPI_INSN_CMD_CODE(SPIFLASH_3BYTE_FAST_READ);
+	}
+	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+		temp |= NUSPI_INSN_CMD_CODE(SPIFLASH_4BYTE_FAST_READ);
+	} else {
+		temp |= NUSPI_INSN_CMD_CODE(nuspi_info->dev->read_cmd);
 	}
 	return nuspi_write_reg(bank, NUSPI_REG_FFMT, temp);
 }
@@ -434,7 +462,18 @@ static int flash_reset(struct flash_bank *bank)
 	if (nuspi_wip(bank, NUSPI_MAX_TIMEOUT) != ERROR_OK)
 		return ERROR_FAIL;
 
-	//delay 1ms
+	//unlock protect
+	/* Send SPI command "01h" */
+	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
+		return ERROR_FAIL;
+
+	nuspi_tx(bank, SPIFLASH_WRITE_STATUS1);
+	nuspi_tx(bank, 0x00);
+	if (nuspi_txwm_wait(bank) != ERROR_OK)
+		return ERROR_FAIL;
+
+	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
+		return ERROR_FAIL;
 
 	return ERROR_OK;
 }
@@ -449,21 +488,16 @@ static int nuspi_enter_4byte_address_mode(struct flash_bank *bank)
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	if (nuspi_reset(bank) != ERROR_OK)
+	/* Send SPI command "enter 4byte" */
+	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
 		return ERROR_FAIL;
 
-	if (bank->size  > 0x1000000) {
-		/* Send SPI command "enter 4byte" */
-		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
-			return ERROR_FAIL;
+	retval = nuspi_tx(bank, SPIFLASH_ENTER_4BYTE);
+	if (retval != ERROR_OK)
+		return retval;
 
-		retval = nuspi_tx(bank, SPIFLASH_ENTER_4BYTE);
-		if (retval != ERROR_OK)
-			return retval;
-
-		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
-			return ERROR_FAIL;
-	}
+	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
+		return ERROR_FAIL;
 
 	return ERROR_OK;
 }
@@ -478,22 +512,16 @@ static int nuspi_exit_4byte_address_mode(struct flash_bank *bank)
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	if (bank->size  > 0x1000000) {
-		/* Send SPI command "enter 4byte" */
-		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
-			return ERROR_FAIL;
+	/* Send SPI command "enter 4byte" */
+	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
+		return ERROR_FAIL;
 
-		retval = nuspi_tx(bank, SPIFLASH_EXIT_4BYTE);
-		if (retval != ERROR_OK)
-			return retval;
-
-		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
-			return ERROR_FAIL;
-	}
-
-	retval = flash_reset(bank);
+	retval = nuspi_tx(bank, SPIFLASH_EXIT_4BYTE);
 	if (retval != ERROR_OK)
 		return retval;
+
+	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
+		return ERROR_FAIL;
 
 	return ERROR_OK;
 }
@@ -594,9 +622,11 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 	if (retval != ERROR_OK)
 		goto done;
 
-	retval = nuspi_enter_4byte_address_mode(bank);
-	if (retval != ERROR_OK)
-		return retval;
+	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+		retval = nuspi_enter_4byte_address_mode(bank);
+		if (retval != ERROR_OK)
+			return retval;
+	}
 
 	for (unsigned int sector = first; sector <= last; sector++) {
 		retval = nuspi_erase_sector(bank, sector);
@@ -848,14 +878,23 @@ err:
 		target_free_working_area(target, algorithm_wa);
 	}
 
-	if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
-		return ERROR_FAIL;
-
+	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+		if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
+			return ERROR_FAIL;
+	}
 	/* Switch to HW mode before return to prompt */
 	if (nuspi_enable_hw_mode(bank) != ERROR_OK)
 		return ERROR_FAIL;
 
 	return retval;
+}
+
+static int nuspi_read(struct flash_bank *bank, const uint8_t *buffer,
+		uint32_t offset, uint32_t count)
+{
+	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
+		return ERROR_FAIL;
+	return default_flash_read(bank, buffer, offset, count);
 }
 
 /* Return ID of flash device */
@@ -968,18 +1007,19 @@ static int nuspi_probe(struct flash_bank *bank)
 
 	for (int i = 0; i < 4; i++) {
 		if (nuspi_write_reg(bank, NUSPI_REG_SCKDIV, i) != ERROR_OK)
-			return ERROR_FAIL;
-
+			continue;
 		retval = nuspi_read_flash_id(bank, &id);
 		if (retval != ERROR_OK)
 			continue;
-
 		nuspi_info->dev = NULL;
-		for (const struct flash_device *p = flash_devices; p->name ; p++)
+		for (const struct flash_device *p = flash_devices; p->name ; p++) {
 			if (p->device_id == id) {
 				nuspi_info->dev = p;
 				break;
 			}
+		}
+		if (NULL != nuspi_info->dev)
+			break;
 	}
 
 	if (nuspi_enable_hw_mode(bank) != ERROR_OK)
@@ -1019,6 +1059,8 @@ static int nuspi_probe(struct flash_bank *bank)
 	}
 
 	bank->sectors = sectors;
+	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
+		return ERROR_FAIL;
 	nuspi_info->probed = true;
 	return ERROR_OK;
 }
@@ -1060,7 +1102,7 @@ const struct flash_driver nuspi_flash = {
 	.erase = nuspi_erase,
 	.protect = nuspi_protect,
 	.write = nuspi_write,
-	.read = default_flash_read,
+	.read = nuspi_read,
 	.probe = nuspi_probe,
 	.auto_probe = nuspi_auto_probe,
 	.erase_check = default_flash_blank_check,
