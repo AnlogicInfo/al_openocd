@@ -951,6 +951,16 @@ static int nuspi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 	return ERROR_OK;
 }
 
+static int gdb_flash_write_end_callback(struct target *target,
+										enum target_event event, void *priv)
+{
+	if (TARGET_EVENT_GDB_FLASH_WRITE_END == event)
+	{
+		if (nuspi_set_xip_read_cmd(priv) != ERROR_OK)
+			return ERROR_FAIL;
+	}
+}
+
 static int nuspi_probe(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
@@ -1004,6 +1014,8 @@ static int nuspi_probe(struct flash_bank *bank)
 
 	if (flash_reset(bank) != ERROR_OK)
 		return ERROR_FAIL;
+
+	target_register_event_callback(gdb_flash_write_end_callback, bank);
 
 	for (int i = 0; i < 4; i++) {
 		if (nuspi_write_reg(bank, NUSPI_REG_SCKDIV, i) != ERROR_OK)
