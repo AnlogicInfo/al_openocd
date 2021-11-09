@@ -137,6 +137,7 @@
 #define NUSPI_CMD_TIMEOUT			(100)
 #define NUSPI_PROBE_TIMEOUT			(100)
 #define NUSPI_MAX_TIMEOUT			(3000)
+#define NUSPI_SIM_TIMEOUT			(0xFFFFF)
 
 #define NUSPI_FLAGS_32B_DAT 		(1 << 0)
 
@@ -146,6 +147,7 @@ struct nuspi_flash_bank {
 	bool probed;
 	target_addr_t ctrl_base;
 	const struct flash_device *dev;
+	bool simulation;
 };
 
 struct nuspi_target {
@@ -185,6 +187,13 @@ FLASH_BANK_COMMAND_HANDLER(nuspi_flash_bank_command)
 		COMMAND_PARSE_ADDRESS(CMD_ARGV[6], nuspi_info->ctrl_base);
 		LOG_DEBUG("ASSUMING NUSPI device at ctrl_base = " TARGET_ADDR_FMT,
 				nuspi_info->ctrl_base);
+	}
+	nuspi_info->simulation = false;
+	if (CMD_ARGC >= 8) {
+		if(strcmp(CMD_ARGV[7], "simulation") == 0) {
+			nuspi_info->simulation = true;
+			LOG_DEBUG("Nuspi Simulation Mode");
+		}
 	}
 
 	return ERROR_OK;
@@ -439,6 +448,7 @@ static int nuspi_set_xip_read_cmd(struct flash_bank *bank)
 static int flash_reset(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
+	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -466,8 +476,13 @@ static int flash_reset(struct flash_bank *bank)
 	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
 		return ERROR_FAIL;
 
-	if (nuspi_wip(bank, NUSPI_MAX_TIMEOUT) != ERROR_OK)
-		return ERROR_FAIL;
+	if (nuspi_info->simulation) {
+		if (nuspi_wip(bank, NUSPI_SIM_TIMEOUT) != ERROR_OK)
+			return ERROR_FAIL;
+	} else {
+		if (nuspi_wip(bank, NUSPI_MAX_TIMEOUT) != ERROR_OK)
+			return ERROR_FAIL;
+	}
 
 	//unlock protect
 	/* Send SPI command "01h" */
@@ -571,7 +586,11 @@ static int nuspi_erase_sector(struct flash_bank *bank, int sector)
 	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
 		return ERROR_FAIL;
 
-	retval = nuspi_wip(bank, NUSPI_MAX_TIMEOUT);
+	if (nuspi_info->simulation) {
+		retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
+	} else {
+		retval = nuspi_wip(bank, NUSPI_MAX_TIMEOUT);
+	}
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -627,7 +646,11 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 		return ERROR_FAIL;
 
 	/* poll WIP */
-	retval = nuspi_wip(bank, NUSPI_MAX_TIMEOUT);
+	if (nuspi_info->simulation) {
+		retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
+	} else {
+		retval = nuspi_wip(bank, NUSPI_MAX_TIMEOUT);
+	}
 	if (retval != ERROR_OK)
 		goto done;
 
@@ -829,9 +852,15 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
 					nuspi_info->ctrl_base, page_size, data_wa->address, offset, cur_count,
 					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-			retval = target_run_algorithm(target, 0, NULL,
+			if (nuspi_info->simulation) {
+				retval = target_run_algorithm(target, 0, NULL,
+						ARRAY_SIZE(reg_params), reg_params,
+						algorithm_wa->address, 0, cur_count * NUSPI_SIM_TIMEOUT, NULL);
+			} else {
+				retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
 					algorithm_wa->address, 0, cur_count * 2, NULL);
+			}
 			if (retval != ERROR_OK) {
 				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 						algorithm_wa->address, retval);
@@ -857,7 +886,11 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 		nuspi_txwm_wait(bank);
 
 		/* poll WIP */
-		retval = nuspi_wip(bank, NUSPI_PROBE_TIMEOUT);
+		if (nuspi_info->simulation) {
+			retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
+		} else {
+			retval = nuspi_wip(bank, NUSPI_PROBE_TIMEOUT);
+		}
 		if (retval != ERROR_OK)
 			goto err;
 
@@ -913,6 +946,7 @@ static int nuspi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 	struct target *target = bank->target;
 	int retval = ERROR_OK;
 	int64_t endtime;
+	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -922,7 +956,11 @@ static int nuspi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 	nuspi_txwm_wait(bank);
 
 	/* poll WIP */
-	retval = nuspi_wip(bank, NUSPI_PROBE_TIMEOUT);
+	if (nuspi_info->simulation) {
+		retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
+	} else {
+		retval = nuspi_wip(bank, NUSPI_PROBE_TIMEOUT);
+	}
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -931,7 +969,11 @@ static int nuspi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 		return ERROR_FAIL;
 
 	nuspi_tx(bank, SPIFLASH_READ_ID);
-	endtime = timeval_ms() + NUSPI_PROBE_TIMEOUT;
+	if (nuspi_info->simulation) {
+		endtime = timeval_ms() + NUSPI_SIM_TIMEOUT;
+	} else {
+		endtime = timeval_ms() + NUSPI_PROBE_TIMEOUT;
+	}
 	do {
 		alive_sleep(1);
 		uint32_t status;
