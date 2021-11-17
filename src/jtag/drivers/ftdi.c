@@ -1047,8 +1047,12 @@ static void oscan1_reset_online_activate(void)
 	  /* TCK=1, TMS=1, TDI=0 (rising edge TCK... CP bit3==0) */
 	  {'1', '1', '0'},
 	};
-	if (!oscan1_mode)
-		return;
+	if (!oscan1_mode) {
+		/* Send a Escape Reset for Old TAP */
+		for (size_t i = 0; i < sizeof(sequence)/sizeof(sequence[0]); i++)
+			oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
+		goto flush;
+	}
 
 
 	if (!tck) {
@@ -1111,7 +1115,7 @@ static void oscan1_reset_online_activate(void)
 			oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
 	} else
 		oscan1_ignore_tlr_rst = 1;
-
+flush:
 	ftdi_get_signal(tdo, &tdovalue);  /* Just to force a flush */
 }
 
