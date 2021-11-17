@@ -1049,7 +1049,7 @@ static void oscan1_reset_online_activate(void)
 	};
 	if (!oscan1_mode) {
 		/* Send a Escape Reset for Old TAP */
-		for (size_t i = 0; i < sizeof(sequence)/sizeof(sequence[0]); i++)
+		for (size_t i = 0; i < 11; i++)
 			oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
 		goto flush;
 	}
