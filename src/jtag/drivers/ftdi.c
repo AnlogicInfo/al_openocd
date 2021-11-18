@@ -685,6 +685,8 @@ static void ftdi_execute_command(struct jtag_command *cmd)
 #if BUILD_FTDI_OSCAN1 == 1
 			oscan1_reset_online_activate(); /* put the target back into OSCAN1 mode */
 #endif
+			if (!oscan1_mode)
+				ftdi_execute_statemove(cmd);
 			break;
 		case JTAG_PATHMOVE:
 			ftdi_execute_pathmove(cmd);
@@ -1050,7 +1052,7 @@ static void oscan1_reset_online_activate(void)
 	if (!oscan1_mode) {
 		/* Send a Escape Reset for Old TAP */
 		for (size_t i = 0; i < 11; i++)
-			oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, sequence[i].tdi);
+			oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tdi, tdi, sequence[i].tms);
 		goto flush;
 	}
 
