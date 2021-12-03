@@ -66,7 +66,6 @@
 #define NUSPI_INSN_CMD_CODE(x)		(((x) & 0xff) << 16)
 #define NUSPI_INSN_PAD_CODE(x)		(((x) & 0xff) << 24)
 
-#define NUSPI_STAT_BUSY				(0x1 << 0)
 #define NUSPI_STAT_TXFULL			(0x1 << 4)
 #define NUSPI_STAT_RXEMPTY			(0x1 << 5)
 
@@ -259,19 +258,18 @@ static int nuspi_rx(volatile uint32_t *ctrl_base, uint8_t *out, uint32_t flags)
 /* Can set bits 19:16 in result. */
 static int nuspi_wip(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info)
 {
+	nuspi_set_dir(ctrl_base, NUSPI_DIR_RX);
+
 	nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD);
 
 	int result = nuspi_tx(ctrl_base, SPIFLASH_READ_STATUS, nuspi_info->flags);
 	if (result != ERROR_OK)
 		return result | ERROR_STACK(0x10000);
+	result = nuspi_rx(ctrl_base, NULL, nuspi_info->flags);
+	if (result != ERROR_OK)
+		return result | ERROR_STACK(0x20000);
+
 	unsigned timeout = TIMEOUT;
-	while (timeout--) {
-		if (!(nuspi_read_reg(ctrl_base, NUSPI_REG_STATUS) & NUSPI_STAT_BUSY)) {
-			break;
-		}
-	}
-	nuspi_set_dir(ctrl_base, NUSPI_DIR_RX);
-	timeout = TIMEOUT;
 	while (timeout--) {
 		result = nuspi_tx(ctrl_base, 0, nuspi_info->flags);
 		if (result != ERROR_OK)

@@ -106,7 +106,6 @@
 #define NUSPI_INSN_CMD_CODE(x)		(((x) & 0xff) << 16)
 #define NUSPI_INSN_PAD_CODE(x)		(((x) & 0xff) << 24)
 
-#define NUSPI_STAT_BUSY				(0x1 << 0)
 #define NUSPI_STAT_TXFULL			(0x1 << 4)
 #define NUSPI_STAT_RXEMPTY			(0x1 << 5)
 
@@ -350,22 +349,15 @@ static int nuspi_wip(struct flash_bank *bank, int timeout)
 {
 	int64_t endtime;
 
+	nuspi_set_dir(bank, NUSPI_DIR_RX);
+
 	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
 		return ERROR_FAIL;
 	endtime = timeval_ms() + timeout;
 
 	nuspi_tx(bank, SPIFLASH_READ_STATUS);
-	do {
-		alive_sleep(1);
-		uint32_t status;
-		if (nuspi_read_reg(bank, &status, NUSPI_REG_STATUS) != ERROR_OK)
-			return ERROR_FAIL;
-		if (!(status & NUSPI_STAT_BUSY))
-			break;
-	} while (timeval_ms() < endtime);
-
-	endtime = timeval_ms() + timeout;
-	nuspi_set_dir(bank, NUSPI_DIR_RX);
+	if (nuspi_rx(bank, NULL) != ERROR_OK)
+		return ERROR_FAIL;
 	do {
 		alive_sleep(1);
 		nuspi_tx(bank, 0);
@@ -380,7 +372,6 @@ static int nuspi_wip(struct flash_bank *bank, int timeout)
 		}
 	} while (timeval_ms() < endtime);
 
-	nuspi_set_dir(bank, NUSPI_DIR_TX);
 	LOG_ERROR("timeout");
 	return ERROR_FAIL;
 }
@@ -855,7 +846,7 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 			if (nuspi_info->simulation) {
 				retval = target_run_algorithm(target, 0, NULL,
 						ARRAY_SIZE(reg_params), reg_params,
-						algorithm_wa->address, 0, cur_count * NUSPI_SIM_TIMEOUT, NULL);
+						algorithm_wa->address, 0, cur_count * 4, NULL);
 			} else {
 				retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
@@ -945,7 +936,6 @@ static int nuspi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 {
 	struct target *target = bank->target;
 	int retval = ERROR_OK;
-	int64_t endtime;
 	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 
 	if (target->state != TARGET_HALTED) {
@@ -964,26 +954,13 @@ static int nuspi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 	if (retval != ERROR_OK)
 		return retval;
 
+	nuspi_set_dir(bank, NUSPI_DIR_RX);
+
 	/* Send SPI command "read ID" */
 	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
 		return ERROR_FAIL;
 
 	nuspi_tx(bank, SPIFLASH_READ_ID);
-	if (nuspi_info->simulation) {
-		endtime = timeval_ms() + NUSPI_SIM_TIMEOUT;
-	} else {
-		endtime = timeval_ms() + NUSPI_PROBE_TIMEOUT;
-	}
-	do {
-		alive_sleep(1);
-		uint32_t status;
-		if (nuspi_read_reg(bank, &status, NUSPI_REG_STATUS) != ERROR_OK)
-			return ERROR_FAIL;
-		if (!(status & NUSPI_STAT_BUSY))
-			break;
-	} while (timeval_ms() < endtime);
-
-	nuspi_set_dir(bank, NUSPI_DIR_RX);
 	/* Send dummy bytes to actually read the ID.*/
 	nuspi_tx(bank, 0);
 	nuspi_tx(bank, 0);
@@ -991,6 +968,8 @@ static int nuspi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 
 	/* read ID from Receive Register */
 	*id = 0;
+	if (nuspi_rx(bank, NULL) != ERROR_OK)
+		return ERROR_FAIL;
 	uint8_t rx;
 	if (nuspi_rx(bank, &rx) != ERROR_OK)
 		return ERROR_FAIL;
@@ -1080,10 +1059,8 @@ static int nuspi_probe(struct flash_bank *bank)
 		if (nuspi_write_reg(bank, NUSPI_REG_SCKDIV, i) != ERROR_OK)
 			continue;
 		retval = nuspi_read_flash_id(bank, &id);
-		if (retval != ERROR_OK) {
-			nuspi_set_dir(bank, NUSPI_DIR_TX);
+		if (retval != ERROR_OK)
 			continue;
-		}
 		nuspi_info->dev = NULL;
 		for (const struct flash_device *p = flash_devices; p->name ; p++) {
 			if (p->device_id == id) {
