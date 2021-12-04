@@ -66,6 +66,7 @@
 #define NUSPI_INSN_CMD_CODE(x)		(((x) & 0xff) << 16)
 #define NUSPI_INSN_PAD_CODE(x)		(((x) & 0xff) << 24)
 
+#define NUSPI_STAT_BUSY				(0x1 << 0)
 #define NUSPI_STAT_TXFULL			(0x1 << 4)
 #define NUSPI_STAT_RXEMPTY			(0x1 << 5)
 
@@ -114,7 +115,7 @@ typedef struct
 } nuspi_info_t;
 
 static uint32_t nuspi_read_reg(volatile uint32_t *ctrl_base, uint32_t address);
-static int nuspi_txwm_wait(volatile uint32_t *ctrl_base);
+static int nuspi_txwm_wait(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
 static int nuspi_wip(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
 static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
 		const uint8_t *buffer, uint32_t offset, uint32_t len,
@@ -136,7 +137,7 @@ int flash_nuspi(volatile uint32_t *ctrl_base, uint32_t page_size,
 	if(nuspi_read_reg(ctrl_base, NUSPI_REG_VERSION) >= 0x00010100)
 		nuspi_info.flags |= NUSPI_FLAGS_32B_DAT;
 
-	result = nuspi_txwm_wait(ctrl_base);
+	result = nuspi_txwm_wait(ctrl_base, &nuspi_info);
 	if (result != ERROR_OK)
 		return result | ERROR_STACK(0x1);
 
@@ -186,14 +187,22 @@ static void nuspi_write_reg(volatile uint32_t *ctrl_base, uint32_t address, uint
 }
 
 /* Can set bits 7:4 in result. */
-static int nuspi_txwm_wait(volatile uint32_t *ctrl_base)
+static int nuspi_txwm_wait(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info)
 {
 	unsigned timeout = TIMEOUT;
 
-	while (timeout--) {
-		uint32_t ip = nuspi_read_reg(ctrl_base, NUSPI_REG_IP);
-		if (ip & NUSPI_IP_TXWM)
-			return ERROR_OK;
+	if (nuspi_info->flags & NUSPI_FLAGS_32B_DAT) {
+		while (timeout--) {
+			uint32_t status = nuspi_read_reg(ctrl_base, NUSPI_REG_STATUS);
+			if (0 == (status & NUSPI_STAT_BUSY))
+				return ERROR_OK;
+		}
+	} else {
+		while (timeout--) {
+			uint32_t ip = nuspi_read_reg(ctrl_base, NUSPI_REG_IP);
+			if (ip & NUSPI_IP_TXWM)
+				return ERROR_OK;
+		}
 	}
 
 	return ERROR_NUSPI_TXWM_WAIT;
@@ -296,7 +305,7 @@ static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
 	int result = nuspi_tx(ctrl_base, SPIFLASH_WRITE_ENABLE, nuspi_info->flags);
 	if (result != ERROR_OK)
 		return result | ERROR_STACK(0x100000);
-	result = nuspi_txwm_wait(ctrl_base);
+	result = nuspi_txwm_wait(ctrl_base, nuspi_info);
 	if (result != ERROR_OK)
 		return result | ERROR_STACK(0x200000);
 
@@ -327,7 +336,7 @@ static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
 			return result | ERROR_STACK(0x700000);
 	}
 
-	result = nuspi_txwm_wait(ctrl_base);
+	result = nuspi_txwm_wait(ctrl_base, nuspi_info);
 	if (result != ERROR_OK)
 		return result | ERROR_STACK(0x800000);
 

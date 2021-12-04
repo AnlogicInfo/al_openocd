@@ -106,6 +106,7 @@
 #define NUSPI_INSN_CMD_CODE(x)		(((x) & 0xff) << 16)
 #define NUSPI_INSN_PAD_CODE(x)		(((x) & 0xff) << 24)
 
+#define NUSPI_STAT_BUSY				(0x1 << 0)
 #define NUSPI_STAT_TXFULL			(0x1 << 4)
 #define NUSPI_STAT_RXEMPTY			(0x1 << 5)
 
@@ -255,17 +256,32 @@ static int nuspi_set_dir(struct flash_bank *bank, bool dir)
 static int nuspi_txwm_wait(struct flash_bank *bank)
 {
 	int64_t start = timeval_ms();
-
-	while (1) {
-		uint32_t ip;
-		if (nuspi_read_reg(bank, &ip, NUSPI_REG_IP) != ERROR_OK)
-			return ERROR_FAIL;
-		if (ip & NUSPI_IP_TXWM)
-			break;
-		int64_t now = timeval_ms();
-		if (now - start > 1000) {
-			LOG_ERROR("ip.txwm didn't get set.");
-			return ERROR_TARGET_TIMEOUT;
+	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
+	if(nuspi_info->nuspi_flags & NUSPI_FLAGS_32B_DAT) {
+		while (1) {
+			uint32_t status;
+			if (nuspi_read_reg(bank, &status, NUSPI_REG_STATUS) != ERROR_OK)
+				return ERROR_FAIL;
+			if (0 == (status & NUSPI_STAT_BUSY))
+				break;
+			int64_t now = timeval_ms();
+			if (now - start > 1000) {
+				LOG_ERROR("ip.txwm didn't get set.");
+				return ERROR_TARGET_TIMEOUT;
+			}
+		}
+	} else {
+		while (1) {
+			uint32_t ip;
+			if (nuspi_read_reg(bank, &ip, NUSPI_REG_IP) != ERROR_OK)
+				return ERROR_FAIL;
+			if (ip & NUSPI_IP_TXWM)
+				break;
+			int64_t now = timeval_ms();
+			if (now - start > 1000) {
+				LOG_ERROR("ip.txwm didn't get set.");
+				return ERROR_TARGET_TIMEOUT;
+			}
 		}
 	}
 
