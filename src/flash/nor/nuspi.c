@@ -137,7 +137,7 @@
 #define NUSPI_CMD_TIMEOUT			(100)
 #define NUSPI_PROBE_TIMEOUT			(100)
 #define NUSPI_MAX_TIMEOUT			(3000)
-#define NUSPI_SIM_TIMEOUT			(0xFFFFF)
+#define NUSPI_SIM_TIMEOUT			(0x7FFFFFFF)
 
 #define NUSPI_FLAGS_32B_DAT 		(1 << 0)
 
@@ -862,7 +862,7 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 			if (nuspi_info->simulation) {
 				retval = target_run_algorithm(target, 0, NULL,
 						ARRAY_SIZE(reg_params), reg_params,
-						algorithm_wa->address, 0, cur_count * 4, NULL);
+						algorithm_wa->address, 0, NUSPI_SIM_TIMEOUT, NULL);
 			} else {
 				retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
