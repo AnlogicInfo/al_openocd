@@ -913,7 +913,7 @@ static void oscan1_run_sequence(uint32_t *sequence, size_t size)
 
 	uint16_t tdovalue;
 
-	int i, j;
+	uint32_t i, j;
 
 	for (i = 0; i < size; i += 2) {
 		uint32_t val = sequence[i];

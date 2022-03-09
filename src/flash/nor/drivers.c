@@ -173,7 +173,7 @@ static const struct flash_driver * const flash_drivers[] = {
 
 const struct flash_driver *flash_driver_find_by_name(const char *name)
 {
-	char *flash_name = name;
+	char *flash_name = (char*)name;
 	if (strcmp(flash_name, "fespi") == 0) {
 		flash_name = "nuspi";
 	}

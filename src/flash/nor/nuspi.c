@@ -162,7 +162,7 @@ static const struct nuspi_target target_devices[] = {
 	/* name,   tap_idcode, ctrl_base */
 	{ "Freedom E310-G000 SPI Flash", 0x10e31913, 0xFFFFFFFF, 0x10014000 },
 	{ "Nuclei SoC SPI Flash", 0x00000a6d, 0xFFF, 0x10014000},
-	{ NULL, 0, 0 }
+	{ NULL, 0, 0, 0}
 };
 
 FLASH_BANK_COMMAND_HANDLER(nuspi_flash_bank_command)
