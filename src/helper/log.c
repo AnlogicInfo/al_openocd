@@ -94,21 +94,10 @@ static void log_puts(enum log_levels level,
 	char *f;
 
 	if (!log_output) {
-		/* log_init() not called yet; print on stderr only on LOG_LVL_ERROR level */
-		FILE *outstream = stdout;
-		if (level == LOG_LVL_ERROR)
-			outstream = stderr;
-		fputs(string, outstream);
-		fflush(outstream);
+		/* log_init() not called yet; print on stderr */
+		fputs(string, stderr);
+		fflush(stderr);
 		return;
-	} else {
-		if (log_output == stdout || log_output == stderr) {
-			if (level == LOG_LVL_ERROR) {
-				log_output = stderr;
-			} else {
-				log_output = stdout;
-			}
-		}
 	}
 
 	if (level == LOG_LVL_OUTPUT) {
@@ -241,11 +230,11 @@ COMMAND_HANDLER(handle_debug_level_command)
 COMMAND_HANDLER(handle_log_output_command)
 {
 	if (CMD_ARGC == 0 || (CMD_ARGC == 1 && strcmp(CMD_ARGV[0], "default") == 0)) {
-		if (log_output != stdout && log_output != stderr && log_output != NULL) {
+		if (log_output != stderr && log_output != NULL) {
 			/* Close previous log file, if it was open and wasn't stderr. */
 			fclose(log_output);
 		}
-		log_output = stdout;
+		log_output = stderr;
 		LOG_DEBUG("set log_output to default");
 		return ERROR_OK;
 	}
@@ -255,8 +244,8 @@ COMMAND_HANDLER(handle_log_output_command)
 			LOG_ERROR("failed to open output log '%s'", CMD_ARGV[0]);
 			return ERROR_FAIL;
 		}
-		if (log_output != stdout && log_output != stderr && log_output != NULL) {
-			/* Close previous log file, if it was open and wasn't stderr or stdout. */
+		if (log_output != stderr && log_output != NULL) {
+			/* Close previous log file, if it was open and wasn't stderr. */
 			fclose(log_output);
 		}
 		log_output = file;
@@ -272,7 +261,7 @@ static const struct command_registration log_command_handlers[] = {
 		.name = "log_output",
 		.handler = handle_log_output_command,
 		.mode = COMMAND_ANY,
-		.help = "redirect logging to a file (default: stdout/stderr)",
+		.help = "redirect logging to a file (default: stderr)",
 		.usage = "[file_name | \"default\"]",
 	},
 	{
@@ -308,7 +297,7 @@ void log_init(void)
 	}
 
 	if (log_output == NULL)
-		log_output = stdout;
+		log_output = stderr;
 
 	start = last_time = timeval_ms();
 }
