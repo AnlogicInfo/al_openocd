@@ -42,6 +42,7 @@ struct flash_bank_msg {
 	uint8_t *buffer;
 	uint32_t param_0;
 	uint32_t param_1;
+	bool simulation;
 };
 
 static int custom_run_algorithm(struct flash_bank *bank)
@@ -124,9 +125,15 @@ static int custom_run_algorithm(struct flash_bank *bank)
 			buf_set_u64(reg_params[2].value, 0, xlen, first_addr);
 			buf_set_u64(reg_params[3].value, 0, xlen, end_addr);
 			buf_set_u64(reg_params[4].value, 0, xlen, 0);
-			retval = target_run_algorithm(target, 0, NULL,
-					ARRAY_SIZE(reg_params), reg_params,
-					algorithm_wa->address, 0, 0x7FFFFFFF, NULL);
+			if (bank_msg->simulation) {
+				retval = target_run_algorithm(target, 0, NULL,
+						ARRAY_SIZE(reg_params), reg_params,
+						algorithm_wa->address, 0, 0x7FFFFFFF, NULL);
+			} else {
+				retval = target_run_algorithm(target, 0, NULL,
+						ARRAY_SIZE(reg_params), reg_params,
+						algorithm_wa->address, 0, (end_addr - first_addr) * 2, NULL);
+			}
 			if (retval != ERROR_OK) {
 				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 						algorithm_wa->address, retval);
@@ -157,9 +164,15 @@ static int custom_run_algorithm(struct flash_bank *bank)
 							cur_count, data_wa->address, retval);
 					goto err;
 				}
-				retval = target_run_algorithm(target, 0, NULL,
+				if (bank_msg->simulation) {
+					retval = target_run_algorithm(target, 0, NULL,
 						ARRAY_SIZE(reg_params), reg_params,
 						algorithm_wa->address, 0, 0x7FFFFFFF, NULL);
+				} else {
+					retval = target_run_algorithm(target, 0, NULL,
+							ARRAY_SIZE(reg_params), reg_params,
+							algorithm_wa->address, 0, cur_count * 2, NULL);
+				}
 				if (retval != ERROR_OK) {
 					LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 							algorithm_wa->address, retval);
@@ -188,9 +201,15 @@ static int custom_run_algorithm(struct flash_bank *bank)
 				buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
 				buf_set_u64(reg_params[3].value, 0, xlen, offset);
 				buf_set_u64(reg_params[4].value, 0, xlen, cur_count);
-				retval = target_run_algorithm(target, 0, NULL,
+				if (bank_msg->simulation) {
+					retval = target_run_algorithm(target, 0, NULL,
 						ARRAY_SIZE(reg_params), reg_params,
 						algorithm_wa->address, 0, 0x7FFFFFFF, NULL);
+				} else {
+					retval = target_run_algorithm(target, 0, NULL,
+							ARRAY_SIZE(reg_params), reg_params,
+							algorithm_wa->address, 0, cur_count * 2, NULL);
+				}
 				if (retval != ERROR_OK) {
 					LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 							algorithm_wa->address, retval);
@@ -220,9 +239,15 @@ static int custom_run_algorithm(struct flash_bank *bank)
 			buf_set_u64(reg_params[2].value, 0, xlen, 0);
 			buf_set_u64(reg_params[3].value, 0, xlen, 0);
 			buf_set_u64(reg_params[4].value, 0, xlen, 0);
-			retval = target_run_algorithm(target, 0, NULL,
+			if (bank_msg->simulation) {
+				retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
 					algorithm_wa->address, 0, 0x7FFFFFFF, NULL);
+			} else {
+				retval = target_run_algorithm(target, 0, NULL,
+						ARRAY_SIZE(reg_params), reg_params,
+						algorithm_wa->address, 0, 10000, NULL);
+			}
 			if (retval != ERROR_OK) {
 				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 						algorithm_wa->address, retval);
@@ -254,7 +279,7 @@ FLASH_BANK_COMMAND_HANDLER(custom_flash_bank_command)
 
 	if (CMD_ARGC < 8) {
 		LOG_ERROR("Parameter error:");
-		LOG_ERROR("flash bank $FLASHNAME custom 0x20000000 0 0 0 $TARGETNAME 0x10014000 ~/work/riscv.bin");
+		LOG_ERROR("flash bank $FLASHNAME custom 0x20000000 0 0 0 $TARGETNAME 0x10014000 ~/work/riscv.bin [simulation]");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -278,6 +303,13 @@ FLASH_BANK_COMMAND_HANDLER(custom_flash_bank_command)
 			bank_msg->ctrl_base);
 	bank_msg->loader_path = malloc(strlen(CMD_ARGV[7]));
 	strcpy((char*)bank_msg->loader_path, CMD_ARGV[7]);
+	bank_msg->simulation = false;
+	if (CMD_ARGC >= 9) {
+		if(strcmp(CMD_ARGV[8], "simulation") == 0) {
+			bank_msg->simulation = true;
+			LOG_DEBUG("Custom Simulation Mode");
+		}
+	}
 
 	return ERROR_OK;
 }
