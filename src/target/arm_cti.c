@@ -136,6 +136,8 @@ int arm_cti_write_reg(struct arm_cti *self, unsigned int reg, uint32_t value)
 {
 	struct adiv5_ap *ap = dap_ap(self->spot.dap, self->spot.ap_num);
 
+	LOG_DEBUG("cti wr addr %x value %x",self->spot.base + reg, value);
+
 	return mem_ap_write_atomic_u32(ap, self->spot.base + reg, value);
 }
 

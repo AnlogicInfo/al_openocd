@@ -1838,12 +1838,15 @@ int armv8_set_dbgreg_bits(struct armv8_common *armv8, unsigned int reg, unsigned
 	if (retval != ERROR_OK)
 		return retval;
 
+	LOG_DEBUG("pre-read addr %llx data %x",(armv8->debug_base + reg), tmp);
+
 	/* clear bitfield */
 	tmp &= ~mask;
 	/* put new value */
 	tmp |= value & mask;
 
 	/* write new value */
+	LOG_DEBUG("set_dbgreg_bits addr %llx data %x mask %lx value %lx", (armv8->debug_base + reg), tmp, mask, value);
 	retval = mem_ap_write_atomic_u32(armv8->debug_ap,
 			armv8->debug_base + reg, tmp);
 	return retval;

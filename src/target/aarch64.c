@@ -294,6 +294,8 @@ static int aarch64_check_state_one(struct target *target,
 	uint32_t prsr;
 	int retval;
 
+	// LOG_DEBUG("check state one addr %llx", (armv8->debug_base + CPUV8_DBG_PRSR));
+
 	retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 			armv8->debug_base + CPUV8_DBG_PRSR, &prsr);
 	if (retval != ERROR_OK)
