@@ -29,6 +29,7 @@ NOR_DRIVERS = \
 	%D%/esirisc_flash.c \
 	%D%/faux.c \
 	%D%/fespi.c \
+	%d%/dwcssi.c \
 	%D%/fm3.c \
 	%D%/fm4.c \
 	%D%/jtagspi.c \
