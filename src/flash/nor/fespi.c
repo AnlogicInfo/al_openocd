@@ -371,6 +371,8 @@ static int fespi_erase(struct flash_bank *bank, unsigned int first,
 	struct fespi_flash_bank *fespi_info = bank->driver_priv;
 	int retval = ERROR_OK;
 
+	printf("test fespi\n");
+
 	LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
 
 	if (target->state != TARGET_HALTED) {

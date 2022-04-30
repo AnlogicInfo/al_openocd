@@ -29,7 +29,8 @@ NOR_DRIVERS = \
 	%D%/esirisc_flash.c \
 	%D%/faux.c \
 	%D%/fespi.c \
-	%d%/dwcssi.c \
+	%D%/dwcssi_flash.c \
+	%D%/dwcssi.c \
 	%D%/fm3.c \
 	%D%/fm4.c \
 	%D%/jtagspi.c \
@@ -92,4 +93,5 @@ NORHEADERS = \
 	%D%/spi.h \
 	%D%/stm32l4x.h \
 	%D%/stmqspi.h \
-	%D%/msp432.h
+	%D%/msp432.h \
+	%D%/dwcssi.h 

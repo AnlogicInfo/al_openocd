@@ -1,0 +1,26 @@
+"shellLauncher.shells.windows": [
+    {
+        "shell": "C:\\Windows\\System32\\cmd.exe",
+        "label": "cmd"
+    },
+    {
+        "shell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "label": "PowerShell"
+    },
+    {
+        "shell": "C:\\msys64\\msys2_shell.cmd",
+        "label": "MSYS2 MinGW64",
+        "args": [
+            "-mingw64"
+        ],
+        "env": {
+            "MSYSTEM": "MINGW64",
+            "CHERE_INVOKING": "1",
+            "MSYS2_PATH_TYPE": "inherit"
+        }
+    },
+    {
+        "shell": "C:\\Windows\\System32\\bash.exe",
+        "label": "WSL Bash"
+    }
+],

@@ -1,101 +1,24 @@
 /*
-* @Author: Tianyi Wang
-* @Date:   2022-04-12 10:48:48
-* @Last Modified by:   Tianyi Wang
-* @Last Modified time: 2022-04-20 20:16:56
-*/
+ * Author: Tianyi Wang (tywang@anlogic.com)
+ * Date:  2022-04-20
+ * Modified By: Tianyi Wang (tywang@anlogic.com>)
+ * Last Modified: 2022-04-27
+ */
 /*
 The AL9000 QSPI controller is based on DWC_ssi 1.02a
 */
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
-#include "imp.h"
-#include "spi.h"
-#include <jtag/jtag.h>
-#include <helper/time_support.h>
-#include <target/algorithm.h>
-#include "target/riscv/riscv.h"
-
-
-/*Register offsets*/
-#define     DWCSSI_REG_CTRLR0                         0x0
-#define     DWCSSI_REG_CTRLR1                         0x4
-#define     DWCSSI_REG_SSIENR                         0x8
-#define     DWCSSI_REG_MWCR                           0xC
-#define     DWCSSI_REG_SER                            0x10
-#define     DWCSSI_REG_BAUDR                          0x14
-#define     DWCSSI_REG_TXFTLR                         0x18
-#define     DWCSSI_REG_RXFTLR                         0x1c
-#define     DWCSSI_REG_TXFLR                          0x20
-#define     DWCSSI_REG_RXFLR                          0x24
-#define     DWCSSI_REG_SR                             0x28
-#define     DWCSSI_REG_IMR                            0x2C
-#define     DWCSSI_REG_ISR                            0x30
-#define     DWCSSI_REG_RISR                           0x34
-#define     DWCSSI_REG_TXOICR                         0x38
-#define     DWCSSI_REG_RXOICR                         0x3c
-#define     DWCSSI_REG_RXUICR                         0x40
-#define     DWCSSI_REG_MSTICR                         0x44
-#define     DWCSSI_REG_ICR                            0x48
-#define     DWCSSI_REG_DMACR                          0x4c
-#define     DWCSSI_REG_DMATDLR                        0x50
-#define     DWCSSI_REG_DMARDLR                        0x54
-#define     DWCSSI_REG_IDR                            0x58
-#define     DWCSSI_REG_SSIC_VERSION_ID                0x5c
-#define     DWCSSI_REG_DRx_START                      0x60
-// #define     DWCSSI_REG_DRx[36]                        0x60+i*0x4, i=[0..35]
-#define     DWCSSI_REG_RX_SAMPLE_DELAY                0xf0
-#define     DWCSSI_REG_SPI_CTRLR0                     0xf4
-#define     DWCSSI_REG_DDR_DRIVE_EDGE                 0xf8
-#define     DWCSSI_REG_XIP_MODE_BITS                  0xfc
-
-/*Fields*/
-#define     DWCSSI_CTRL0_DFS(x)                       (((x) & 0xF) << 0)
-#define     DWCSSI_CTRL0_TMOD(x)                      (((x) & 0x3) << 10)
-#define     DWCSSI_CTRL0_SPI_FRF(x)                   (((x) & 0x3) << 22)
-
-#define     DWCSSI_CTRL1_NDF(x)                       (((x) & 0xFFFF) << 22)
-
-#define     DWCSSI_SSIC_EN(x)                         (((x) & 0x1) << 0)
-
-#define     DWCSSI_SER(x)                             (((x) & 0x3) << 0)
-#define     DWCSSI_BAUDR_SCKDV(x)                     (((x) & 0x7FFF) << 1)
-
-#define     DWCSSI_SR_BUSY(x)                         (((x) & 0x1) << 0)
-#define     DWCSSI_ISR_TXEIS(x)                       (((x) & 0x1) << 0)
-
-
-/*DFS define*/
-#define     DFS_BYTE                                  (7)    // 7+1=8 bits=byte
-/*TMOD define*/
-#define     TX_AND_RX                                 0
-#define     TX_ONLY                                   1
-#define     RX_ONLY                                   2
-#define     EEPROM_READ                               3
-/*SPI_FRF define*/
-#define     SPI_FRF_X1_MODE                           0
-#define     SPI_FRF_X2_MODE                           1
-#define     SPI_FRF_X4_MODE                           2
-#define     SPI_FRF_X8_MODE                           3
-
-/* Timeout in ms */
-#define     DWCSSI_CMD_TIMEOUT                        (100)
-#define     DWCSSI_PROBE_TIMEOUT                      (100)
-#define     DWCSSI_MAX_TIMEOUT                        (3000)
-
-struct dwcssi_flash_bank {
-    bool probed;
-    target_addr_t ctrl_base;
-    const struct flash_device *dev;
-}
+#include "dwcssi.h"
+static const struct dwcssi_target target_devices[] = {
+     // name, tap_idcode, ctrl_base 
+    { "AL9000 RPU", 0x1c900a6d, 0xF804E000 },
+    { "AL9000 APU", 0x5ba00477, 0xF804E000 },
+    { NULL, 0, 0 }
+};
 
 
 FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 {
-    struct dwcssi_flash_bank_command *dwcssi_info;
+    struct dwcssi_flash_bank *dwcssi_info;
 
     LOG_DEBUG("%s", __func__);
 
@@ -130,6 +53,9 @@ static int dwcssi_read_reg(struct flash_bank *bank, uint32_t *value, target_addr
                 dwcssi_info->ctrl_base + address);
         return result;
     }
+
+    // LOG_INFO("dwcssi_read_reg() get 0x%" PRIx32 " at " TARGET_ADDR_FMT,
+    //             *value, dwcssi_info->ctrl_base + address);
     return ERROR_OK;
 }
 
@@ -137,76 +63,133 @@ static int dwcssi_write_reg(struct flash_bank *bank, target_addr_t address, uint
 {
     struct target *target = bank->target;
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    int result;
 
-    int result = target_write_u32(target, dwcssi_info->ctrl_base + address, value);
+    // LOG_INFO("dwcssi_write_reg() writing 0x%" PRIx32 " to " TARGET_ADDR_FMT,
+    //         value, dwcssi_info->ctrl_base + address);
+
+    result = target_write_u32(target, dwcssi_info->ctrl_base + address, value);
     if (result != ERROR_OK) {
         LOG_ERROR("dwcssi_write_reg() error writing 0x%" PRIx32 " to " TARGET_ADDR_FMT,
                 value, dwcssi_info->ctrl_base + address);
         return result;
     }
     return ERROR_OK;
-
 }
 
-static int dwcssi_set(struct flash_bank *bank, target_addr_t address, uint32_t value, uint32_t bitmask)
+static int dwcssi_set_bits(struct flash_bank *bank, target_addr_t address, uint32_t value, uint32_t bitmask)
 {
     uint32_t rd_value, wr_value;
-    if(dwcssi_read_reg(bank, &rd, address) != ERROR_OK)
+    if(dwcssi_read_reg(bank, &rd_value, address) != ERROR_OK)
         return ERROR_FAIL;
 
     wr_value = (rd_value & ~bitmask) | (value & bitmask);
 
     dwcssi_write_reg(bank, address, wr_value);
+    return ERROR_OK;
 
 }
+
+static int dwcssi_get_bits(struct flash_bank *bank, target_addr_t address, uint32_t bitmask, uint32_t index)
+{
+    uint32_t rd_value, ret_value;
+
+    if(dwcssi_read_reg(bank, &rd_value, address) != ERROR_OK)
+        return ERROR_FAIL;
+
+    ret_value = (rd_value & bitmask) >> index;
+    return ret_value;
+}
+
+/*config dwcssi controller*/
 
 static int dwcssi_disable(struct flash_bank *bank)
 {
     uint32_t ssic_en;
+
+    LOG_INFO("dwcssi disable");
     if(dwcssi_read_reg(bank, &ssic_en, DWCSSI_REG_SSIENR) != ERROR_OK)
         return ERROR_FAIL;
-    return dwcssi_write_reg(bank, DWCSSI_REG_SSIENR, ssic_en & ~DWCSSI_SSIC_EN);
+    return dwcssi_write_reg(bank, DWCSSI_REG_SSIENR, ssic_en & ~DWCSSI_SSIC_EN(1));
+
 }
 
 static int dwcssi_enable(struct flash_bank *bank)
 {
     uint32_t ssic_en;
+    LOG_INFO("dwcssi enable");
     if(dwcssi_read_reg(bank, &ssic_en, DWCSSI_REG_SSIENR) != ERROR_OK)
         return ERROR_FAIL;
-    return dwcssi_write_reg(bank, DWCSSI_REG_SSIENR, ssic_en | DWCSSI_SSIC_EN);
-
+    return dwcssi_write_reg(bank, DWCSSI_REG_SSIENR, ssic_en | DWCSSI_SSIC_EN(1));
 }
 
-
-
-static int dwcssi_config(struct flash_bank * bank)
+static int dwcssi_config_init(struct flash_bank *bank)
 {
-    dwcssi_disable(bank);
+    uint32_t val, mask;
+    LOG_INFO("config init");
 
-    dwcssi_set(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRL0_DFS(DFS_BYTE), DWCSSI_CTRL0_DFS(0xFFFFFFFF));
-    dwcssi_set(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRL0_SPI_FRF(SPI_FRF_X1_MODE), DWCSSI_CTRL0_SPI_FRF(0xFFFFFFFF));
-    // dwcssi_set(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRL0_TMOD(EEPROM_READ), DWCSSI_CTRL0_TMOD(0xFFFFFFFF));
+    val = DWCSSI_BAUDR_SCKDV(2) | DWCSSI_SER(1);
+    mask = DWCSSI_BAUDR_SCKDV_MASK | DWCSSI_SER_MASK;
 
-    dwcssi_set(bank, DWCSSI_REG_SER, DWCSSI_SER(1), DWCSSI_SER(0xFFFFFFFF));
-    dwcssi_set(bank, DWCSSI_REG_SER, DWCSSI_BAUDR_SCKDV(2), DWCSSI_BAUDR_SCKDV(0xFFFFFFFF));
-
-    dwcssi_enable(bank);
-
+    dwcssi_set_bits(bank, DWCSSI_REG_SER, val, mask);
+    return ERROR_OK;
 }
 
+static int dwcssi_config_CTRLR0(struct flash_bank *bank, uint32_t DFS, uint32_t SPI_FRF, uint32_t TMOD)
+{
+    uint32_t val, mask;
+    LOG_INFO("config CTRLR0");
+    val = DWCSSI_CTRLR0_DFS(DFS) | DWCSSI_CTRLR0_SPI_FRF(SPI_FRF) | DWCSSI_CTRLR0_TMOD(TMOD);
+    mask = DWCSSI_CTRLR0_DFS_MASK | DWCSSI_CTRLR0_SPI_FRF_MASK | DWCSSI_CTRLR0_TMOD_MASK;
+
+    dwcssi_set_bits(bank, DWCSSI_REG_CTRLR0, val, mask);
+    return ERROR_OK;
+}
+
+static int dwcssi_config_CTRLR1(struct flash_bank *bank, uint32_t NDF)
+{
+    LOG_INFO("config CTRLR1");
+    dwcssi_set_bits(bank, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(NDF), DWCSSI_CTRLR1_NDF_MASK);   
+    return ERROR_OK;
+}
+
+static int dwcssi_config_TXFTLR(struct flash_bank *bank, uint32_t TFT, uint32_t TXFTHR)
+{
+    uint32_t val, mask;
+    
+    val  = DWCSSI_TXFTLR_TFT(TFT) | DWCSSI_TXFTLR_TXFTHR(TXFTHR);
+    mask = DWCSSI_TXFTLR_TFT_MASK | DWCSSI_TXFTLR_TXFTHR_MASK;
+    dwcssi_set_bits(bank, DWCSSI_REG_TXFTLR, val, mask);
+    return ERROR_OK;
+}
+
+
+/*dwc base functions*/
 static int dwcssi_txwm_wait(struct flash_bank* bank)
 {
     int64_t start = timeval_ms();
-    while (1) {
-        uint32_t ip;
-        // if (dwcssi_read_reg(bank, &ip, DWCSSI_REG_SR) != ERROR_OK)
-        if (dwcssi_read_reg(bank, &ip, DWCSSI_REG_ISR) != ERROR_OK)
-            return ERROR_FAIL;
-        if (ip & DWCSSI_ISR_TXEIS)
+    // TX fifo empty
+    while(1)
+    {
+        if(dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_TFE_MASK, 2))
             break;
         int64_t now = timeval_ms();
         if (now - start > 1000) {
-            LOG_ERROR("ip.txeis didn't get set.");
+            LOG_ERROR("txfifo timeout");
+            return ERROR_TARGET_TIMEOUT;
+        }
+    }
+
+    while (1) {
+        uint32_t status;
+        if (dwcssi_read_reg(bank, &status, DWCSSI_REG_SR) != ERROR_OK)
+        // if (dwcssi_read_reg(bank, &status, DWCSSI_REG_ISR) != ERROR_OK)
+            return ERROR_FAIL;
+        if (!(status & DWCSSI_SR_BUSY(1)))
+            break;
+        int64_t now = timeval_ms();
+        if (now - start > 1000) {
+            LOG_ERROR("ssi timeout");
             return ERROR_TARGET_TIMEOUT;
         }
     }
@@ -217,39 +200,40 @@ static int dwcssi_txwm_wait(struct flash_bank* bank)
 static int dwcssi_tx(struct flash_bank *bank, uint8_t in)
 {
     int64_t start = timeval_ms();
-    uint32_t isr;
+    int     fifo_full=0;
 
-    while (1) {
-        if (dwcssi_read_reg(bank, &isr, DWCSSI_REG_ISR) != ERROR_OK)
-            return ERROR_FAIL;
-        if (!(isr >> 1))
+    while(1) 
+    {
+        fifo_full = dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_TFTNF_MASK, 1);
+        LOG_INFO("tx fifo status %d\n", fifo_full);
+        if(fifo_full)
             break;
         int64_t now = timeval_ms();
         if (now - start > 1000) {
-            LOG_ERROR("tx fifo overflow.");
+            LOG_ERROR("txfifo full");
             return ERROR_TARGET_TIMEOUT;
         }
     }
 
-    return dwcssi_write_reg(bank, DWCSSI_REG_DRx_START, in);
+    dwcssi_write_reg(bank, DWCSSI_REG_DRx_START, in);
+    LOG_INFO("tx %x", in);
+    return ERROR_OK;
+}
+
+static int dwcssi_tx_buf(struct flash_bank * bank, uint8_t* in_buf, uint32_t in_cnt)
+{
+    uint32_t i;
+    for(i = 0; i < in_cnt; i++)
+    {
+        dwcssi_tx(bank, *(in_buf+i));
+    }
+
+    return (dwcssi_txwm_wait(bank));
 }
 
 static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
 {
-    int64_t start = timeval_ms();
-    uint32_t isr, value;
-
-    while (1) {
-        if (dwcssi_read_reg(bank, &isr, DWCSSI_REG_ISR) != ERROR_OK)
-            return ERROR_FAIL;
-        if (!(isr >> 3))
-            break;
-        int64_t now = timeval_ms();
-        if (now - start > 1000) {
-            LOG_ERROR("rxfifo overflow");
-            return ERROR_TARGET_TIMEOUT;
-        }
-    }
+    uint32_t value;
 
     dwcssi_read_reg(bank, &value, DWCSSI_REG_DRx_START);
     if (out)
@@ -258,93 +242,187 @@ static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
     return ERROR_OK;
 }
 
+// static int dwcssi_poll_flash_status(struct flash_bank *bank)
+// {
+//     uint8_t rx;
+
+//     dwcssi_tx()
+// }
+
 static int dwcssi_wait_flash_status(struct flash_bank *bank, int timeout)
 {
     int64_t endtime;
     uint8_t rx;
-	
-	dwcssi_set(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRL0_TMOD(RX_ONLY), DWCSSI_CTRL0_TMOD(0xFFFFFFFF));
-    dwcssi_set(bank, DWCSSI_REG_SER, DWCSSI_SER(1), DWCSSI_SER(0xFFFFFFFF));
+
+    LOG_INFO("check flash status");
+
+	dwcssi_disable(bank);
+    dwcssi_config_init(bank);
+	dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
+    dwcssi_config_CTRLR1(bank, 0);
+    dwcssi_config_TXFTLR(bank, 0, 0);
+    dwcssi_enable(bank);
     endtime = timeval_ms() + timeout;
     dwcssi_tx(bank, SPIFLASH_READ_STATUS);
+    dwcssi_txwm_wait(bank);
     if(dwcssi_rx(bank, NULL) != ERROR_OK)
         return ERROR_FAIL;
     do {
-        alive_sleep(1);
-        dwcssi_tx(bank, 0);
+        alive_sleep(5);
+        dwcssi_tx(bank, SPIFLASH_READ_STATUS);
+        dwcssi_txwm_wait(bank);
         if(dwcssi_rx(bank, &rx) != ERROR_OK)
             return ERROR_FAIL;
         if((rx & SPIFLASH_BSY_BIT) == 0) {
-        	dwcssi_set(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRL0_TMOD(TX_ONLY), DWCSSI_CTRL0_TMOD(0xFFFFFFFF));
+            LOG_INFO("flash idle");
             return ERROR_OK;
         }
     } while (timeval_ms() < endtime);
-
-    LOG_ERROR("timeout");
+    // } while (1);
+    LOG_INFO("flash timeout");
     return ERROR_FAIL;
 }
 
-static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int first, unsigned int last)
+static int dwcssi_flash_wr_en(struct flash_bank *bank)
 {
+    dwcssi_disable(bank);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
+    dwcssi_config_TXFTLR(bank, 0, 0);
+    dwcssi_enable(bank);
 
+    dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
+    dwcssi_txwm_wait(bank);
+    return ERROR_OK;
 }
 
+// static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
+// {
+//     struct dwcssi_flash_bank *fespi_info = bank->driver_priv;
+//     int retval;
 
+
+//     return ERROR_FAIL;
+
+// }
+
+static int dwcssi_erase_bulk(struct flash_bank *bank)
+{
+    int retval = ERROR_OK;
+    dwcssi_disable(bank);
+    // dwcssi_config_init(bank);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
+    dwcssi_config_TXFTLR(bank, 0,0);
+    dwcssi_enable(bank);
+
+    dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
+    dwcssi_tx(bank, SPIFLASH_MASS_ERASE);
+    // dwcssi_config_CTRLR1(bank, 0);
+    retval = dwcssi_wait_flash_status(bank, DWCSSI_MAX_TIMEOUT);
+
+    return retval;
+}
+
+/*dwc driver*/
 static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 {
-    struct target *target = bank->target;
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+
+    // struct target *target = bank->target;
+    // struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
     int retval = ERROR_OK;
 
-    LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
+    // // LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
+    // LOG_INFO("dwcssi erase");
+    // if (target->state != TARGET_HALTED) {
+    //     LOG_ERROR("Target not halted");
+    //     return ERROR_TARGET_NOT_HALTED;
+    // }
 
-    if (target->state != TARGET_HALTED) {
-        LOG_ERROR("Target not halted");
-        return ERROR_TARGET_NOT_HALTED;
-    }
+    // if ((last < first) || (last >= bank->num_sectors)) {
+    //     LOG_ERROR("Flash sector invalid");
+    //     return ERROR_FLASH_SECTOR_INVALID;
+    // }
 
-    if ((last < first) || (last >= bank->num_sectors)) {
-        LOG_ERROR("Flash sector invalid");
-        return ERROR_FLASH_SECTOR_INVALID;
-    }
+    // if (!(dwcssi_info->probed)) {
+    //     LOG_ERROR("Flash bank not probed");
+    //     return ERROR_FLASH_BANK_NOT_PROBED;
+    // }
 
-    if (!(dwcssi_info->probed)) {
-        LOG_ERROR("Flash bank not probed");
-        return ERROR_FLASH_BANK_NOT_PROBED;
-    }
+    // for (unsigned int sector = first; sector <= last; sector++) {
+    //     if (bank->sectors[sector].is_protected) {
+    //         LOG_ERROR("Flash sector %u protected", sector);
+    //         return ERROR_FAIL;
+    //     }
+    // }
 
-    for (unsigned int sector = first; sector <= last; sector++) {
-        if (bank->sectors[sector].is_protected) {
-            LOG_ERROR("Flash sector %u protected", sector);
-            return ERROR_FAIL;
-        }
-    }
+    // if (dwcssi_info->dev->erase_cmd == 0x00)
+    //     return ERROR_FLASH_OPER_UNSUPPORTED;
 
-    if (dwcssi_info->dev->erase_cmd == 0x00)
-        return ERROR_FLASH_OPER_UNSUPPORTED;
+    // dwcssi_erase_sector(bank, first);
+    retval = dwcssi_erase_bulk(bank);
+
+    return retval;
 }
-
 
 static int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, unsigned last)
 {
+    for(unsigned int sector = first; sector <= last; sector ++)
+        bank->sectors[sector].is_protected = set;
 
+    return ERROR_OK;
 }
 
-static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
 {
+    uint16_t i = 0;
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    uint8_t wrdata[256] = {0};
 
+    LOG_INFO("dwcssi slow write 1634");
+
+    for(i=0; i<256; i++)
+    {
+        wrdata[i] = i;
+    }
+
+    dwcssi_flash_wr_en(bank);
+    dwcssi_wait_flash_status(bank, DWCSSI_MAX_TIMEOUT);
+    dwcssi_disable(bank);
+    dwcssi_config_init(bank);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
+    dwcssi_config_TXFTLR(bank, 0, 0x21); //30+1+4
+    dwcssi_enable(bank);
+
+    // dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
+    // dwcssi_tx(bank, 0x02);
+    dwcssi_tx(bank, dwcssi_info->dev->pprog_cmd);
+    dwcssi_tx(bank, 0x00);
+    dwcssi_tx(bank, 0x00);
+    dwcssi_tx(bank, 0x00);
+
+    dwcssi_tx_buf(bank, wrdata, 30);
+
+
+    dwcssi_wait_flash_status(bank, DWCSSI_PROBE_TIMEOUT);
+
+    return ERROR_OK;
 }
 
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
-
+    uint32_t cur_count=0;
+    LOG_INFO("dwcssi write");
+    slow_dwcssi_write(bank, buffer, offset, cur_count);
+    return ERROR_OK;
 }
 
 
 static int dwcssi_read_flash_id(struct flash_bank *bank, uint32_t *id)
 {
     struct target *target = bank->target;
-    int retval;
+    uint8_t rx;
+    // int retval;
+
+    LOG_INFO("dwcssi read id");
 
     if (target->state != TARGET_HALTED) {
         LOG_ERROR("Target not halted");
@@ -352,47 +430,137 @@ static int dwcssi_read_flash_id(struct flash_bank *bank, uint32_t *id)
     }
     dwcssi_txwm_wait(bank);
 
-	/* poll WIP */
-	retval = dwcssi_wait_flash_status(bank, DWCSSI_PROBE_TIMEOUT);
-	if (retval != ERROR_OK)
-		return retval;
-
-	dwcssi_config(bank);
-	dwcssi_set(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRL0_TMOD(RX_ONLY), DWCSSI_CTRL0_TMOD(0xFFFFFFFF));
+    dwcssi_disable(bank);
+    dwcssi_config_init(bank);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
+    dwcssi_config_CTRLR1(bank, 2);
+    dwcssi_enable(bank);
 
 	dwcssi_tx(bank, SPIFLASH_READ_ID);
-	dwcssi_tx(bank, 0);
-	dwcssi_tx(bank, 0);
-	dwcssi_tx(bank, 0);
-
 	/* read ID from Receive Register */
 	*id = 0;
-	if (dwcssi_rx(bank, NULL) != ERROR_OK)
-		return ERROR_FAIL;
-	uint8_t rx;
+
 	if (dwcssi_rx(bank, &rx) != ERROR_OK)
 		return ERROR_FAIL;
-	*id = rx;
+    *id = rx;
 	if (dwcssi_rx(bank, &rx) != ERROR_OK)
 		return ERROR_FAIL;
 	*id |= (rx << 8);
+
 	if (dwcssi_rx(bank, &rx) != ERROR_OK)
 		return ERROR_FAIL;
 	*id |= (rx << 16);
 
-	dwcssi_set(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRL0_TMOD(RX_ONLY), DWCSSI_CTRL0_TMOD(0xFFFFFFFF));
-	return ERROR_OK;
+    LOG_INFO("dwcssi get id %x", *id);
+
+    
+	return (dwcssi_wait_flash_status(bank, 100));
+}
+
+static int dwcssi_reset_flash(struct flash_bank *bank)
+{
+
+    LOG_INFO("dwcssi reset");
+
+    dwcssi_txwm_wait(bank);
+
+    dwcssi_disable(bank);
+    dwcssi_config_init(bank);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
+    dwcssi_config_TXFTLR(bank, 0,0);
+    dwcssi_enable(bank);
+
+    dwcssi_tx(bank, 0xF0);
+    return (dwcssi_wait_flash_status(bank, 100));
+
+}
+
+int dwcssi_info_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwcssi_info)
+{
+    const struct dwcssi_target *target_device;
+    struct target *target = bank->target;
+    // reset probe state
+    if(dwcssi_info->probed)
+        free(bank->sectors);
+    dwcssi_info->probed = false;
+
+    // init ctrl_base
+    if(dwcssi_info->ctrl_base == 0)
+    {
+        for(target_device = target_devices; target_device->name; ++target_device)
+        {
+            if(target_device->tap_idcode == target->tap->idcode)
+                break;
+        }
+
+        if(!target_device->name) {
+            LOG_ERROR("Device ID 0x%" PRIx32 " is not known as DWCSSPI capable",target->tap->idcode);
+            return ERROR_FAIL;
+        }
+
+        dwcssi_info->ctrl_base = target_device->ctrl_base;
+        LOG_DEBUG("Valid DWCSSI on device %s at address" TARGET_ADDR_FMT, target_device->name, bank->base);
+    }
+    else
+    {
+        LOG_DEBUG("Assuming DWCSSI as specified at address " TARGET_ADDR_FMT "with ctrl at" TARGET_ADDR_FMT,
+         dwcssi_info->ctrl_base, bank->base);
+    }
+    return ERROR_OK;
 }
 
 static int dwcssi_probe(struct flash_bank *bank)
 {
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
 
+    uint32_t id = 0;
+
+    // int retval
+    LOG_INFO("test dwcssi probe");
+
+    dwcssi_info_init(bank, dwcssi_info);
+
+    dwcssi_reset_flash(bank);
+    // read flash ID
+    dwcssi_read_flash_id(bank, &id);
+
+    flash_bank_init(bank, dwcssi_info, id);
+
+    return ERROR_OK;
 }
+
 
 static int dwcssi_auto_probe(struct flash_bank *bank)
 {
-
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    if(dwcssi_info->probed)
+        return ERROR_OK;
+    return dwcssi_probe(bank);
 }
+
+static int dwcssi_protect_check(struct flash_bank *bank)
+{
+    /* Nothing to do. Protection is only handled in SW. */
+    
+    return ERROR_OK;
+}
+
+static int get_dwcssi_info(struct flash_bank *bank, struct command_invocation *cmd)
+{
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+
+    if (!(dwcssi_info->probed)) {
+        command_print_sameline(cmd, "\ndwcssi flash bank not probed yet\n");
+        return ERROR_OK;
+    }
+
+    command_print_sameline(cmd, "\ndwcssi flash information:\n"
+            "  Device \'%s\' (ID 0x%08" PRIx32 ")\n",
+            dwcssi_info->dev->name, dwcssi_info->dev->device_id);
+
+    return ERROR_OK;
+}
+
 
 const struct flash_driver dwcssi_flash = {
     .name = "dwcssi",
@@ -400,10 +568,10 @@ const struct flash_driver dwcssi_flash = {
     .erase = dwcssi_erase,
     .protect = dwcssi_protect,
     .write = dwcssi_write,
-    .read = default_dwcssi_read,
+    .read = default_flash_read,
     .probe = dwcssi_probe,
     .auto_probe = dwcssi_auto_probe,
-    .erase_check = default_dwcssi_blank_check,
+    .erase_check = default_flash_blank_check,
     .protect_check = dwcssi_protect_check,
     .info = get_dwcssi_info,
     .free_driver_priv = default_flash_free_driver_priv
