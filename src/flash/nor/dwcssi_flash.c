@@ -35,6 +35,9 @@ int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwc
     unsigned int sector;
     struct flash_sector *sectors;
 
+
+    dwcssi_info->flash_start_offset = 0x20000;
+
     sectorsize = dwcssi_info->dev->sectorsize ? dwcssi_info->dev->sectorsize : dwcssi_info->dev->size_in_bytes;
     bank->num_sectors = 0x1FE;
     bank->size = sectorsize * bank->num_sectors;
@@ -47,7 +50,7 @@ int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwc
 
     for(sector = 0; sector < bank->num_sectors; sector++)
     {
-        sectors[sector].offset = sector * sectorsize + 0x20000;
+        sectors[sector].offset = sector * sectorsize + dwcssi_info->flash_start_offset;
         sectors[sector].size = sectorsize;
         sectors[sector].is_erased = -1;
         sectors[sector].is_protected = 0;
@@ -62,6 +65,8 @@ int default_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcss
     uint32_t sectorsize;
     unsigned int sector;
     struct flash_sector *sectors;
+
+    dwcssi_info->flash_start_offset = 0;
 
     bank->size = dwcssi_info->dev->size_in_bytes;
     sectorsize = dwcssi_info->dev->sectorsize ? dwcssi_info->dev->sectorsize : dwcssi_info->dev->size_in_bytes;
@@ -103,4 +108,33 @@ int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_i
 
     return retval;
 
+}
+
+int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count)
+{
+    unsigned int sector;
+    for(sector = 0; sector < bank->num_sectors; sector++)
+    {
+        if((offset < (bank->sectors[sector].offset + bank->sectors[sector].size))
+            && ((offset + count - 1) >= bank->sectors[sector].offset ))
+            break;
+        else 
+            continue;
+    }
+
+    if(sector == bank->num_sectors)
+    {
+        LOG_ERROR("Flash offset oversize");
+        return ERROR_FAIL;
+    }
+    else
+    {
+        if(bank->sectors[sector].is_protected)
+        {
+            LOG_ERROR("Flash sector %u protected", sector);
+            return ERROR_FAIL;
+        }
+    }
+
+    return ERROR_OK;
 }

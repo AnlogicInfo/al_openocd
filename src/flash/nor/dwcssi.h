@@ -102,6 +102,7 @@
 struct dwcssi_flash_bank {
     bool probed;
     target_addr_t ctrl_base;
+    uint32_t      flash_start_offset;
     const struct flash_device *dev;
 };
 
@@ -115,5 +116,6 @@ struct dwcssi_target {
 // flash support
 
 int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t id);
+int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
 
 #endif

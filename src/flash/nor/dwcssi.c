@@ -200,13 +200,13 @@ static int dwcssi_txwm_wait(struct flash_bank* bank)
 static int dwcssi_tx(struct flash_bank *bank, uint8_t in)
 {
     int64_t start = timeval_ms();
-    int     fifo_full=0;
+    int     fifo_not_full=0;
 
     while(1) 
     {
-        fifo_full = dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_TFTNF_MASK, 1);
-        LOG_INFO("tx fifo status %d\n", fifo_full);
-        if(fifo_full)
+        fifo_not_full = dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_TFTNF_MASK, 1);
+        LOG_INFO("tx fifo status %d\n", fifo_not_full);
+        if(fifo_not_full)
             break;
         int64_t now = timeval_ms();
         if (now - start > 1000) {
@@ -220,7 +220,7 @@ static int dwcssi_tx(struct flash_bank *bank, uint8_t in)
     return ERROR_OK;
 }
 
-static int dwcssi_tx_buf(struct flash_bank * bank, uint8_t* in_buf, uint32_t in_cnt)
+static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32_t in_cnt)
 {
     uint32_t i;
     for(i = 0; i < in_cnt; i++)
@@ -283,17 +283,17 @@ static int dwcssi_wait_flash_status(struct flash_bank *bank, int timeout)
     return ERROR_FAIL;
 }
 
-static int dwcssi_flash_wr_en(struct flash_bank *bank)
-{
-    dwcssi_disable(bank);
-    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
-    dwcssi_config_TXFTLR(bank, 0, 0);
-    dwcssi_enable(bank);
+// static int dwcssi_flash_wr_en(struct flash_bank *bank)
+// {
+//     dwcssi_disable(bank);
+//     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
+//     dwcssi_config_TXFTLR(bank, 0, 0);
+//     dwcssi_enable(bank);
 
-    dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
-    dwcssi_txwm_wait(bank);
-    return ERROR_OK;
-}
+//     dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
+//     dwcssi_txwm_wait(bank);
+//     return ERROR_OK;
+// }
 
 // static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 // {
@@ -371,36 +371,34 @@ static int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, 
     return ERROR_OK;
 }
 
+
+
 static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
 {
-    uint16_t i = 0;
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-    uint8_t wrdata[256] = {0};
 
-    LOG_INFO("dwcssi slow write 1634");
+    LOG_INFO("dwcssi slow write");
 
-    for(i=0; i<256; i++)
-    {
-        wrdata[i] = i;
-    }
+    // txfthr = len + 6; // len + wr_en + wr_cmd + addr4
+    // dwcssi_flash_wr_en(bank);
+    // dwcssi_wait_flash_status(bank, DWCSSI_MAX_TIMEOUT);
+    // actual_offset = flash_offset(offset);
 
-    dwcssi_flash_wr_en(bank);
-    dwcssi_wait_flash_status(bank, DWCSSI_MAX_TIMEOUT);
     dwcssi_disable(bank);
     dwcssi_config_init(bank);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
-    dwcssi_config_TXFTLR(bank, 0, 0x21); //30+1+4
+    dwcssi_config_TXFTLR(bank, 0, 6); //1+1+4
     dwcssi_enable(bank);
 
-    // dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
+    dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
     // dwcssi_tx(bank, 0x02);
     dwcssi_tx(bank, dwcssi_info->dev->pprog_cmd);
-    dwcssi_tx(bank, 0x00);
-    dwcssi_tx(bank, 0x00);
-    dwcssi_tx(bank, 0x00);
+    dwcssi_tx(bank, offset >> 24);
+    dwcssi_tx(bank, offset >> 16);
+    dwcssi_tx(bank, offset >> 8);
+    dwcssi_tx(bank, offset);
 
-    dwcssi_tx_buf(bank, wrdata, 30);
-
+    dwcssi_tx_buf(bank, buffer, len);
 
     dwcssi_wait_flash_status(bank, DWCSSI_PROBE_TIMEOUT);
 
@@ -409,9 +407,32 @@ static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uin
 
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
-    uint32_t cur_count=0;
+    uint32_t cur_count, page_size;
+    uint32_t page_offset, actual_offset;
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+
+
     LOG_INFO("dwcssi write");
-    slow_dwcssi_write(bank, buffer, offset, cur_count);
+
+    page_size = dwcssi_info->dev->pagesize ? 
+                dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
+
+    actual_offset = offset + dwcssi_info->flash_start_offset;
+    flash_sector_check(bank, actual_offset, count);
+    while(count > 0) 
+    {
+        if(page_offset + count > page_size)
+            cur_count = page_size - page_offset;
+        else
+            cur_count = count;
+    
+        slow_dwcssi_write(bank, buffer, actual_offset, cur_count);
+
+        page_offset = 0;
+        buffer += cur_count;
+        offset += cur_count;
+        count  -= cur_count;
+    }
     return ERROR_OK;
 }
 
