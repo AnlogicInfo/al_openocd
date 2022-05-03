@@ -242,6 +242,17 @@ static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
     return ERROR_OK;
 }
 
+static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out_cnt)
+{
+    uint8_t i;
+    for(i=0; i < out_cnt; i++)
+    {
+        dwcssi_rx(bank, out_buf+i);
+        LOG_INFO("read buf %x data %x", i, *(out_buf+i));
+    }
+    return ERROR_OK;
+}
+
 // static int dwcssi_poll_flash_status(struct flash_bank *bank)
 // {
 //     uint8_t rx;
@@ -295,70 +306,93 @@ static int dwcssi_wait_flash_status(struct flash_bank *bank, int timeout)
 //     return ERROR_OK;
 // }
 
-// static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
-// {
-//     struct dwcssi_flash_bank *fespi_info = bank->driver_priv;
-//     int retval;
-
-
-//     return ERROR_FAIL;
-
-// }
-
-static int dwcssi_erase_bulk(struct flash_bank *bank)
+static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 {
-    int retval = ERROR_OK;
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    uint32_t offset;
+    int retval;
+
+    offset = bank->sectors[sector].offset;
     dwcssi_disable(bank);
     // dwcssi_config_init(bank);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
-    dwcssi_config_TXFTLR(bank, 0,0);
+    dwcssi_config_TXFTLR(bank, 0,6);
     dwcssi_enable(bank);
 
     dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
-    dwcssi_tx(bank, SPIFLASH_MASS_ERASE);
-    // dwcssi_config_CTRLR1(bank, 0);
+    dwcssi_tx(bank, dwcssi_info->dev->erase_cmd);
+    dwcssi_tx(bank, offset >> 24);
+    dwcssi_tx(bank, offset >> 16);
+    dwcssi_tx(bank, offset >> 8);
+    dwcssi_tx(bank, offset);
+
     retval = dwcssi_wait_flash_status(bank, DWCSSI_MAX_TIMEOUT);
 
     return retval;
+
 }
+
+// static int dwcssi_erase_bulk(struct flash_bank *bank)
+// {
+//     int retval = ERROR_OK;
+//     dwcssi_disable(bank);
+//     // dwcssi_config_init(bank);
+//     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
+//     dwcssi_config_TXFTLR(bank, 0,0);
+//     dwcssi_enable(bank);
+
+//     dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
+//     dwcssi_tx(bank, SPIFLASH_MASS_ERASE);
+//     // dwcssi_config_CTRLR1(bank, 0);
+//     retval = dwcssi_wait_flash_status(bank, DWCSSI_MAX_TIMEOUT);
+
+//     return retval;
+// }
 
 /*dwc driver*/
 static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 {
 
-    // struct target *target = bank->target;
-    // struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct target *target = bank->target;
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    unsigned int sector;
     int retval = ERROR_OK;
 
-    // // LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
-    // LOG_INFO("dwcssi erase");
-    // if (target->state != TARGET_HALTED) {
-    //     LOG_ERROR("Target not halted");
-    //     return ERROR_TARGET_NOT_HALTED;
-    // }
+    LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
+    LOG_INFO("dwcssi erase");
+    if (target->state != TARGET_HALTED) {
+        LOG_ERROR("Target not halted");
+        return ERROR_TARGET_NOT_HALTED;
+    }
 
-    // if ((last < first) || (last >= bank->num_sectors)) {
-    //     LOG_ERROR("Flash sector invalid");
-    //     return ERROR_FLASH_SECTOR_INVALID;
-    // }
+    if ((last < first) || (last >= bank->num_sectors)) {
+        LOG_ERROR("Flash sector invalid");
+        return ERROR_FLASH_SECTOR_INVALID;
+    }
 
-    // if (!(dwcssi_info->probed)) {
-    //     LOG_ERROR("Flash bank not probed");
-    //     return ERROR_FLASH_BANK_NOT_PROBED;
-    // }
+    if (!(dwcssi_info->probed)) {
+        LOG_ERROR("Flash bank not probed");
+        return ERROR_FLASH_BANK_NOT_PROBED;
+    }
 
-    // for (unsigned int sector = first; sector <= last; sector++) {
-    //     if (bank->sectors[sector].is_protected) {
-    //         LOG_ERROR("Flash sector %u protected", sector);
-    //         return ERROR_FAIL;
-    //     }
-    // }
+    for (sector = first; sector <= last; sector++) {
+        if (bank->sectors[sector].is_protected) {
+            LOG_ERROR("Flash sector %u protected", sector);
+            return ERROR_FAIL;
+        }
+    }
 
-    // if (dwcssi_info->dev->erase_cmd == 0x00)
-    //     return ERROR_FLASH_OPER_UNSUPPORTED;
+    if (dwcssi_info->dev->erase_cmd == 0x00)
+        return ERROR_FLASH_OPER_UNSUPPORTED;
 
-    // dwcssi_erase_sector(bank, first);
-    retval = dwcssi_erase_bulk(bank);
+    for (sector = first; sector <= last; sector++)
+    {
+        retval = dwcssi_erase_sector(bank, sector);
+        if (retval != ERROR_OK)
+            break;
+
+        keep_alive();
+    }
 
     return retval;
 }
@@ -371,7 +405,60 @@ static int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, 
     return ERROR_OK;
 }
 
+static int dwcssi_read_page(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t len)
+{
+    // struct dwcssi_flash_bank *dwcssi_info   = bank->driver_priv;
 
+    LOG_INFO("dwcssi read page %x len %x", offset, len);
+    dwcssi_disable(bank);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
+    dwcssi_config_CTRLR1(bank, len-1);
+    dwcssi_config_TXFTLR(bank, 0, 3);
+    dwcssi_enable(bank);
+
+    dwcssi_tx(bank, 0x03);
+    // dwcssi_tx(bank, dwcssi_info->dev->read_cmd);
+    // dwcssi_tx(bank, offset >> 24);
+    dwcssi_tx(bank, offset >> 16);
+    dwcssi_tx(bank, offset >> 8);
+    dwcssi_tx(bank, offset);
+
+    dwcssi_rx_buf(bank, buffer, len);
+
+    return ERROR_OK;
+
+}
+
+static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
+{
+    uint32_t cur_count, page_size;
+    uint32_t page_offset, actual_offset;
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+
+    page_size = dwcssi_info->dev->pagesize ? 
+                dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
+
+    page_offset = offset % page_size;
+    actual_offset = offset + dwcssi_info->flash_start_offset;
+
+    LOG_INFO("read addr %x", actual_offset);
+    while(count > 0)
+    {
+        if(page_offset + count > page_size)
+            cur_count = page_size - page_offset;
+        else
+            cur_count = count;
+
+        dwcssi_read_page(bank, buffer, actual_offset, cur_count);
+
+        page_offset = 0;
+        buffer        += cur_count;
+        actual_offset += cur_count;
+        count         -= cur_count;
+    }
+
+    return ERROR_OK;
+}
 
 static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
 {
@@ -400,9 +487,7 @@ static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uin
 
     dwcssi_tx_buf(bank, buffer, len);
 
-    dwcssi_wait_flash_status(bank, DWCSSI_PROBE_TIMEOUT);
-
-    return ERROR_OK;
+    return (dwcssi_wait_flash_status(bank, DWCSSI_PROBE_TIMEOUT));
 }
 
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
@@ -417,6 +502,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     page_size = dwcssi_info->dev->pagesize ? 
                 dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
+    page_offset = offset % page_size;
     actual_offset = offset + dwcssi_info->flash_start_offset;
     flash_sector_check(bank, actual_offset, count);
     while(count > 0) 
@@ -429,9 +515,9 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
         slow_dwcssi_write(bank, buffer, actual_offset, cur_count);
 
         page_offset = 0;
-        buffer += cur_count;
-        offset += cur_count;
-        count  -= cur_count;
+        buffer        += cur_count;
+        actual_offset += cur_count;
+        count         -= cur_count;
     }
     return ERROR_OK;
 }
@@ -589,7 +675,7 @@ const struct flash_driver dwcssi_flash = {
     .erase = dwcssi_erase,
     .protect = dwcssi_protect,
     .write = dwcssi_write,
-    .read = default_flash_read,
+    .read = dwcssi_read,
     .probe = dwcssi_probe,
     .auto_probe = dwcssi_auto_probe,
     .erase_check = default_flash_blank_check,
