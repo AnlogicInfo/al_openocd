@@ -64,6 +64,7 @@
 #define     DWCSSI_SR_BUSY(x)                         (((x) & 0x1) << 0)
 #define     DWCSSI_SR_TFNF(x)                         (((x) & 0x1) << 1)
 #define     DWCSSI_SR_TFE(x)                          (((x) & 0x1) << 2)
+#define     DWCSSI_SR_RFNE(x)                         (((x) & 0x1) << 3)
 #define     DWCSSI_ISR_TXEIS(x)                       (((x) & 0x1) << 0)
 
 /*Masks*/
@@ -78,7 +79,8 @@
 #define     DWCSSI_TXFTLR_TXFTHR_MASK                  DWCSSI_TXFTLR_TXFTHR(0xFFFFFFFF)  
 #define     DWCSSI_SR_BUSY_MASK                        DWCSSI_SR_BUSY(0xFFFFFFFF)        
 #define     DWCSSI_SR_TFE_MASK                         DWCSSI_SR_TFE(0xFFFFFFFF)
-#define     DWCSSI_SR_TFTNF_MASK                       DWCSSI_SR_TFNF(0xFFFFFFFF)  
+#define     DWCSSI_SR_TFTNF_MASK                       DWCSSI_SR_TFNF(0xFFFFFFFF)
+#define     DWCSSI_SR_RFNE_MASK                        DWCSSI_SR_RFNE(0xFFFFFFFF)
 #define     DWCSSI_ISR_TXEIS_MASK                      DWCSSI_ISR_TXEIS(0xFFFFFFFF)      
 
 /*DFS define*/
@@ -117,5 +119,7 @@ struct dwcssi_target {
 
 int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t id);
 int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
+
+int flash_check_status(uint8_t status);
 
 #endif

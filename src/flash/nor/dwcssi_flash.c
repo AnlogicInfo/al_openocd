@@ -7,27 +7,7 @@
 
 // flash support for dwcssi controller
 #include "dwcssi.h"
-
-int flash_probe(struct dwcssi_flash_bank *dwcssi_info,  uint32_t id)
-{
-
-    dwcssi_info->dev = NULL;
-    for(const struct flash_device *p = flash_devices; p->name; p++)
-    {
-        if(p->device_id == id) {
-            dwcssi_info->dev = p;
-            break;
-        }
-    }
-
-    if(!dwcssi_info->dev)
-    {
-        LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", id);
-        return ERROR_FAIL;
-    }
-
-    return ERROR_OK;
-}
+#define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
 
 int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwcssi_info)
 {
@@ -35,8 +15,8 @@ int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwc
     unsigned int sector;
     struct flash_sector *sectors;
 
-
-    dwcssi_info->flash_start_offset = 0x20000;
+    dwcssi_info->flash_start_offset = 0;
+    // dwcssi_info->flash_start_offset = 0x20000;
 
     sectorsize = dwcssi_info->dev->sectorsize ? dwcssi_info->dev->sectorsize : dwcssi_info->dev->size_in_bytes;
     bank->num_sectors = 0x1FE;
@@ -60,6 +40,7 @@ int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwc
     dwcssi_info->probed = true;
     return ERROR_OK;
 }
+
 int default_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_info)
 {
     uint32_t sectorsize;
@@ -89,6 +70,28 @@ int default_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcss
     dwcssi_info->probed = true;
     return ERROR_OK;
 }
+
+int flash_probe(struct dwcssi_flash_bank *dwcssi_info,  uint32_t id)
+{
+
+    dwcssi_info->dev = NULL;
+    for(const struct flash_device *p = flash_devices; p->name; p++)
+    {
+        if(p->device_id == id) {
+            dwcssi_info->dev = p;
+            break;
+        }
+    }
+
+    if(!dwcssi_info->dev)
+    {
+        LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", id);
+        return ERROR_FAIL;
+    }
+
+    return ERROR_OK;
+}
+
 
 int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t id)
 {
@@ -135,6 +138,18 @@ int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count)
             return ERROR_FAIL;
         }
     }
-
     return ERROR_OK;
 }
+
+int flash_check_status(uint8_t status)
+{
+    uint8_t err_bits = 0;
+    int fail_flag = 0;
+
+    err_bits = FLASH_STATUS_ERR(status);
+
+    fail_flag = (err_bits != 0); 
+
+    return fail_flag;
+}
+
