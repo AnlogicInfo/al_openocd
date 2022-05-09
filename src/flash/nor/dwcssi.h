@@ -64,6 +64,8 @@
 #define     DWCSSI_TXFTLR_TFT(x)                      (((x) & 0xFF) << 0)
 #define     DWCSSI_TXFTLR_TXFTHR(x)                   (((x) & 0xFF) << 16)
 
+#define     DWCSSI_RXFTLR_RFT(x)                      (((x) & 0xFF) << 0)
+
 #define     DWCSSI_SR_BUSY(x)                         (((x) & 0x1) << 0)
 #define     DWCSSI_SR_TFNF(x)                         (((x) & 0x1) << 1)
 #define     DWCSSI_SR_TFE(x)                          (((x) & 0x1) << 2)
@@ -114,8 +116,9 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     DWCSSI_SSIC_EN_MASK                        DWCSSI_SSIC_EN(0xFFFFFFFF)        
 #define     DWCSSI_SER_MASK                            DWCSSI_SER(0xFFFFFFFF)            
 #define     DWCSSI_BAUDR_SCKDV_MASK                    DWCSSI_BAUDR_SCKDV(0xFFFFFFFF)    
-#define     DWCSSI_TXFTLR_TFT_MASK                     DWCSSI_TXFTLR_TFT(0xFFFFFFFF)     
+#define     DWCSSI_TXFTLR_TFT_MASK                     DWCSSI_TXFTLR_TFT(0xFFFFFFFF)
 #define     DWCSSI_TXFTLR_TXFTHR_MASK                  DWCSSI_TXFTLR_TXFTHR(0xFFFFFFFF)  
+#define     DWCSSI_RXFTLR_RFT_MASK                     DWCSSI_RXFTLR_RFT(0xFFFFFFFF)
 #define     DWCSSI_SR_BUSY_MASK                        DWCSSI_SR_BUSY(0xFFFFFFFF)        
 #define     DWCSSI_SR_TFE_MASK                         DWCSSI_SR_TFE(0xFFFFFFFF)
 #define     DWCSSI_SR_TFTNF_MASK                       DWCSSI_SR_TFNF(0xFFFFFFFF)

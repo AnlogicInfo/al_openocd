@@ -175,6 +175,16 @@ static int dwcssi_config_TXFTLR(struct flash_bank *bank, uint32_t tft, uint32_t 
     return ERROR_OK;
 }
 
+static int dwcssi_config_RXFTLR(struct flash_bank *bank, uint32_t rft)
+{
+    uint32_t val, mask;
+    
+    val  = DWCSSI_RXFTLR_RFT(rft);
+    mask = DWCSSI_RXFTLR_RFT_MASK;
+    dwcssi_set_bits(bank, DWCSSI_REG_RXFTLR, val, mask);
+    return ERROR_OK;
+}
+
 static int dwcssi_config_SPICTRLR0(struct flash_bank *bank, uint32_t val, uint32_t mask)
 {
     dwcssi_set_bits(bank, DWCSSI_REG_SPI_CTRLR0, val, mask);
@@ -222,7 +232,7 @@ static int dwcssi_tx(struct flash_bank *bank, uint8_t in)
     while(1) 
     {
         fifo_not_full = dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_TFTNF_MASK, 1);
-        LOG_INFO("tx fifo status %d\n", fifo_not_full);
+        // LOG_INFO("tx fifo status %d\n", fifo_not_full);
         if(fifo_not_full)
             break;
         int64_t now = timeval_ms();
@@ -233,7 +243,7 @@ static int dwcssi_tx(struct flash_bank *bank, uint8_t in)
     }
 
     dwcssi_write_reg(bank, DWCSSI_REG_DRx_START, in);
-    LOG_INFO("tx %x", in);
+    // LOG_INFO("tx %x", in);
     return ERROR_OK;
 }
 
@@ -261,19 +271,14 @@ static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
 
 static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out_cnt)
 {
-    uint8_t i;
-
-    // for(i = 0; i < out_cnt; i++)
-    // {
-    //     LOG_INFO("buf before read %x data %x", i, *(out_buf+i));
-    // }
+    uint32_t i;
 
     for(i = 0; i < out_cnt; i++)
     {
         if(dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_RFNE_MASK, 3))
         {
             dwcssi_rx(bank, out_buf+i);
-            LOG_INFO("read buf %x data %x", i, *(out_buf+i));
+            // LOG_INFO("read buf %x data %x", i, *(out_buf+i));
         }
     }
     return ERROR_OK;
@@ -413,7 +418,7 @@ static int dwcssi_x4_mode(struct flash_bank *bank, uint32_t tmod, uint32_t len)
     spi_ctrlr0.reg_fields.ADDR_L                = ADDR_L32;
     // spi_ctrlr0.reg_fields.XIP_MD_BIT_EN         = DISABLE;
     spi_ctrlr0.reg_fields.INST_L                = INST_L8;
-    spi_ctrlr0.reg_fields.WAIT_CYCLES           = 8;
+
     // spi_ctrlr0.reg_fields.XIP_DFS_HC            = 0;
     // spi_ctrlr0.reg_fields.XIP_INST_EN           = DISABLE;
     // spi_ctrlr0.reg_fields.SSIC_XIP_CONT_XFER_EN = DISABLE;
@@ -423,9 +428,24 @@ static int dwcssi_x4_mode(struct flash_bank *bank, uint32_t tmod, uint32_t len)
 
     dwcssi_wr_flash_reg(bank, FLASH_CONFIG_CMD, 0x02, 0x02);
 
+    if(tmod == TX_ONLY)
+    {
+        dwcssi_flash_wr_en(bank);
+    }
     dwcssi_disable(bank);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X4_MODE, tmod);
-    dwcssi_config_CTRLR1(bank, len+2);
+    if(tmod == RX_ONLY)
+    {
+        spi_ctrlr0.reg_fields.WAIT_CYCLES           = 8;
+        dwcssi_config_RXFTLR(bank, 0x3f);
+        dwcssi_config_CTRLR1(bank, len);
+    }
+    else
+    {
+        spi_ctrlr0.reg_fields.WAIT_CYCLES           = 0;
+        dwcssi_config_TXFTLR(bank, 0, 2);
+        dwcssi_config_CTRLR1(bank, 0xFF);
+    }
     dwcssi_config_SPICTRLR0(bank, spi_ctrlr0.reg_val, 0xFFFFFFFF);
     dwcssi_enable(bank);
     return ERROR_OK;
@@ -572,11 +592,11 @@ static int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, 
 
 static int dwcssi_read_page_x4(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t len)
 {
-
-
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
     uint8_t flash_sr;
-    
+
+    LOG_INFO("dwcssi read x4");
+
     dwcssi_x4_mode(bank, RX_ONLY, len);
     dwcssi_tx(bank, dwcssi_info->dev->qread_cmd);
     dwcssi_tx(bank, offset);
@@ -597,14 +617,13 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
     page_offset = offset % page_size;
     actual_offset = offset + dwcssi_info->flash_start_offset;
 
-    LOG_INFO("read addr %x", actual_offset);
     while(count > 0)
     {
         if(page_offset + count > page_size)
             cur_count = page_size - page_offset;
         else
             cur_count = count;
-
+        LOG_INFO("read addr %x count %x", actual_offset, count);
         dwcssi_read_page_x4(bank, buffer, actual_offset, cur_count);
 
         page_offset = 0;
@@ -621,8 +640,10 @@ static int dwcssi_write_page_x4(struct flash_bank *bank, const uint8_t *buffer, 
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
     uint8_t flash_sr;
 
+    LOG_INFO("dwcssi write x4");
     dwcssi_x4_mode(bank, TX_ONLY, len);
     dwcssi_tx(bank, dwcssi_info->dev->qprog_cmd);
+    // dwcssi_tx(bank, 0x32);
     dwcssi_tx(bank, offset);
     dwcssi_tx_buf(bank, buffer, len);
     return dwcssi_wait_flash_status(bank, 90000, &flash_sr);
