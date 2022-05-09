@@ -7,7 +7,8 @@
 
 // flash support for dwcssi controller
 #include "dwcssi.h"
-#define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
+#include "dwcssi_flash.h"
+
 
 int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwcssi_info)
 {
@@ -46,8 +47,6 @@ int default_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcss
     uint32_t sectorsize;
     unsigned int sector;
     struct flash_sector *sectors;
-
-    dwcssi_info->flash_start_offset = 0;
 
     bank->size = dwcssi_info->dev->size_in_bytes;
     sectorsize = dwcssi_info->dev->sectorsize ? dwcssi_info->dev->sectorsize : dwcssi_info->dev->size_in_bytes;
@@ -151,5 +150,15 @@ int flash_check_status(uint8_t status)
     fail_flag = (err_bits != 0); 
 
     return fail_flag;
+}
+
+uint8_t flash_check_wp(uint8_t status)
+{
+    uint8_t wp_bits, wp_flag = 0;
+    wp_bits = FLASH_STATUS_WP(status);
+    if(wp_bits != 0)
+        wp_flag = 1;
+
+    return wp_flag;
 }
 

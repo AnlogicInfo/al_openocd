@@ -33,6 +33,7 @@ struct flash_device {
 	uint8_t read_cmd;
 	uint8_t qread_cmd;
 	uint8_t pprog_cmd;
+	uint8_t qprog_cmd;
 	uint8_t erase_cmd;
 	uint8_t chip_erase_cmd;
 	uint32_t device_id;
@@ -41,12 +42,13 @@ struct flash_device {
 	uint32_t size_in_bytes;
 };
 
-#define FLASH_ID(n, re, qr, pp, es, ces, id, psize, ssize, size) \
+#define FLASH_ID(n, re, qr, pp, qp, es, ces, id, psize, ssize, size) \
 {	                                \
 	.name = n,                      \
 	.read_cmd = re,                 \
 	.qread_cmd = qr,                \
 	.pprog_cmd = pp,                \
+	.qprog_cmd = qp,                \
 	.erase_cmd = es,                \
 	.chip_erase_cmd = ces,          \
 	.device_id = id,                \

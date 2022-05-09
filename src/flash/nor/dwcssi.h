@@ -55,17 +55,56 @@
 #define     DWCSSI_CTRLR0_DFS(x)                      (((x) & 0xF) << 0)
 #define     DWCSSI_CTRLR0_TMOD(x)                     (((x) & 0x3) << 10)
 #define     DWCSSI_CTRLR0_SPI_FRF(x)                  (((x) & 0x3) << 22)
+
 #define     DWCSSI_CTRLR1_NDF(x)                      (((x) & 0xFFFF) << 0)
 #define     DWCSSI_SSIC_EN(x)                         (((x) & 0x1) << 0)
 #define     DWCSSI_SER(x)                             (((x) & 0x3) << 0)
 #define     DWCSSI_BAUDR_SCKDV(x)                     (((x) & 0x7FFF) << 1)
+
 #define     DWCSSI_TXFTLR_TFT(x)                      (((x) & 0xFF) << 0)
 #define     DWCSSI_TXFTLR_TXFTHR(x)                   (((x) & 0xFF) << 16)
+
 #define     DWCSSI_SR_BUSY(x)                         (((x) & 0x1) << 0)
 #define     DWCSSI_SR_TFNF(x)                         (((x) & 0x1) << 1)
 #define     DWCSSI_SR_TFE(x)                          (((x) & 0x1) << 2)
 #define     DWCSSI_SR_RFNE(x)                         (((x) & 0x1) << 3)
+
 #define     DWCSSI_ISR_TXEIS(x)                       (((x) & 0x1) << 0)
+
+#define     DWCSSI_SPI_CTRLR0_TRANS_TYPE              (((x) & 0x3) << 0)
+#define     DWCSSI_SPI_CTRLR0_ADDR_L                  (((x) & 0xF) << 2)
+#define     DWCSSI_SPI_CTRLR0_INST_L                  (((x) & 0x3) << 8)
+#define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES             (((x) & 0x1F) << 11)
+#define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN          (((x) & 0x1) << 30)
+
+typedef union dwcssi_spi_ctrlr0_t
+{
+    uint32_t reg_val;
+    struct
+    {
+        uint32_t TRANS_TYPE         :2;   /*[1:0]-Address and instruction transfer format.*/
+        uint32_t ADDR_L             :4;   /*[5:2]-This bit defines Length of Address to be transmitted.*/
+        uint32_t RSVD_6             :1;   /*[6]-RSVD*/
+        uint32_t XIP_MD_BIT_EN      :1;   /*[7]-Mode bits enable in XIP mode.*/
+        uint32_t INST_L             :2;   /*[9:8]-Dual/Quad/Octal mode instruction length in bits.*/
+        uint32_t RSVD_10            :1;   /*[10]-RSVD*/
+        uint32_t WAIT_CYCLES        :5;   /*[15:11]-Wait cycles in Dual/Quad/Octal mode between control frames transmit and data reception.*/
+        uint32_t SPI_DDR_EN         :1;   /*[16]-SPI DDR Enable bit.*/
+        uint32_t INST_DDR_EN        :1;   /*[17]-Instruction DDR Enable bit.*/
+        uint32_t SPI_RXDS_EN        :1;   /*[18]-Read data strobe enable bit.*/
+        uint32_t XIP_DFS_HC         :1;   /*[19]-Fix DFS for XIP transfers.*/
+        uint32_t XIP_INST_EN        :1;   /*[20]-XIP instruction enable bit.*/
+        uint32_t SSIC_XIP_CONT_XFER_EN  :1; /*[21]-Enable continuous transfer in XIP mode.*/
+        uint32_t RSVD_23_22         :2;   /*[23:22]-RSVD*/
+        uint32_t SPI_DM_EN          :1;   /*[24]-SPI data mask enable bit.*/
+        uint32_t SPI_RXDS_SIG_EN    :1;   /*[25]-Enable rxds signaling during address and command phase of Hypebus transfer.*/
+        uint32_t XIP_MBL            :2;   /*[27:26]-XIP Mode bits length.*/
+        uint32_t RSVD_28            :1;   /*[28]-RSVD*/
+        uint32_t XIP_PREFETCH_EN    :1;   /*[29]-Enables XIP pre-fetch functionality in DWC_ssi. */
+        uint32_t CLK_STRETCH_EN     :1;   /*[30]-Enables clock stretching capability in SPI transfers.*/
+        uint32_t RSVD_31            :1;   /*[31]-RSVD*/
+    } reg_fields;
+} dwcssi_spi_ctrlr0_t;
 
 /*Masks*/
 #define     DWCSSI_CTRLR0_DFS_MASK                     DWCSSI_CTRLR0_DFS(0xFFFFFFFF)     
@@ -83,6 +122,15 @@
 #define     DWCSSI_SR_RFNE_MASK                        DWCSSI_SR_RFNE(0xFFFFFFFF)
 #define     DWCSSI_ISR_TXEIS_MASK                      DWCSSI_ISR_TXEIS(0xFFFFFFFF)      
 
+#define     DWCSSI_SPI_CTRLR0_TRANS_TYPE_MASK           DWCSSI_SPI_CTRLR0_TRANS_TYPE(0xFFFFFFFF)
+#define     DWCSSI_SPI_CTRLR0_ADDR_L_MASK               DWCSSI_SPI_CTRLR0_ADDR_L(0xFFFFFFFF)
+#define     DWCSSI_SPI_CTRLR0_INST_L_MASK               DWCSSI_SPI_CTRLR0_INST_L(0xFFFFFFFF)
+#define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES_MASK          DWCSSI_SPI_CTRLR0_WAIT_CYCLES(0xFFFFFFFF)
+#define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN_MASK       DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN(0xFFFFFFFF)
+
+#define     DISABLE                                   0
+#define     ENABLE                                    1
+
 /*DFS define*/
 #define     DFS_BYTE                                  (7)    // 7+1=8 bits=byte
 /*TMOD define*/
@@ -96,6 +144,22 @@
 #define     SPI_FRF_X4_MODE                           2
 #define     SPI_FRF_X8_MODE                           3
 
+/*SPI_CTRLR0 define*/
+#define     TRANS_TYPE_TT0                            0
+#define     TRANS_TYPE_TT1                            1
+#define     TRANS_TYPE_TT2                            2
+#define     TRANS_TYPE_TT3                            3
+
+#define     ADDR_L28                                  7
+#define     ADDR_L32                                  8
+
+#define     INST_L8                                   2
+
+#define     MBL_2                                     0
+#define     MBL_4                                     1
+#define     MBL_8                                     2
+#define     MBL_16                                    3
+
 /* Timeout in ms */
 #define     DWCSSI_CMD_TIMEOUT                        (100)
 #define     DWCSSI_PROBE_TIMEOUT                      (100)
@@ -104,7 +168,7 @@
 struct dwcssi_flash_bank {
     bool probed;
     target_addr_t ctrl_base;
-    uint32_t      flash_start_offset;
+    uint32_t flash_start_offset;
     const struct flash_device *dev;
 };
 
@@ -114,12 +178,5 @@ struct dwcssi_target {
     uint32_t ctrl_base;
 };
 
-
-// flash support
-
-int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t id);
-int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
-
-int flash_check_status(uint8_t status);
 
 #endif

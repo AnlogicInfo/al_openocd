@@ -94,4 +94,5 @@ NORHEADERS = \
 	%D%/stm32l4x.h \
 	%D%/stmqspi.h \
 	%D%/msp432.h \
-	%D%/dwcssi.h 
+	%D%/dwcssi.h \
+	%D%/dwcssi_flash.h
