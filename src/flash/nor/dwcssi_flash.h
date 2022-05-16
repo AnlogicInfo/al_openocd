@@ -1,6 +1,7 @@
 #ifndef DWCSSI_FLASH_H
 #define DWCSSI_FALSH_H
 // s25f1256s flash defines
+#define   FLASH_RD_CONFIG_REG_CMD              0x35
 #define   FLASH_CONFIG_CMD                     0x01
 typedef union sp_flash_sr1_t
 {
