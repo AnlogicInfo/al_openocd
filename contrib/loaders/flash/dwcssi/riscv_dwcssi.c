@@ -117,7 +117,7 @@ static void dwcssi_enable(volatile uint32_t *ctrl_base);
 static int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base);
 static int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offest, uint32_t len, uint32_t flash_info);
 
-int flash_dwcssi(volatile uint32_t *ctrl_bas, uint32_t page_size, const uint8_t *buffer, uint32_t offset, uint32_t count, uint32_t falsh_info)
+int flash_dwcssi(volatile uint32_t *ctrl_base, uint32_t page_size, const uint8_t *buffer, uint32_t offset, uint32_t count, uint32_t flash_info)
 {
     int result = dwcssi_txwm_wait(ctrl_base);
     if(result != ERROR_OK)
@@ -126,7 +126,7 @@ int flash_dwcssi(volatile uint32_t *ctrl_bas, uint32_t page_size, const uint8_t 
     result = dwcssi_wait_flash_idle(ctrl_base);    
     if(result != ERROR_OK)
     {
-        result != ERROR_STACK(0x2);
+        result |= ERROR_STACK(0x2);
         goto err;
     }
 
@@ -171,7 +171,7 @@ static uint32_t dwcssi_get_bits(volatile uint32_t *ctrl_base, uint32_t address, 
     return ret_val;
 }
 
-static uint32_t dwcssi_write_reg(volatile uint32_t *ctrl_base, uint32_t address, uint32_t value)
+static void dwcssi_write_reg(volatile uint32_t *ctrl_base, uint32_t address, uint32_t value)
 {
     ctrl_base[address/4] = value;
 }
@@ -203,7 +203,6 @@ static void dwcssi_enable(volatile uint32_t *ctrl_base)
 static void dwcssi_config_CTRLR1(volatile uint32_t *ctrl_base, uint32_t ndf)
 {
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(ndf), DWCSSI_CTRLR1_NDF_MASK);   
-    return ERROR_OK;
 }
 
 static void dwcssi_config_TXFTLR(volatile uint32_t *ctrl_base, uint32_t tft, uint32_t txfthr)
@@ -213,7 +212,6 @@ static void dwcssi_config_TXFTLR(volatile uint32_t *ctrl_base, uint32_t tft, uin
     val  = DWCSSI_TXFTLR_TFT(tft) | DWCSSI_TXFTLR_TXFTHR(txfthr);
     mask = DWCSSI_TXFTLR_TFT_MASK | DWCSSI_TXFTLR_TXFTHR_MASK;
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_TXFTLR, val, mask);
-    return ERROR_OK;
 }
 
 static int dwcssi_txwm_wait(volatile uint32_t *ctrl_base)
@@ -325,7 +323,6 @@ static void dwcssi_wr_en(volatile uint32_t *ctrl_base)
 
 static int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info)
 {
-    uint8_t result;
     uint32_t i;
 
     dwcssi_wr_en(ctrl_base);
