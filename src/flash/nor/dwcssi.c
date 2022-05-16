@@ -201,35 +201,33 @@ static void dwcssi_x4_mode(struct flash_bank *bank, uint32_t tmod)
     spi_ctrlr0.reg_fields.ADDR_L                = ADDR_L32;
     spi_ctrlr0.reg_fields.INST_L                = INST_L8;
     spi_ctrlr0.reg_fields.CLK_STRETCH_EN        = ENABLE; 
-    if(tmod == RX_ONLY)
+    if(tmod == TX_ONLY)
     {
-        spi_ctrlr0.reg_fields.WAIT_CYCLES       = 8;
+        spi_ctrlr0.reg_fields.WAIT_CYCLES       = 0;
     }
     else
     {
-        spi_ctrlr0.reg_fields.WAIT_CYCLES           = 0;
+        spi_ctrlr0.reg_fields.WAIT_CYCLES       = 8;
     }
 
     dwcssi_config_SPICTRLR0(bank, spi_ctrlr0.reg_val, 0xFFFFFFFF);
 }
 
 
-static void dwcssi_config_init(struct flash_bank *bank, uint8_t spi_frf)
+static void dwcssi_config_init(struct flash_bank *bank)
 {
 
     dwcssi_disable(bank);
     dwcssi_config_BAUDR(bank, 2);
     dwcssi_config_SER(bank, 1);
-    dwcssi_config_CTRLR0(bank, DFS_BYTE, spi_frf, EEPROM_READ);
-    if(spi_frf == SPI_FRF_X4_MODE)
-        dwcssi_x4_mode(bank, SPI_FRF_X1_MODE);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
     dwcssi_enable(bank);
 }
 
 static void dwcssi_config_eeprom(struct flash_bank *bank, uint32_t len)
 {
     dwcssi_disable(bank);
-    dwcssi_set_bits(bank, DWCSSI_REG_CTRLR0, DWCSSI_CTRLR0_TMOD(EEPROM_READ), DWCSSI_CTRLR0_TMOD_MASK);
+    dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
     dwcssi_config_CTRLR1(bank, len-1);
     dwcssi_config_TXFTLR(bank, 0, 0);
     dwcssi_enable(bank);
@@ -351,7 +349,7 @@ static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out
 static int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
 {
     int64_t endtime;
-    uint8_t rx, rx_len = 0xFF;
+    uint8_t rx, rx_len = 0x1;
 
     LOG_INFO("check flash status");
 
@@ -359,7 +357,8 @@ static int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t*
 
     endtime = timeval_ms() + timeout;
     dwcssi_tx(bank, SPIFLASH_READ_STATUS);
-    dwcssi_txwm_wait(bank);
+    if(dwcssi_txwm_wait(bank)!= ERROR_OK)
+        return ERROR_FAIL;
     if(dwcssi_rx(bank, NULL) != ERROR_OK)
         return ERROR_FAIL;
     do {
@@ -370,9 +369,9 @@ static int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t*
             return ERROR_FAIL;
 
         LOG_INFO("flash status %x", rx);
+        *sr = rx;
         if((rx & SPIFLASH_BSY_BIT) == 0) {
             LOG_INFO("flash idle");
-            *sr = rx;
             return ERROR_OK;
         }
         else if(flash_check_status(rx))
@@ -400,7 +399,7 @@ static int dwcssi_read_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint
     LOG_INFO("dwcssi read flash reg");
     uint8_t rx, i;
     dwcssi_txwm_wait(bank);
-    dwcssi_config_eeprom(bank, len - 1);
+    dwcssi_config_eeprom(bank, len);
     dwcssi_tx(bank, cmd);
     for(i = 0; i < len; i++)
     {
@@ -417,12 +416,8 @@ static int dwcssi_read_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint
 
 static int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t cmd, uint8_t sr1, uint8_t cr1)
 {
-    uint32_t cr_curr = 0;
-    uint8_t flash_sr, cr_set;
-    LOG_INFO("dwcssi reset flash regs");
-
-    dwcssi_read_flash_reg(bank, &cr_curr, FLASH_RD_CONFIG_REG_CMD, 1);
-    cr_set = cr_curr | cr1;
+    uint8_t flash_sr;
+    LOG_INFO("dwcssi wr flash regs");
 
     dwcssi_txwm_wait(bank);
     dwcssi_flash_wr_en(bank);
@@ -431,7 +426,7 @@ static int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t cmd, uint8_t sr1
     dwcssi_config_tx(bank, 2, 2);
     dwcssi_tx(bank, cmd);
     dwcssi_tx(bank, sr1);
-    dwcssi_tx(bank, cr_set);
+    dwcssi_tx(bank, cr1);
 
     dwcssi_txwm_wait(bank);
 
@@ -613,6 +608,8 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     actual_offset = offset + dwcssi_info->flash_start_offset;
     flash_sector_check(bank, actual_offset, count);
 
+    dwcssi_x4_mode(bank, TX_ONLY);
+
     while(count > 0) 
     {
         if(page_offset + count > page_size)
@@ -634,32 +631,26 @@ static int dwcssi_reset_flash(struct flash_bank *bank)
 {
     int flash_err;
     uint8_t flash_sr;
-    uint32_t flash_cr;
+    uint32_t flash_cr = 0;
 
     flash_err = dwcssi_wait_flash_idle(bank, 100, &flash_sr);
 
     if(flash_err != 0)
     {
         LOG_INFO("Flash Status Error %x", flash_sr);
-        // dwcssi_disable(bank);
-        // dwcssi_config_TXFTLR(bank, 0,0);
-        // dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
-        // dwcssi_enable(bank);
         dwcssi_config_tx(bank, 1, 0);
 
         dwcssi_tx(bank, 0xF0);
-        dwcssi_txwm_wait(bank);
+        if(dwcssi_txwm_wait(bank) != 0)
+            return ERROR_TARGET_TIMEOUT;
         dwcssi_wait_flash_idle(bank, 100, &flash_sr);
     }
 
     dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-    LOG_INFO("FLASH CR %x", flash_cr);
+    LOG_INFO("curr cr %x", flash_cr);
 
-    if(flash_check_wp(flash_sr))
-    {
-        LOG_INFO("Flash Disable WP");
-        dwcssi_wr_flash_reg(bank, 0x01, 0x00, 0x08);
-    }
+    dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr & (0x3C));
+
     return ERROR_OK;
 }
 
@@ -703,18 +694,20 @@ static int dwcssi_probe(struct flash_bank *bank)
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
 
     uint32_t id = 0;
+    // uint8_t spi_frf = SPI_FRF_X1_MODE;
     // int retval
     LOG_INFO("test dwcssi probe");
 
     dwcssi_info_init(bank, dwcssi_info);
-    dwcssi_config_init(bank, SPI_FRF_X4_MODE);
-    dwcssi_reset_flash(bank);
-    // read flash ID
-    dwcssi_read_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
-
-    LOG_INFO("dwcssi get id %x", id);
-
-    flash_bank_init(bank, dwcssi_info, id);
+    dwcssi_config_init(bank);
+    if(dwcssi_reset_flash(bank) == ERROR_OK)
+    {
+        // read flash ID
+        dwcssi_read_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
+        LOG_INFO("dwcssi get id %x", id);
+        if(flash_bank_init(bank, dwcssi_info, id) != ERROR_OK)
+            return ERROR_FAIL;
+    }
 
     return ERROR_OK;
 }

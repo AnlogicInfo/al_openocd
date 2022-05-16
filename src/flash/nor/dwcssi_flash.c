@@ -99,17 +99,19 @@ int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_i
 
     retval = flash_probe(dwcssi_info, id);
 
-    switch(id) {
-        case 0x00190201:
-            s25fl256s_sector_init(bank, dwcssi_info);
-            break;
-        default:
-            default_sector_init(bank, dwcssi_info);
-            break;
+    if(retval == ERROR_OK)
+    {
+        switch(id) {
+            case 0x00190201:
+                s25fl256s_sector_init(bank, dwcssi_info);
+                break;
+            default:
+                default_sector_init(bank, dwcssi_info);
+                break;
+        }
     }
 
     return retval;
-
 }
 
 int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count)
@@ -160,5 +162,12 @@ uint8_t flash_check_wp(uint8_t status)
         wp_flag = 1;
 
     return wp_flag;
+}
+
+uint8_t flash_quad_mode(uint8_t config_reg)
+{
+    uint8_t quad_bit;
+    quad_bit = FLASH_CONFIG_QUAD(config_reg);
+    return quad_bit;
 }
 

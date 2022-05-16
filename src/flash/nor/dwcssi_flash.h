@@ -2,7 +2,7 @@
 #define DWCSSI_FALSH_H
 // s25f1256s flash defines
 #define   FLASH_RD_CONFIG_REG_CMD              0x35
-#define   FLASH_CONFIG_CMD                     0x01
+#define   FLASH_WR_CONFIG_REG_CMD              0x01
 typedef union sp_flash_sr1_t
 {
     uint8_t reg_val;
@@ -59,6 +59,7 @@ typedef union sp_flash_cr1_t
 
 #define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
 #define   FLASH_STATUS_WP(x)                   ((x >> 2) & 0x7)
+#define   FLASH_CONFIG_QUAD(x)                 ((x >> 1) & 0x1)
 
 
 // flash support
@@ -66,6 +67,6 @@ int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_i
 int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
 int flash_check_status(uint8_t status);
 uint8_t flash_check_wp(uint8_t status);
-
+uint8_t flash_quad_mode(uint8_t config_reg);
 #endif
 
