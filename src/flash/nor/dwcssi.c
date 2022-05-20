@@ -242,7 +242,7 @@ static void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf,uint8_t tx_tot
 
     if(frf == SPI_FRF_X4_MODE)
     {
-        dwcssi_config_CTRLR1(bank, tx_total_len);
+        dwcssi_config_CTRLR1(bank, tx_total_len - 1 );
         dwcssi_x4_mode(bank, TX_ONLY);
     }
     dwcssi_enable(bank);
