@@ -142,6 +142,23 @@ int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count)
     return ERROR_OK;
 }
 
+uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, uint32_t count)
+{
+    uint32_t actual_count;
+
+    if(offset + count > bank->size)
+    {
+        LOG_WARNING("Write exceeds flash boundary. Discard extra data");
+
+        actual_count = bank->size - offset;
+    }
+    else{
+        actual_count = count;
+    }
+
+    return actual_count;
+}
+
 int flash_check_status(uint8_t status)
 {
     uint8_t err_bits = 0;

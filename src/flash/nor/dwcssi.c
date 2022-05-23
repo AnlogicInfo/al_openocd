@@ -264,6 +264,7 @@ static void dwcssi_config_rx(struct flash_bank *bank, uint8_t frf, uint8_t rx_ip
 static int dwcssi_txwm_wait(struct flash_bank* bank)
 {
     int64_t start = timeval_ms();
+    uint32_t ir_status;
     // TX fifo empty
     while(1)
     {
@@ -284,7 +285,9 @@ static int dwcssi_txwm_wait(struct flash_bank* bank)
         if (!(status & DWCSSI_SR_BUSY(1)))
             break;
         int64_t now = timeval_ms();
-        if (now - start > 1000) {
+        if (now - start > 10000) {
+            dwcssi_read_reg(bank, &ir_status, DWCSSI_REG_ISR);
+            LOG_INFO("ctl staus %x interrupt status %x", status, ir_status);
             LOG_ERROR("ssi timeout");
             return ERROR_TARGET_TIMEOUT;
         }
@@ -293,7 +296,7 @@ static int dwcssi_txwm_wait(struct flash_bank* bank)
     return ERROR_OK;
 }
 
-static int dwcssi_tx(struct flash_bank *bank, uint8_t in)
+static int dwcssi_tx(struct flash_bank *bank, uint32_t in)
 {
     int64_t start = timeval_ms();
     int     fifo_not_full=0;
@@ -347,7 +350,7 @@ static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out
         if(dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_RFNE_MASK, 3))
         {
             dwcssi_rx(bank, out_buf+i);
-            LOG_INFO("read buf %x data %x", i, *(out_buf+i));
+            // LOG_INFO("read buf %x data %x", i, *(out_buf+i));
         }
     }
     return ERROR_OK;
@@ -583,14 +586,13 @@ static int dwcssi_read_page(struct flash_bank *bank, uint8_t *buffer, uint32_t o
 static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
 {
     uint32_t cur_count, page_size;
-    uint32_t page_offset, actual_offset;
+    uint32_t page_offset;
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
 
     page_size = dwcssi_info->dev->pagesize ? 
                 dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
     page_offset = offset % page_size;
-    actual_offset = offset + dwcssi_info->flash_start_offset;
 
     dwcssi_flash_quad_en(bank);
     dwcssi_config_rx(bank, SPI_FRF_X4_MODE, 0x3F);
@@ -600,12 +602,12 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
             cur_count = page_size - page_offset;
         else
             cur_count = count;
-        dwcssi_read_page(bank, buffer, actual_offset, cur_count);
-        LOG_INFO("read addr %x count %x", actual_offset, count);
+        dwcssi_read_page(bank, buffer, offset, cur_count);
+        LOG_INFO("read addr %x count %x", offset, count);
 
         page_offset = 0;
         buffer        += cur_count;
-        actual_offset += cur_count;
+        offset        += cur_count;
         count         -= cur_count;
     }
 
@@ -617,49 +619,173 @@ static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uin
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
     uint8_t flash_sr;
 
-    LOG_INFO("dwcssi write x4");
+    LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
-    dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x2);
-    LOG_INFO("dwcssi write config done");
+    dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x3);
     dwcssi_tx(bank, dwcssi_info->dev->qprog_cmd);
-    // dwcssi_tx(bank, 0x32);
     dwcssi_tx(bank, offset);
     dwcssi_tx_buf(bank, buffer, len);
-    LOG_INFO("dwcssi write done");
-    return dwcssi_wait_flash_idle(bank, 90000, &flash_sr);
+    return dwcssi_wait_flash_idle(bank, 9000, &flash_sr);
 }
+
+static const uint8_t riscv32_bin[] = {
+#include "../../../contrib/loaders/flash/dwcssi/riscv32_dwcssi.inc"
+};
+
+static const uint8_t riscv64_bin[] = {
+#include "../../../contrib/loaders/flash/dwcssi/riscv64_dwcssi.inc"
+};
+
 
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
+	struct target *target = bank->target;
     uint32_t cur_count, page_size;
-    uint32_t page_offset, actual_offset;
+    uint32_t page_offset;
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-
+	int retval = ERROR_OK;
 
     LOG_INFO("dwcssi write");
+
+    count = flash_write_boundary_check(bank, offset, count);
+    flash_sector_check(bank, offset, count);
+
+    if(target->state != TARGET_HALTED)
+    {
+		LOG_ERROR("Target not halted");
+		return ERROR_TARGET_NOT_HALTED;        
+    }
+
+    uint32_t xlen = riscv_xlen(target);
+    struct working_area *algorithm_wa = NULL;
+    struct working_area *data_wa      = NULL;
+    const uint8_t *bin;
+    size_t bin_size;
+
+    if(xlen == 32)
+    {
+        LOG_INFO("rv 32");
+        bin = riscv32_bin;
+        bin_size = sizeof(riscv32_bin);
+    } else {
+        LOG_INFO("rv 64");
+        bin = riscv64_bin;
+        bin_size = sizeof(riscv64_bin);
+    }
+
+    uint32_t data_wa_size = 0;
+
+
+	if (target_alloc_working_area(target, bin_size, &algorithm_wa) == ERROR_OK) {
+		retval = target_write_buffer(target, algorithm_wa->address,
+				bin_size, bin);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("Failed to write code to " TARGET_ADDR_FMT ": %d",
+					algorithm_wa->address, retval);
+			target_free_working_area(target, algorithm_wa);
+			algorithm_wa = NULL;
+
+		} else {
+			data_wa_size = MIN(target_get_working_area_avail(target), count);
+			if (data_wa_size < 128) {
+				LOG_WARNING("Couldn't allocate data working area.");
+				target_free_working_area(target, algorithm_wa);
+				algorithm_wa = NULL;
+			} else if (target_alloc_working_area(target, data_wa_size, &data_wa) != ERROR_OK) {
+				target_free_working_area(target, algorithm_wa);
+				algorithm_wa = NULL;
+			}
+		}
+	} else {
+		LOG_WARNING("Couldn't allocate %zd-byte working area.", bin_size);
+		algorithm_wa = NULL;
+	}
 
     page_size = dwcssi_info->dev->pagesize ? 
                 dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
     page_offset = offset % page_size;
-    actual_offset = offset + dwcssi_info->flash_start_offset;
-    flash_sector_check(bank, actual_offset, count);
 
     dwcssi_flash_quad_en(bank);
-    while(count > 0) 
+    if (algorithm_wa)
     {
-        if(page_offset + count > page_size)
-            cur_count = page_size - page_offset;
-        else
-            cur_count = count;
-    
-        slow_dwcssi_write(bank, buffer, actual_offset, cur_count);
+        LOG_INFO("wa allocate success");
+        struct reg_param reg_params[6];
+		init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
+		init_reg_param(&reg_params[1], "a1", xlen, PARAM_OUT);
+		init_reg_param(&reg_params[2], "a2", xlen, PARAM_OUT);
+		init_reg_param(&reg_params[3], "a3", xlen, PARAM_OUT);
+		init_reg_param(&reg_params[4], "a4", xlen, PARAM_OUT);
+		init_reg_param(&reg_params[5], "a5", xlen, PARAM_OUT);
 
-        page_offset = 0;
-        buffer        += cur_count;
-        actual_offset += cur_count;
-        count         -= cur_count;
+        while(count > 0)
+        {
+            cur_count = MIN(count, data_wa_size);
+			buf_set_u64(reg_params[0].value, 0, xlen, dwcssi_info->ctrl_base);
+			buf_set_u64(reg_params[1].value, 0, xlen, page_size);
+			buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
+			buf_set_u64(reg_params[3].value, 0, xlen, offset);
+			buf_set_u64(reg_params[4].value, 0, xlen, cur_count);
+			buf_set_u64(reg_params[5].value, 0, xlen, dwcssi_info->dev->qprog_cmd);
+
+            retval = target_write_buffer(target, data_wa->address, cur_count, buffer);
+			if (retval != ERROR_OK) {
+				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
+						cur_count, data_wa->address, retval);
+				goto err;
+			}
+			
+            LOG_DEBUG("write(ctrl_base=0x%" TARGET_PRIxADDR ", page_size=0x%x, "
+					"address=0x%" TARGET_PRIxADDR ", offset=0x%" PRIx32
+					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
+					dwcssi_info->ctrl_base, page_size, data_wa->address, offset, cur_count,
+					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
+			retval = target_run_algorithm(target, 0, NULL,
+					ARRAY_SIZE(reg_params), reg_params,
+					algorithm_wa->address, 0, cur_count * 2, NULL);
+			if (retval != ERROR_OK) {
+				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
+						algorithm_wa->address, retval);
+				goto err;
+			}
+
+			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
+			if (algorithm_result != 0) {
+				LOG_ERROR("Algorithm returned error %" PRId64, algorithm_result);
+				retval = ERROR_FAIL;
+				goto err;
+			}
+
+			buffer += cur_count;
+			offset += cur_count;
+			count -= cur_count;
+        }
+
+    	target_free_working_area(target, data_wa);
+		target_free_working_area(target, algorithm_wa);
     }
+    else
+    {
+        while(count > 0) 
+        {
+            if(page_offset + count > page_size)
+                cur_count = page_size - page_offset;
+            else
+                cur_count = count;
+
+            slow_dwcssi_write(bank, buffer, offset, cur_count);
+
+            page_offset = 0;
+            buffer      += cur_count;
+            offset      += cur_count;
+            count       -= cur_count;
+        }
+    }
+
+err:
+	target_free_working_area(target, data_wa);
+	target_free_working_area(target, algorithm_wa);
+
     return ERROR_OK;
 }
 

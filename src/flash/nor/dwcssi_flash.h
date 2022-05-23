@@ -65,6 +65,7 @@ typedef union sp_flash_cr1_t
 // flash support
 int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t id);
 int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
+uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
 int flash_check_status(uint8_t status);
 uint8_t flash_check_wp(uint8_t status);
 uint8_t flash_quad_mode(uint8_t config_reg);

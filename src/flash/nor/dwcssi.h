@@ -153,6 +153,7 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     TRANS_TYPE_TT2                            2
 #define     TRANS_TYPE_TT3                            3
 
+#define     ADDR_L24                                  6
 #define     ADDR_L28                                  7
 #define     ADDR_L32                                  8
 
