@@ -10,7 +10,7 @@ CFLAGS = -nostdlib -nostartfiles -Wall -Werror -Os -fPIC -Wunused-result -g
 RISCV32_CFLAGS = -march=rv32e -mabi=ilp32e $(CFLAGS)
 RISCV64_CFLAGS = -march=rv64i -mabi=lp64 $(CFLAGS)
 
-all: riscv64_dwcssi.inc riscv64_dwcssi.lst
+all: riscv32_dwcssi.inc riscv64_dwcssi.inc riscv64_dwcssi.lst
 
 .PHONY: clean
 

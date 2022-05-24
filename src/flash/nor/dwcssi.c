@@ -160,7 +160,7 @@ static int dwcssi_config_CTRLR0(struct flash_bank *bank, uint32_t dfs, uint32_t 
 
 static int dwcssi_config_CTRLR1(struct flash_bank *bank, uint32_t ndf)
 {
-    // LOG_INFO("config CTRLR1");
+    LOG_INFO("config CTRLR1 ndf %x", ndf);
     dwcssi_set_bits(bank, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(ndf), DWCSSI_CTRLR1_NDF_MASK);   
     return ERROR_OK;
 }
@@ -234,7 +234,7 @@ static void dwcssi_config_eeprom(struct flash_bank *bank, uint32_t len)
     dwcssi_enable(bank);
 }
 
-static void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf,uint8_t tx_total_len, uint32_t tx_start_lv)
+static void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv)
 {
     dwcssi_disable(bank);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, frf, TX_ONLY);
@@ -285,7 +285,7 @@ static int dwcssi_txwm_wait(struct flash_bank* bank)
         if (!(status & DWCSSI_SR_BUSY(1)))
             break;
         int64_t now = timeval_ms();
-        if (now - start > 10000) {
+        if (now - start > 1000) {
             dwcssi_read_reg(bank, &ir_status, DWCSSI_REG_ISR);
             LOG_INFO("ctl staus %x interrupt status %x", status, ir_status);
             LOG_ERROR("ssi timeout");
@@ -324,6 +324,7 @@ static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32
     uint32_t i;
     for(i = 0; i < in_cnt; i++)
     {
+        LOG_INFO("tx buf %x data %x", i, *(in_buf+i));
         dwcssi_tx(bank, *(in_buf+i));
     }
 
@@ -361,7 +362,8 @@ static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out
 static int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
 {
     int64_t endtime;
-    uint8_t rx, rx_len = 0x1;
+    uint8_t rx;
+    uint32_t rx_len = 0x1;
 
     // LOG_INFO("check flash status");
 
@@ -397,15 +399,15 @@ static int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t*
 
 static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
 {
-    uint8_t tx_start_lv = 0, tx_total_len = 0xFF;
+    uint8_t tx_start_lv = 0;
 
-    dwcssi_config_tx(bank, frf, tx_total_len, tx_start_lv);
+    dwcssi_config_tx(bank, frf, 0, tx_start_lv);
     dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
     dwcssi_txwm_wait(bank);
     return ERROR_OK;
 }
 
-static int dwcssi_read_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, uint8_t len)
+static int dwcssi_read_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, uint32_t len)
 {
     // LOG_INFO("dwcssi read flash reg");
     uint8_t rx, i;
@@ -621,7 +623,7 @@ static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uin
 
     LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
-    dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x3);
+    dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x4);
     dwcssi_tx(bank, dwcssi_info->dev->qprog_cmd);
     dwcssi_tx(bank, offset);
     dwcssi_tx_buf(bank, buffer, len);
@@ -707,6 +709,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     page_offset = offset % page_size;
 
     dwcssi_flash_quad_en(bank);
+
     if (algorithm_wa)
     {
         LOG_INFO("wa allocate success");
@@ -740,9 +743,13 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
 					dwcssi_info->ctrl_base, page_size, data_wa->address, offset, cur_count,
 					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
+			// retval = target_run_algorithm(target, 0, NULL,
+			// 		ARRAY_SIZE(reg_params), reg_params,
+			// 		algorithm_wa->address, 0, cur_count * 2, NULL);
+
 			retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
-					algorithm_wa->address, 0, cur_count * 2, NULL);
+					algorithm_wa->address, 0, 10000, NULL);
 			if (retval != ERROR_OK) {
 				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 						algorithm_wa->address, retval);
@@ -750,8 +757,9 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 			}
 
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
+			LOG_INFO("Algorithm returned error %llx", algorithm_result);
+            
 			if (algorithm_result != 0) {
-				LOG_ERROR("Algorithm returned error %" PRId64, algorithm_result);
 				retval = ERROR_FAIL;
 				goto err;
 			}

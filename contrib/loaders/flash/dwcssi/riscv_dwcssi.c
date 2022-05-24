@@ -109,15 +109,15 @@
 #define     SPI_FRF_X8_MODE                           3
 
 
-#define TIMEOUT   1000
+#define TIMEOUT   10000
 
 #define DEBUG
 #ifdef DEBUG
 #define ERROR_STACK(x)		    (x)
-#define ERROR_DWCSSI_TXWM_WAIT	0x20
-#define ERROR_DWCSSI_TX		    0x100
-#define ERROR_DWCSSI_RX		    0x1000
-#define ERROR_DWCSSI_WIP		0x50000
+#define ERROR_DWCSSI_TXWM_WAIT	0x200000
+#define ERROR_DWCSSI_TX		    0x100000
+#define ERROR_DWCSSI_RX		    0x100000
+#define ERROR_DWCSSI_WIP		0x500000
 #else
 #define ERROR_STACK(x)		    0
 #define ERROR_DWCSSI_TXWM_WAIT	1
@@ -135,16 +135,17 @@ static int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buff
 
 int flash_dwcssi(volatile uint32_t *ctrl_base, uint32_t page_size, const uint8_t *buffer, uint32_t offset, uint32_t count, uint32_t flash_info)
 {
-    int result = dwcssi_txwm_wait(ctrl_base);
+    uint32_t result = dwcssi_txwm_wait(ctrl_base);
+    uint8_t wr_en = 1;
     if(result != ERROR_OK)
-        return result | ERROR_STACK(0x1);
+        return result | ERROR_STACK(0x10000);
     
     result = dwcssi_wait_flash_idle(ctrl_base);    
-    if(result != ERROR_OK)
-    {
-        result |= ERROR_STACK(0x2);
-        goto err;
-    }
+    // if(result != ERROR_OK)
+    // {
+    //     result |= ERROR_STACK(0x2000);
+    //     goto err;
+    // }
 
     uint32_t page_offset = offset & (page_size - 1);
 
@@ -155,12 +156,16 @@ int flash_dwcssi(volatile uint32_t *ctrl_base, uint32_t page_size, const uint8_t
             cur_count = page_size - page_offset;
         else 
             cur_count = count;
-        
+
+        if(wr_en)
+        {
         result = dwcssi_write_buffer(ctrl_base, buffer, offset, cur_count, flash_info);
         if(result != ERROR_OK)
         {
-            result |= ERROR_STACK(0x3);
+            result |= ERROR_STACK(0x20000);
             goto err;
+        }
+
         }
 
         page_offset = 0;
@@ -242,7 +247,7 @@ static void dwcssi_config_TXFTLR(volatile uint32_t *ctrl_base, uint32_t tft, uin
 }
 
 
-static void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint8_t tx_total_len, uint32_t tx_start_lv)
+static void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv)
 {
     dwcssi_disable(ctrl_base);
     dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, frf, TX_ONLY);
@@ -300,15 +305,20 @@ static int dwcssi_tx(volatile uint32_t *ctrl_base, uint8_t in)
 static int dwcssi_rx(volatile uint32_t *ctrl_base, uint8_t *out)
 {
     uint32_t value, timeout = TIMEOUT;
+    uint32_t dwcssi_sr;
 
     while(timeout--)
     {
-        if(dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, DWCSSI_SR_RFNE_MASK, 3))
+        dwcssi_sr = dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, 0xFFFFFFFF, 0);
+        // if(dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, DWCSSI_SR_RFNE_MASK, 3))
+        if((dwcssi_sr >> 3) & 0x1)
         {
+            // value =dwcssi_sr;
+            // return value;            
             value = dwcssi_read_reg(ctrl_base, DWCSSI_REG_DRx_START);
             if(out)
                 *out = value & 0xFF;
-            return ERROR_OK;
+            return ERROR_OK;            
         }
     }
     
@@ -317,37 +327,40 @@ static int dwcssi_rx(volatile uint32_t *ctrl_base, uint8_t *out)
 
 static int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 {
-    int result;
-    uint8_t rx;
-    uint32_t timeout = TIMEOUT;
-	dwcssi_disable(ctrl_base);
-    dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
-    dwcssi_config_CTRLR1(ctrl_base, 0);
-    dwcssi_config_TXFTLR(ctrl_base, 0, 0);
-    dwcssi_enable(ctrl_base);
+    int result = 0;
+    uint8_t rx = 0;
+    uint32_t timeout = 0;
 
-    result = dwcssi_tx(ctrl_base, SPIFLASH_READ_STATUS);
-	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x100000);    
-    result = dwcssi_txwm_wait(ctrl_base);
-	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x200000);
-    result = dwcssi_rx(ctrl_base, NULL);
-	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x300000);
 
-    while(timeout--)
+    // result = dwcssi_tx(ctrl_base, SPIFLASH_READ_STATUS);
+    // result = dwcssi_txwm_wait(ctrl_base);
+	// if (result != ERROR_OK)
+		// return result | ERROR_STACK(0x200000);
+    // result = dwcssi_rx(ctrl_base, NULL);
+	// if (result != ERROR_OK)
+	// 	return result | ERROR_STACK(0x300000);
+
+    for(timeout = 0; timeout < 2; timeout ++)
     {
+	    dwcssi_disable(ctrl_base);
+        dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
+        dwcssi_config_CTRLR1(ctrl_base, 0);
+        dwcssi_config_TXFTLR(ctrl_base, 0, 0);
+        dwcssi_enable(ctrl_base);
+
         dwcssi_tx(ctrl_base, SPIFLASH_READ_STATUS);
         result = dwcssi_txwm_wait(ctrl_base);
+
         if (result != ERROR_OK)
-			return result | ERROR_STACK(0x40000);
+			return result | ERROR_STACK(0x000100);
+
         result = dwcssi_rx(ctrl_base, &rx);
         if(result != ERROR_OK)
-            return result | ERROR_STACK(0x50000);
+            return result | ERROR_STACK(0x000200);
+
         if((rx & SPIFLASH_BSY_BIT) == 0)
         {
-            return ERROR_OK;
+            return (rx);
         }
     }
     return ERROR_DWCSSI_WIP;
@@ -356,7 +369,7 @@ static int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 static int dwcssi_wr_en(volatile uint32_t *ctrl_base)
 {
     int result;
-    dwcssi_config_tx(ctrl_base, SPI_FRF_X1_MODE, 0xFF, 0);
+    dwcssi_config_tx(ctrl_base, SPI_FRF_X1_MODE, 0, 0);
     dwcssi_tx(ctrl_base, SPIFLASH_WRITE_ENABLE);
     result = dwcssi_txwm_wait(ctrl_base);
     return result;
@@ -365,29 +378,35 @@ static int dwcssi_wr_en(volatile uint32_t *ctrl_base)
 
 static int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info)
 {
-    uint32_t i;
+    uint32_t i = 0;
     int result;
+
     result = dwcssi_wr_en(ctrl_base);
-	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x210000);    
+
+	// if (result != ERROR_OK)
+	// 	return result | ERROR_STACK(0x1000);    
     dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x2);
 
     result = dwcssi_tx(ctrl_base, flash_info & 0xFF);
-	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x220000);      
+	// if (result != ERROR_OK)
+	// 	return result | ERROR_STACK(0x2000);      
     result = dwcssi_tx(ctrl_base, offset);
 	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x230000);      
+		return result | ERROR_STACK(0x3000);      
     for(i = 0; i < len; i++)
     {
         result = dwcssi_tx(ctrl_base, buffer[i]);
 	    if (result != ERROR_OK)
-	    	return result | ERROR_STACK(0x240000);          
+	    	return result | ERROR_STACK(0x4000);          
     }
 
     result = dwcssi_txwm_wait(ctrl_base);
 	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x250000);      
+		return result | ERROR_STACK(0x5000);      
 
-    return dwcssi_wait_flash_idle(ctrl_base);
+    result = dwcssi_wait_flash_idle(ctrl_base);
+
+	if (result != ERROR_OK)
+		return (result | ERROR_STACK(0x6000));  
+    return ERROR_OK;
 }
