@@ -154,7 +154,7 @@ int flash_dwcssi(volatile uint32_t *ctrl_base, uint32_t page_size, const uint8_t
     uint32_t result = 0;
 
 
-    __RV_CSR_CLEAR(CSR_MMISC_CTL,MMISC_CTL_BPU);
+    // __RV_CSR_CLEAR(CSR_MMISC_CTL,MMISC_CTL_BPU);
 
     result = dwcssi_txwm_wait(ctrl_base);
     if(result != ERROR_OK)

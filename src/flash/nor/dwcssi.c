@@ -160,7 +160,7 @@ static int dwcssi_config_CTRLR0(struct flash_bank *bank, uint32_t dfs, uint32_t 
 
 static int dwcssi_config_CTRLR1(struct flash_bank *bank, uint32_t ndf)
 {
-    LOG_INFO("config CTRLR1 ndf %x", ndf);
+    // LOG_INFO("config CTRLR1 ndf %x", ndf);
     dwcssi_set_bits(bank, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(ndf), DWCSSI_CTRLR1_NDF_MASK);   
     return ERROR_OK;
 }
@@ -211,7 +211,7 @@ static void dwcssi_x4_mode(struct flash_bank *bank, uint32_t tmod)
     }
 
     dwcssi_config_SPICTRLR0(bank, spi_ctrlr0.reg_val, 0xFFFFFFFF);
-    LOG_INFO("dwcssi config SPICTRLR0 value %x", spi_ctrlr0.reg_val);
+    // LOG_INFO("dwcssi config SPICTRLR0 value %x", spi_ctrlr0.reg_val);
 }
 
 
@@ -287,7 +287,7 @@ static int dwcssi_txwm_wait(struct flash_bank* bank)
         int64_t now = timeval_ms();
         if (now - start > 1000) {
             dwcssi_read_reg(bank, &ir_status, DWCSSI_REG_ISR);
-            LOG_INFO("ctl staus %x interrupt status %x", status, ir_status);
+            // LOG_INFO("ctl staus %x interrupt status %x", status, ir_status);
             LOG_ERROR("ssi timeout");
             return ERROR_TARGET_TIMEOUT;
         }
@@ -324,7 +324,7 @@ static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32
     uint32_t i;
     for(i = 0; i < in_cnt; i++)
     {
-        LOG_INFO("tx buf %x data %x", i, *(in_buf+i));
+        // LOG_INFO("tx buf %x data %x", i, *(in_buf+i));
         dwcssi_tx(bank, *(in_buf+i));
     }
 
@@ -384,7 +384,7 @@ static int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t*
         {
             *sr = rx;
             if((rx & SPIFLASH_BSY_BIT) == 0) {
-                LOG_INFO("flash status %x idle", rx);
+                // LOG_INFO("flash status %x idle", rx);
                 return ERROR_OK;
             }
             else if(flash_check_status(rx))
@@ -392,7 +392,7 @@ static int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t*
         }    
     }
 
-    LOG_INFO("flash timeout");
+    LOG_ERROR("flash timeout");
     return ERROR_FAIL;
 }
 
@@ -433,7 +433,7 @@ static int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t cmd, uint8_t sr1
 {
     uint8_t flash_sr;
     // uint32_t flash_cr=0;
-    LOG_INFO("dwcssi wr flash sr %x cr %x", sr1, cr1);
+    // LOG_INFO("dwcssi wr flash sr %x cr %x", sr1, cr1);
 
     dwcssi_txwm_wait(bank);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
@@ -466,16 +466,13 @@ static void dwcssi_flash_quad_en(struct flash_bank *bank)
     uint32_t flash_cr = 0, quad_en;
     dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     quad_en = (flash_cr >> 0x1) & 0x1;
-    LOG_INFO("flash cr %x bit %x", flash_cr, quad_en);
+    // LOG_INFO("flash cr %x bit %x", flash_cr, quad_en);
     if(quad_en == 0)
     {
-        LOG_INFO("dwcssi flash en quad");
+        // LOG_INFO("dwcssi flash en quad");
         dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr | 0x2);
     }
-    else
-    {
-        LOG_INFO("flash quad enabled");
-    }
+
 }
 
 static void dwcssi_flash_quad_disable(struct flash_bank *bank)
@@ -499,7 +496,7 @@ static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
     // dwcssi_enable(bank);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
     dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 0xFF, 4);
-    LOG_INFO("dwcssi erase cmd %x sector %x", dwcssi_info->dev->erase_cmd, offset);
+    // LOG_INFO("dwcssi erase cmd %x sector %x", dwcssi_info->dev->erase_cmd, offset);
 
     dwcssi_tx(bank, dwcssi_info->dev->erase_cmd);
     dwcssi_tx(bank, offset >> 24);
@@ -523,7 +520,6 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
     int retval = ERROR_OK;
 
     LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
-    LOG_INFO("dwcssi erase");
     if (target->state != TARGET_HALTED) {
         LOG_ERROR("Target not halted");
         return ERROR_TARGET_NOT_HALTED;
@@ -621,7 +617,7 @@ static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uin
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
     uint8_t flash_sr;
 
-    LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
+    // LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
     dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x4);
     dwcssi_tx(bank, dwcssi_info->dev->qprog_cmd);
@@ -663,21 +659,22 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     struct working_area *data_wa      = NULL;
     const uint8_t *bin;
     size_t bin_size;
+    uint64_t start, now, used_time;
 
     if(xlen == 32)
     {
-        LOG_INFO("rv 32");
+        // LOG_INFO("rv 32");
         bin = riscv32_bin;
         bin_size = sizeof(riscv32_bin);
     } else {
-        LOG_INFO("rv 64");
+        // LOG_INFO("rv 64");
         bin = riscv64_bin;
         bin_size = sizeof(riscv64_bin);
     }
 
     uint32_t data_wa_size = 0;
 
-
+    start = timeval_ms();
 	if (target_alloc_working_area(target, bin_size, &algorithm_wa) == ERROR_OK) {
 		retval = target_write_buffer(target, algorithm_wa->address,
 				bin_size, bin);
@@ -707,12 +704,14 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
                 dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
     page_offset = offset % page_size;
-
+    now = timeval_ms();
+    used_time = now - start;
+    LOG_DEBUG("loader init time %llx", used_time);
     dwcssi_flash_quad_en(bank);
 
     if (algorithm_wa)
     {
-        LOG_INFO("wa allocate success");
+        // LOG_INFO("wa allocate success");
         struct reg_param reg_params[6];
 		init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
 		init_reg_param(&reg_params[1], "a1", xlen, PARAM_OUT);
@@ -723,6 +722,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 
         while(count > 0)
         {
+            start = timeval_ms();
             cur_count = MIN(count, data_wa_size);
 			buf_set_u64(reg_params[0].value, 0, xlen, dwcssi_info->ctrl_base);
 			buf_set_u64(reg_params[1].value, 0, xlen, page_size);
@@ -737,7 +737,10 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 						cur_count, data_wa->address, retval);
 				goto err;
 			}
-			
+			now = timeval_ms();
+            used_time = now - start;
+
+            LOG_DEBUG("count %x loader init time %llx", count, used_time);
             LOG_DEBUG("write(ctrl_base=0x%" TARGET_PRIxADDR ", page_size=0x%x, "
 					"address=0x%" TARGET_PRIxADDR ", offset=0x%" PRIx32
 					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
@@ -746,7 +749,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 			// retval = target_run_algorithm(target, 0, NULL,
 			// 		ARRAY_SIZE(reg_params), reg_params,
 			// 		algorithm_wa->address, 0, cur_count * 2, NULL);
-
+            start = timeval_ms();
 			retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
 					algorithm_wa->address, 0, 10000, NULL);
@@ -757,12 +760,16 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 			}
 
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
-			LOG_INFO("Algorithm returned error %llx", algorithm_result);
             
 			if (algorithm_result != 0) {
+			    LOG_INFO("Algorithm returned error %llx", algorithm_result);
 				retval = ERROR_FAIL;
 				goto err;
 			}
+            now = timeval_ms();
+            used_time = now - start;
+
+            LOG_DEBUG("count %x loader execute time %llx", count, used_time);
 
 			buffer += cur_count;
 			offset += cur_count;
@@ -807,7 +814,7 @@ static int dwcssi_reset_flash(struct flash_bank *bank)
     // dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     if(flash_err != 0)
     {
-        LOG_INFO("Flash Status Error %x", flash_sr);
+        // LOG_INFO("Flash Status Error %x", flash_sr);
         dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
 
         dwcssi_tx(bank, 0xF0);
@@ -862,7 +869,7 @@ static int dwcssi_probe(struct flash_bank *bank)
     uint32_t id = 0;
     // uint8_t spi_frf = SPI_FRF_X1_MODE;
     // int retval
-    LOG_INFO("test dwcssi probe");
+    // LOG_INFO("test dwcssi probe");
 
     dwcssi_info_init(bank, dwcssi_info);
     dwcssi_config_init(bank);
