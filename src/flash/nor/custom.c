@@ -357,7 +357,7 @@ static int custom_probe(struct flash_bank *bank)
 {
 	struct flash_bank_msg *bank_msg = bank->driver_priv;
 
-	uint32_t id = 0x001940ef;
+	uint32_t id = 0x12345678;
 	struct flash_sector *sectors;
 	uint32_t sectorsize;
 
@@ -398,43 +398,8 @@ static int custom_probe(struct flash_bank *bank)
 	bank_msg->param_1 = 0;
 
 	id = custom_run_algorithm(bank);
-	/* free sectors */
-	free(bank->sectors);
 
-	bank_msg->dev = NULL;
-	for (const struct flash_device *p = flash_devices; p->name ; p++) {
-		if (p->device_id == id) {
-			bank_msg->dev = p;
-			break;
-		}
-	}
-	if (!bank_msg->dev) {
-		LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", id);
-		return ERROR_FAIL;
-	}
-	LOG_INFO("Found flash device \'%s\' (ID 0x%08" PRIx32 ")",
-			bank_msg->dev->name, bank_msg->dev->device_id);
-	/* Set correct size value */
-	bank->size = bank_msg->dev->size_in_bytes;
-	if (bank->size <= (1UL << 16))
-		LOG_WARNING("device needs 2-byte addresses - not implemented");
-	/* if no sectors, treat whole bank as single sector */
-	sectorsize = bank_msg->dev->sectorsize ?
-		bank_msg->dev->sectorsize : bank_msg->dev->size_in_bytes;
-	/* create and fill sectors array */
-	bank->num_sectors = bank_msg->dev->size_in_bytes / sectorsize;
-	sectors = malloc(sizeof(struct flash_sector) * bank->num_sectors);
-	if (sectors == NULL) {
-		LOG_ERROR("not enough memory");
-		return ERROR_FAIL;
-	}
-	for (unsigned int sector = 0; sector < bank->num_sectors; sector++) {
-		sectors[sector].offset = sector * sectorsize;
-		sectors[sector].size = sectorsize;
-		sectors[sector].is_erased = -1;
-		sectors[sector].is_protected = 0;
-	}
-	bank->sectors = sectors;
+	LOG_INFO("Found custom flash device (ID 0x%08" PRIx32 ")", id);
 	bank_msg->probed = true;
 	return ERROR_OK;
 }
