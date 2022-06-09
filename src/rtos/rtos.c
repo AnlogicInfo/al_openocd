@@ -22,35 +22,36 @@
 
 #include "rtos.h"
 #include "target/target.h"
+#include "target/smp.h"
 #include "helper/log.h"
 #include "helper/binarybuffer.h"
 #include "server/gdb_server.h"
 
 /* RTOSs */
-extern struct rtos_type FreeRTOS_rtos;
-extern struct rtos_type ThreadX_rtos;
-extern struct rtos_type eCos_rtos;
-extern struct rtos_type Linux_os;
+extern struct rtos_type freertos_rtos;
+extern struct rtos_type threadx_rtos;
+extern struct rtos_type ecos_rtos;
+extern struct rtos_type linux_rtos;
 extern struct rtos_type chibios_rtos;
 extern struct rtos_type chromium_ec_rtos;
-extern struct rtos_type embKernel_rtos;
+extern struct rtos_type embkernel_rtos;
 extern struct rtos_type mqx_rtos;
-extern struct rtos_type uCOS_III_rtos;
+extern struct rtos_type ucos_iii_rtos;
 extern struct rtos_type nuttx_rtos;
 extern struct rtos_type hwthread_rtos;
 extern struct rtos_type riot_rtos;
 extern struct rtos_type zephyr_rtos;
 
 static struct rtos_type *rtos_types[] = {
-	&ThreadX_rtos,
-	&FreeRTOS_rtos,
-	&eCos_rtos,
-	&Linux_os,
+	&threadx_rtos,
+	&freertos_rtos,
+	&ecos_rtos,
+	&linux_rtos,
 	&chibios_rtos,
 	&chromium_ec_rtos,
-	&embKernel_rtos,
+	&embkernel_rtos,
 	&mqx_rtos,
-	&uCOS_III_rtos,
+	&ucos_iii_rtos,
 	&nuttx_rtos,
 	&riot_rtos,
 	&zephyr_rtos,
@@ -119,7 +120,7 @@ static int os_alloc_create(struct target *target, struct rtos_type *ostype,
 {
 	int ret = os_alloc(target, ostype, cmd_ctx);
 
-	if (JIM_OK == ret) {
+	if (ret == JIM_OK) {
 		ret = target->rtos->type->create(target);
 		if (ret != JIM_OK)
 			os_free(target);
@@ -148,7 +149,7 @@ int rtos_create(struct jim_getopt_info *goi, struct target *target)
 	if (e != JIM_OK)
 		return e;
 
-	if (0 == strcmp(cp, "auto")) {
+	if (strcmp(cp, "auto") == 0) {
 		/* Auto detect tries to look up all symbols for each RTOS,
 		 * and runs the RTOS driver's _detect() function when GDB
 		 * finds all symbols for any RTOS. See rtos_qsymbol(). */
@@ -160,7 +161,7 @@ int rtos_create(struct jim_getopt_info *goi, struct target *target)
 	}
 
 	for (x = 0; rtos_types[x]; x++)
-		if (0 == strcmp(cp, rtos_types[x]->name))
+		if (strcmp(cp, rtos_types[x]->name) == 0)
 			return os_alloc_create(target, rtos_types[x], cmd_ctx);
 
 	Jim_SetResultFormatted(goi->interp, "Unknown RTOS type %s, try one of: ", cp);
@@ -180,7 +181,7 @@ void rtos_destroy(struct target *target)
 int gdb_thread_packet(struct connection *connection, char const *packet, int packet_size)
 {
 	struct target *target = get_target_from_connection(connection);
-	if (target->rtos == NULL)
+	if (!target->rtos)
 		return rtos_thread_packet(connection, packet, packet_size);	/* thread not
 										 *found*/
 	return target->rtos->gdb_thread_packet(connection, packet, packet_size);
@@ -242,7 +243,7 @@ int rtos_qsymbol(struct connection *connection, char const *packet, int packet_s
 	uint64_t addr = 0;
 	size_t reply_len;
 	char reply[GDB_BUFFER_SIZE + 1], cur_sym[GDB_BUFFER_SIZE / 2 + 1] = ""; /* Extra byte for null-termination */
-	struct symbol_table_elem *next_sym = NULL;
+	struct symbol_table_elem *next_sym;
 	struct target *target = get_target_from_connection(connection);
 	struct rtos *os = target->rtos;
 
@@ -274,7 +275,16 @@ int rtos_qsymbol(struct connection *connection, char const *packet, int packet_s
 			cur_sym[0] = '\x00';
 		}
 	}
+
+	LOG_DEBUG("RTOS: Address of symbol '%s' is 0x%" PRIx64, cur_sym, addr);
+
 	next_sym = next_symbol(os, cur_sym, addr);
+
+	/* Should never happen unless the debugger misbehaves */
+	if (!next_sym) {
+		LOG_WARNING("RTOS: Debugger sent us qSymbol with '%s' that we did not ask for", cur_sym);
+		goto done;
+	}
 
 	if (!next_sym->symbol_name) {
 		/* No more symbols need looking up */
@@ -299,6 +309,8 @@ int rtos_qsymbol(struct connection *connection, char const *packet, int packet_s
 		goto done;
 	}
 
+	LOG_DEBUG("RTOS: Requesting symbol lookup of '%s' from the debugger", next_sym->symbol_name);
+
 	reply_len = snprintf(reply, sizeof(reply), "qSymbol:");
 	reply_len += hexify(reply + reply_len,
 		(const uint8_t *)next_sym->symbol_name, strlen(next_sym->symbol_name),
@@ -314,13 +326,13 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 	struct target *target = get_target_from_connection(connection);
 
 	if (strncmp(packet, "qThreadExtraInfo,", 17) == 0) {
-		if ((target->rtos != NULL) && (target->rtos->thread_details != NULL) &&
+		if ((target->rtos) && (target->rtos->thread_details) &&
 				(target->rtos->thread_count != 0)) {
 			threadid_t threadid = 0;
 			int found = -1;
 			sscanf(packet, "qThreadExtraInfo,%" SCNx64, &threadid);
 
-			if ((target->rtos != NULL) && (target->rtos->thread_details != NULL)) {
+			if ((target->rtos) && (target->rtos->thread_details)) {
 				int thread_num;
 				for (thread_num = 0; thread_num < target->rtos->thread_count; thread_num++) {
 					if (target->rtos->thread_details[thread_num].threadid == threadid) {
@@ -337,17 +349,17 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 			struct thread_detail *detail = &target->rtos->thread_details[found];
 
 			int str_size = 0;
-			if (detail->thread_name_str != NULL)
+			if (detail->thread_name_str)
 				str_size += strlen(detail->thread_name_str);
-			if (detail->extra_info_str != NULL)
+			if (detail->extra_info_str)
 				str_size += strlen(detail->extra_info_str);
 
 			char *tmp_str = calloc(str_size + 9, sizeof(char));
 			char *tmp_str_ptr = tmp_str;
 
-			if (detail->thread_name_str != NULL)
+			if (detail->thread_name_str)
 				tmp_str_ptr += sprintf(tmp_str_ptr, "Name: %s", detail->thread_name_str);
-			if (detail->extra_info_str != NULL) {
+			if (detail->extra_info_str) {
 				if (tmp_str_ptr != tmp_str)
 					tmp_str_ptr += sprintf(tmp_str_ptr, ", ");
 				tmp_str_ptr += sprintf(tmp_str_ptr, "%s", detail->extra_info_str);
@@ -379,7 +391,7 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 		return ERROR_OK;
 	} else if (strncmp(packet, "qfThreadInfo", 12) == 0) {
 		int i;
-		if (target->rtos != NULL) {
+		if (target->rtos) {
 			if (target->rtos->thread_count == 0) {
 				gdb_put_packet(connection, "l", 1);
 			} else {
@@ -412,7 +424,7 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 		 * otherwise it gets incorrectly handled */
 		return GDB_THREAD_PACKET_NOT_CONSUMED;
 	} else if (strncmp(packet, "qC", 2) == 0) {
-		if (target->rtos != NULL) {
+		if (target->rtos) {
 			char buffer[19];
 			int size;
 			size = snprintf(buffer, 19, "QC%016" PRIx64, target->rtos->current_thread);
@@ -424,7 +436,7 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 		threadid_t threadid;
 		int found = -1;
 		sscanf(packet, "T%" SCNx64, &threadid);
-		if ((target->rtos != NULL) && (target->rtos->thread_details != NULL)) {
+		if ((target->rtos) && (target->rtos->thread_details)) {
 			int thread_num;
 			for (thread_num = 0; thread_num < target->rtos->thread_count; thread_num++) {
 				if (target->rtos->thread_details[thread_num].threadid == threadid) {
@@ -440,7 +452,7 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 		return ERROR_OK;
 	} else if (packet[0] == 'H') {	/* Set current thread ( 'c' for step and continue, 'g' for
 					 * all other operations ) */
-		if ((packet[1] == 'g') && (target->rtos != NULL)) {
+		if ((packet[1] == 'g') && (target->rtos)) {
 			threadid_t threadid;
 			sscanf(packet, "Hg%16" SCNx64, &threadid);
 			LOG_DEBUG("RTOS: GDB requested to set current thread to 0x%" PRIx64, threadid);
@@ -485,7 +497,7 @@ int rtos_get_gdb_reg(struct connection *connection, int reg_num)
 {
 	struct target *target = get_target_from_connection(connection);
 	threadid_t current_threadid = target->rtos->current_threadid;
-	if ((target->rtos != NULL) && (current_threadid != -1) &&
+	if ((target->rtos) && (current_threadid != -1) &&
 			(current_threadid != 0) &&
 			((current_threadid != target->rtos->current_thread) ||
 			(target->smp))) {	/* in smp several current thread are possible */
@@ -499,16 +511,33 @@ int rtos_get_gdb_reg(struct connection *connection, int reg_num)
 										target->rtos->current_thread);
 
 		int retval;
-		if (target->rtos->type->get_thread_reg) {
-			reg_list = calloc(1, sizeof(*reg_list));
-			reg_list[0].number = reg_num;
-			num_regs = 1;
-			retval = target->rtos->type->get_thread_reg(target->rtos,
-					current_threadid, reg_num, &reg_list[0]);
+		if (target->rtos->type->get_thread_reg_value) {
+			uint32_t reg_size;
+			uint8_t *reg_value;
+			retval = target->rtos->type->get_thread_reg_value(target->rtos,
+					current_threadid, reg_num, &reg_size, &reg_value);
 			if (retval != ERROR_OK) {
 				LOG_ERROR("RTOS: failed to get register %d", reg_num);
 				return retval;
 			}
+
+			/* Create a reg_list with one register that can
+			 * accommodate the full size of the one we just got the
+			 * value for. To do that we allocate extra space off the
+			 * end of the struct, relying on the fact that
+			 * rtos_reg.value is the last element in the struct. */
+			reg_list = calloc(1, sizeof(*reg_list) + DIV_ROUND_UP(reg_size, 8));
+			if (!reg_list) {
+				free(reg_value);
+				LOG_ERROR("Failed to allocated reg_list for %d-byte register.",
+					  reg_size);
+				return ERROR_FAIL;
+			}
+			reg_list[0].number = reg_num;
+			reg_list[0].size = reg_size;
+			memcpy(&reg_list[0].value, reg_value, DIV_ROUND_UP(reg_size, 8));
+			free(reg_value);
+			num_regs = 1;
 		} else {
 			retval = target->rtos->type->get_thread_reg_list(target->rtos,
 					current_threadid,
@@ -538,7 +567,7 @@ int rtos_get_gdb_reg_list(struct connection *connection)
 {
 	struct target *target = get_target_from_connection(connection);
 	int64_t current_threadid = target->rtos->current_threadid;
-	if ((target->rtos != NULL) && (current_threadid != -1) &&
+	if ((target->rtos) && (current_threadid != -1) &&
 			(current_threadid != 0) &&
 			((current_threadid != target->rtos->current_thread) ||
 			(target->smp))) {	/* in smp several current thread are possible */
@@ -572,8 +601,8 @@ int rtos_set_reg(struct connection *connection, int reg_num,
 {
 	struct target *target = get_target_from_connection(connection);
 	int64_t current_threadid = target->rtos->current_threadid;
-	if ((target->rtos != NULL) &&
-			(target->rtos->type->set_reg != NULL) &&
+	if ((target->rtos) &&
+			(target->rtos->type->set_reg) &&
 			(current_threadid != -1) &&
 			(current_threadid != 0)) {
 		return target->rtos->type->set_reg(target->rtos, reg_num, reg_value);
@@ -615,7 +644,7 @@ int rtos_generic_stack_read(struct target *target,
 #endif
 
 	target_addr_t new_stack_ptr;
-	if (stacking->calculate_process_stack != NULL) {
+	if (stacking->calculate_process_stack) {
 		new_stack_ptr = stacking->calculate_process_stack(target,
 				stack_data, stacking, stack_ptr);
 	} else {
@@ -761,10 +790,29 @@ static int rtos_try_next(struct target *target)
 	return 1;
 }
 
+struct rtos *rtos_of_target(struct target *target)
+{
+	/* Primarily consider the rtos field of the target itself, secondarily consider
+	 * rtos field SMP leader target, then consider rtos field of any other target in the SMP group.
+	 * Otherwise NULL return means that no associated non-zero rtos field could be found. */
+
+	struct target_list *pos;
+
+	if ((target->rtos) && (target->rtos->type))
+		return target->rtos;
+
+	foreach_smp_target(pos, target->smp_targets)
+		if ((pos->target->rtos) && (pos->target->rtos->type))
+			return pos->target->rtos;
+
+	return NULL;
+}
+
 int rtos_update_threads(struct target *target)
 {
-	if ((target->rtos != NULL) && (target->rtos->type != NULL))
-		target->rtos->type->update_threads(target->rtos);
+	struct rtos *rtos = rtos_of_target(target);
+	if (rtos)
+		rtos->type->update_threads(rtos);
 	return ERROR_OK;
 }
 
@@ -807,4 +855,12 @@ int rtos_write_buffer(struct target *target, target_addr_t address,
 	if (target->rtos->type->write_buffer)
 		return target->rtos->type->write_buffer(target->rtos, address, size, buffer);
 	return ERROR_NOT_IMPLEMENTED;
+}
+
+struct target *rtos_swbp_target(struct target *target, target_addr_t address,
+				uint32_t length, enum breakpoint_type type)
+{
+	if (target->rtos->type->swbp_target)
+		return target->rtos->type->swbp_target(target->rtos, address, length, type);
+	return target;
 }

@@ -27,6 +27,7 @@
 #include <helper/binarybuffer.h>
 #include <helper/time_support.h>
 #include <target/algorithm.h>
+#include <target/arm_adi_v5.h>
 #include <target/cortex_m.h>
 
 /* SI32_DEVICEID0 */
@@ -511,7 +512,7 @@ static int sim3x_flash_write(struct flash_bank *bank, const uint8_t *buffer, uin
 		count++;
 		new_buffer = malloc(count);
 
-		if (new_buffer == NULL) {
+		if (!new_buffer) {
 			LOG_ERROR("odd number of bytes to write and no memory "
 					"for padding buffer");
 			return ERROR_FAIL;
@@ -935,7 +936,7 @@ COMMAND_HANDLER(sim3x_mass_erase)
 	struct cortex_m_common *cortex_m = target_to_cm(target);
 	struct adiv5_dap *dap = cortex_m->armv7m.arm.dap;
 
-	if (dap == NULL) {
+	if (!dap) {
 		/* Used debug interface doesn't support direct DAP access */
 		LOG_ERROR("mass_erase can't be used by this debug interface");
 		return ERROR_FAIL;
@@ -980,9 +981,9 @@ COMMAND_HANDLER(sim3x_lock)
 	struct cortex_m_common *cortex_m = target_to_cm(target);
 	struct adiv5_dap *dap = cortex_m->armv7m.arm.dap;
 
-	if (dap == NULL) {
+	if (!dap) {
 		/* Used debug interface doesn't support direct DAP access */
-		LOG_INFO("Target can't by unlocked by this debug interface");
+		LOG_INFO("Target can't be unlocked by this debug interface");
 
 		/* Core check */
 		ret = target_read_u32(target, CPUID, &val);
@@ -1039,7 +1040,7 @@ COMMAND_HANDLER(sim3x_lock)
 			return retval;
 
 		ret = sim3x_flash_write(bank, lock_word, LOCK_WORD_ADDRESS, 4);
-		if (ERROR_OK != ret)
+		if (ret != ERROR_OK)
 			return ret;
 
 		LOG_INFO("Target is successfully locked");
@@ -1052,7 +1053,7 @@ COMMAND_HANDLER(sim3x_lock)
 		LOG_ERROR("Unexpected lock word value");
 
 		/* SIM3X_AP_ID_VALUE is not checked */
-		if (dap == NULL)
+		if (!dap)
 			LOG_INFO("Maybe this isn't a SiM3x MCU");
 
 		return ERROR_FAIL;

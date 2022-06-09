@@ -59,6 +59,7 @@ extern const struct flash_driver mdr_flash;
 extern const struct flash_driver mrvlqspi_flash;
 extern const struct flash_driver msp432_flash;
 extern const struct flash_driver niietcm4_flash;
+extern const struct flash_driver npcx_flash;
 extern const struct flash_driver nrf5_flash;
 extern const struct flash_driver nrf51_flash;
 extern const struct flash_driver numicro_flash;
@@ -124,6 +125,7 @@ static const struct flash_driver * const flash_drivers[] = {
 	&fm3_flash,
 	&fm4_flash,
 	&fespi_flash,
+	&gd32vf103_flash,
 	&jtagspi_flash,
 	&kinetis_flash,
 	&kinetis_ke_flash,
@@ -136,6 +138,7 @@ static const struct flash_driver * const flash_drivers[] = {
 	&mrvlqspi_flash,
 	&msp432_flash,
 	&niietcm4_flash,
+	&npcx_flash,
 	&nrf5_flash,
 	&nrf51_flash,
 	&numicro_flash,
@@ -157,7 +160,6 @@ static const struct flash_driver * const flash_drivers[] = {
 	&stm32lx_flash,
 	&stm32l4x_flash,
 	&stm32h7x_flash,
-	&gd32vf103_flash,
 	&stmsmi_flash,
 	&stmqspi_flash,
 	&str7x_flash,

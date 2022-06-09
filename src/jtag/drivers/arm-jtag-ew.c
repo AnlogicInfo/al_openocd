@@ -103,7 +103,7 @@ static int armjtagew_execute_queue(void)
 	enum scan_type type;
 	uint8_t *buffer;
 
-	while (cmd != NULL) {
+	while (cmd) {
 		switch (cmd->type) {
 			case JTAG_RUNTEST:
 				LOG_DEBUG_IO("runtest %i cycles, end in %i",
@@ -688,7 +688,7 @@ static struct armjtagew *armjtagew_usb_open(void)
 	const uint16_t pids[] = { USB_PID, 0 };
 	struct libusb_device_handle *dev;
 
-	if (jtag_libusb_open(vids, pids, NULL, &dev, NULL) != ERROR_OK)
+	if (jtag_libusb_open(vids, pids, &dev, NULL) != ERROR_OK)
 		return NULL;
 
 	struct armjtagew *result = malloc(sizeof(struct armjtagew));

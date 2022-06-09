@@ -41,8 +41,12 @@
  * official policies, either expressed or implied, of the Jim Tcl Project.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "jim-nvp.h"
 #include <string.h>
-#include <jim-nvp.h>
 
 int jim_get_nvp(Jim_Interp *interp,
 	Jim_Obj *objptr, const struct jim_nvp *nvp_table, const struct jim_nvp **result)
@@ -66,7 +70,7 @@ int jim_get_nvp(Jim_Interp *interp,
 struct jim_nvp *jim_nvp_name2value_simple(const struct jim_nvp *p, const char *name)
 {
 	while (p->name) {
-		if (0 == strcmp(name, p->name))
+		if (strcmp(name, p->name) == 0)
 			break;
 		p++;
 	}
@@ -76,7 +80,7 @@ struct jim_nvp *jim_nvp_name2value_simple(const struct jim_nvp *p, const char *n
 struct jim_nvp *jim_nvp_name2value_nocase_simple(const struct jim_nvp *p, const char *name)
 {
 	while (p->name) {
-		if (0 == strcasecmp(name, p->name))
+		if (strcasecmp(name, p->name) == 0)
 			break;
 		p++;
 	}
@@ -199,7 +203,7 @@ int jim_getopt_obj(struct jim_getopt_info *goi, Jim_Obj **puthere)
 	}
 	if (puthere)
 		*puthere = o;
-	if (o != NULL)
+	if (o)
 		return JIM_OK;
 	else
 		return JIM_ERR;
@@ -227,7 +231,7 @@ int jim_getopt_double(struct jim_getopt_info *goi, double *puthere)
 	Jim_Obj *o;
 	double _safe;
 
-	if (puthere == NULL)
+	if (!puthere)
 		puthere = &_safe;
 
 	r = jim_getopt_obj(goi, &o);
@@ -245,7 +249,7 @@ int jim_getopt_wide(struct jim_getopt_info *goi, jim_wide *puthere)
 	Jim_Obj *o;
 	jim_wide _safe;
 
-	if (puthere == NULL)
+	if (!puthere)
 		puthere = &_safe;
 
 	r = jim_getopt_obj(goi, &o);
@@ -260,7 +264,7 @@ int jim_getopt_nvp(struct jim_getopt_info *goi, const struct jim_nvp *nvp, struc
 	Jim_Obj *o;
 	int e;
 
-	if (puthere == NULL)
+	if (!puthere)
 		puthere = &_safe;
 
 	e = jim_getopt_obj(goi, &o);
@@ -284,7 +288,7 @@ int jim_getopt_enum(struct jim_getopt_info *goi, const char *const *lookup, int 
 	Jim_Obj *o;
 	int e;
 
-	if (puthere == NULL)
+	if (!puthere)
 		puthere = &_safe;
 	e = jim_getopt_obj(goi, &o);
 	if (e == JIM_OK)

@@ -21,6 +21,7 @@
 #endif
 
 #include "imp.h"
+#include <helper/binarybuffer.h>
 #include <target/algorithm.h>
 #include <target/armv7m.h>
 
@@ -302,8 +303,6 @@ static int max32xxx_erase(struct flash_bank *bank, unsigned int first,
 			max32xxx_flash_op_post(bank);
 			return ERROR_FLASH_OPERATION_FAILED;
 		}
-
-		bank->sectors[banknr].is_erased = 1;
 	}
 
 	if (!erased) {
@@ -768,16 +767,12 @@ COMMAND_HANDLER(max32xxx_handle_mass_erase_command)
 		return ERROR_OK;
 	}
 
-	if (ERROR_OK != retval)
+	if (retval != ERROR_OK)
 		return retval;
 
-	if (max32xxx_mass_erase(bank) == ERROR_OK) {
-		/* set all sectors as erased */
-		for (unsigned i = 0; i < bank->num_sectors; i++)
-			bank->sectors[i].is_erased = 1;
-
+	if (max32xxx_mass_erase(bank) == ERROR_OK)
 		command_print(CMD, "max32xxx mass erase complete");
-	} else
+	else
 		command_print(CMD, "max32xxx mass erase failed");
 
 	return ERROR_OK;
@@ -796,12 +791,12 @@ COMMAND_HANDLER(max32xxx_handle_protection_set_command)
 	}
 
 	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &bank);
-	if (ERROR_OK != retval)
+	if (retval != ERROR_OK)
 		return retval;
 	info = bank->driver_priv;
 
 	/* Convert the range to the page numbers */
-	if (1 != sscanf(CMD_ARGV[1], "0x%"SCNx32, &addr)) {
+	if (sscanf(CMD_ARGV[1], "0x%"SCNx32, &addr) != 1) {
 		LOG_WARNING("Error parsing address");
 		command_print(CMD, "max32xxx protection_set <bank> <addr> <size>");
 		return ERROR_FAIL;
@@ -809,7 +804,7 @@ COMMAND_HANDLER(max32xxx_handle_protection_set_command)
 	/* Mask off the top portion on the address */
 	addr = (addr & 0x0FFFFFFF);
 
-	if (1 != sscanf(CMD_ARGV[2], "0x%"SCNx32, &len)) {
+	if (sscanf(CMD_ARGV[2], "0x%"SCNx32, &len) != 1) {
 		LOG_WARNING("Error parsing length");
 		command_print(CMD, "max32xxx protection_set <bank> <addr> <size>");
 		return ERROR_FAIL;
@@ -852,12 +847,12 @@ COMMAND_HANDLER(max32xxx_handle_protection_clr_command)
 	}
 
 	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &bank);
-	if (ERROR_OK != retval)
+	if (retval != ERROR_OK)
 		return retval;
 	info = bank->driver_priv;
 
 	/* Convert the range to the page numbers */
-	if (1 != sscanf(CMD_ARGV[1], "0x%"SCNx32, &addr)) {
+	if (sscanf(CMD_ARGV[1], "0x%"SCNx32, &addr) != 1) {
 		LOG_WARNING("Error parsing address");
 		command_print(CMD, "max32xxx protection_clr <bank> <addr> <size>");
 		return ERROR_FAIL;
@@ -865,7 +860,7 @@ COMMAND_HANDLER(max32xxx_handle_protection_clr_command)
 	/* Mask off the top portion on the address */
 	addr = (addr & 0x0FFFFFFF);
 
-	if (1 != sscanf(CMD_ARGV[2], "0x%"SCNx32, &len)) {
+	if (sscanf(CMD_ARGV[2], "0x%"SCNx32, &len) != 1) {
 		LOG_WARNING("Error parsing length");
 		command_print(CMD, "max32xxx protection_clr <bank> <addr> <size>");
 		return ERROR_FAIL;
@@ -907,13 +902,13 @@ COMMAND_HANDLER(max32xxx_handle_protection_check_command)
 	}
 
 	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &bank);
-	if (ERROR_OK != retval)
+	if (retval != ERROR_OK)
 		return retval;
 	info = bank->driver_priv;
 
 	/* Update the protection array */
 	retval = max32xxx_protect_check(bank);
-	if (ERROR_OK != retval) {
+	if (retval != ERROR_OK) {
 		LOG_WARNING("Error updating the protection array");
 		return retval;
 	}

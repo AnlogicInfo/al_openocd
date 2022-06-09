@@ -16,7 +16,7 @@
 #include "target/target.h"
 #include "target/algorithm.h"
 #include "target/target_type.h"
-#include "log.h"
+#include <helper/log.h>
 #include "jtag/jtag.h"
 #include "target/register.h"
 #include "target/breakpoints.h"
@@ -1112,6 +1112,9 @@ static int execute_resume(struct target *target, bool step)
 	riscv011_info_t *info = get_info(target);
 
 	LOG_DEBUG("step=%d", step);
+
+	if (riscv_flush_registers(target) != ERROR_OK)
+		return ERROR_FAIL;
 
 	maybe_write_tselect(target);
 
@@ -2333,7 +2336,7 @@ static int wait_for_authbusy(struct target *target)
 	return ERROR_OK;
 }
 
-static int riscv011_authdata_read(struct target *target, uint32_t *value, unsigned index)
+static int riscv011_authdata_read(struct target *target, uint32_t *value, unsigned int index)
 {
 	if (index > 1) {
 		LOG_ERROR("Spec 0.11 only has a two authdata registers.");
@@ -2349,7 +2352,7 @@ static int riscv011_authdata_read(struct target *target, uint32_t *value, unsign
 	return ERROR_OK;
 }
 
-static int riscv011_authdata_write(struct target *target, uint32_t value, unsigned index)
+static int riscv011_authdata_write(struct target *target, uint32_t value, unsigned int index)
 {
 	if (index > 1) {
 		LOG_ERROR("Spec 0.11 only has a two authdata registers.");

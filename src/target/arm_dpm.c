@@ -50,7 +50,7 @@
 
 /* Read coprocessor */
 static int dpm_mrc(struct target *target, int cpnum,
-	uint32_t op1, uint32_t op2, uint32_t CRn, uint32_t CRm,
+	uint32_t op1, uint32_t op2, uint32_t crn, uint32_t crm,
 	uint32_t *value)
 {
 	struct arm *arm = target_to_arm(target);
@@ -62,12 +62,12 @@ static int dpm_mrc(struct target *target, int cpnum,
 		return retval;
 
 	LOG_DEBUG("MRC p%d, %d, r0, c%d, c%d, %d", cpnum,
-		(int) op1, (int) CRn,
-		(int) CRm, (int) op2);
+		(int) op1, (int) crn,
+		(int) crm, (int) op2);
 
 	/* read coprocessor register into R0; return via DCC */
 	retval = dpm->instr_read_data_r0(dpm,
-			ARMV4_5_MRC(cpnum, op1, 0, CRn, CRm, op2),
+			ARMV4_5_MRC(cpnum, op1, 0, crn, crm, op2),
 			value);
 
 	/* (void) */ dpm->finish(dpm);
@@ -75,7 +75,7 @@ static int dpm_mrc(struct target *target, int cpnum,
 }
 
 static int dpm_mcr(struct target *target, int cpnum,
-	uint32_t op1, uint32_t op2, uint32_t CRn, uint32_t CRm,
+	uint32_t op1, uint32_t op2, uint32_t crn, uint32_t crm,
 	uint32_t value)
 {
 	struct arm *arm = target_to_arm(target);
@@ -87,12 +87,12 @@ static int dpm_mcr(struct target *target, int cpnum,
 		return retval;
 
 	LOG_DEBUG("MCR p%d, %d, r0, c%d, c%d, %d", cpnum,
-		(int) op1, (int) CRn,
-		(int) CRm, (int) op2);
+		(int) op1, (int) crn,
+		(int) crm, (int) op2);
 
 	/* read DCC into r0; then write coprocessor register from R0 */
 	retval = dpm->instr_write_data_r0(dpm,
-			ARMV4_5_MCR(cpnum, op1, 0, CRn, CRm, op2),
+			ARMV4_5_MCR(cpnum, op1, 0, crn, crm, op2),
 			value);
 
 	/* (void) */ dpm->finish(dpm);
@@ -398,7 +398,7 @@ fail:
  * or running debugger code.
  */
 static int dpm_maybe_update_bpwp(struct arm_dpm *dpm, bool bpwp,
-	struct dpm_bpwp *xp, int *set_p)
+	struct dpm_bpwp *xp, bool *set_p)
 {
 	int retval = ERROR_OK;
 	bool disable;
@@ -473,7 +473,7 @@ int arm_dpm_write_dirty_registers(struct arm_dpm *dpm, bool bpwp)
 			struct breakpoint *bp = dbp->bp;
 
 			retval = dpm_maybe_update_bpwp(dpm, bpwp, &dbp->bpwp,
-					bp ? &bp->set : NULL);
+					bp ? &bp->is_set : NULL);
 			if (retval != ERROR_OK)
 				goto done;
 		}
@@ -485,7 +485,7 @@ int arm_dpm_write_dirty_registers(struct arm_dpm *dpm, bool bpwp)
 		struct watchpoint *wp = dwp->wp;
 
 		retval = dpm_maybe_update_bpwp(dpm, bpwp, &dwp->bpwp,
-				wp ? &wp->set : NULL);
+				wp ? &wp->is_set : NULL);
 		if (retval != ERROR_OK)
 			goto done;
 	}
@@ -1070,7 +1070,7 @@ int arm_dpm_setup(struct arm_dpm *dpm)
 	arm->read_core_reg = arm_dpm_read_core_reg;
 	arm->write_core_reg = arm_dpm_write_core_reg;
 
-	if (arm->core_cache == NULL) {
+	if (!arm->core_cache) {
 		cache = arm_build_reg_cache(target, arm);
 		if (!cache)
 			return ERROR_FAIL;

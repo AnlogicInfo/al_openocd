@@ -33,14 +33,18 @@
 #endif
 
 /* project specific includes */
+#include <helper/align.h>
 #include <helper/binarybuffer.h>
 #include <helper/bits.h>
 #include <helper/system.h>
+#include <helper/time_support.h>
+#include <jtag/adapter.h>
 #include <jtag/interface.h>
 #include <jtag/hla/hla_layout.h>
 #include <jtag/hla/hla_transport.h>
 #include <jtag/hla/hla_interface.h>
 #include <jtag/swim.h>
+#include <target/arm_adi_v5.h>
 #include <target/target.h>
 #include <transport/transport.h>
 
@@ -67,8 +71,8 @@
 #define ENDPOINT_IN  0x80
 #define ENDPOINT_OUT 0x00
 
-#define STLINK_WRITE_TIMEOUT 1000
-#define STLINK_READ_TIMEOUT 1000
+#define STLINK_WRITE_TIMEOUT  (LIBUSB_TIMEOUT_MS)
+#define STLINK_READ_TIMEOUT   (LIBUSB_TIMEOUT_MS)
 
 #define STLINK_RX_EP          (1|ENDPOINT_IN)
 #define STLINK_TX_EP          (2|ENDPOINT_OUT)
@@ -78,7 +82,7 @@
 #define STLINK_V2_1_TRACE_EP  (2|ENDPOINT_IN)
 
 #define STLINK_SG_SIZE        (31)
-#define STLINK_DATA_SIZE      (4096)
+#define STLINK_DATA_SIZE      (6144)
 #define STLINK_CMD_SIZE_V2    (16)
 #define STLINK_CMD_SIZE_V1    (10)
 
@@ -90,19 +94,31 @@
 #define STLINK_V3E_PID          (0x374E)
 #define STLINK_V3S_PID          (0x374F)
 #define STLINK_V3_2VCP_PID      (0x3753)
+#define STLINK_V3E_NO_MSD_PID   (0x3754)
 
 /*
  * ST-Link/V1, ST-Link/V2 and ST-Link/V2.1 are full-speed USB devices and
  * this limits the bulk packet size and the 8bit read/writes to max 64 bytes.
  * STLINK-V3 is a high speed USB 2.0 and the limit is 512 bytes from FW V3J6.
+ *
+ * For 16 and 32bit read/writes stlink handles USB packet split and the limit
+ * is the internal buffer size of 6144 bytes.
+ * TODO: override ADIv5 layer's tar_autoincr_block that limits the transfer
+ * to 1024 or 4096 bytes
  */
-#define STLINK_MAX_RW8		(64)
-#define STLINKV3_MAX_RW8	(512)
+#define STLINK_MAX_RW8          (64)
+#define STLINKV3_MAX_RW8        (512)
+#define STLINK_MAX_RW16_32      STLINK_DATA_SIZE
+#define STLINK_SWIM_DATA_SIZE   STLINK_DATA_SIZE
 
 /* "WAIT" responses will be retried (with exponential backoff) at
  * most this many times before failing to caller.
  */
 #define MAX_WAIT_RETRIES 8
+
+/* HLA is currently limited at AP#0 and no control on CSW */
+#define STLINK_HLA_AP_NUM       0
+#define STLINK_HLA_CSW          0
 
 enum stlink_jtag_api_version {
 	STLINK_JTAG_API_V1 = 1,
@@ -140,6 +156,13 @@ struct stlink_usb_priv_s {
 	struct libusb_transfer *trans;
 };
 
+struct stlink_tcp_version {
+	uint32_t api;
+	uint32_t major;
+	uint32_t minor;
+	uint32_t build;
+};
+
 struct stlink_tcp_priv_s {
 	/** */
 	int fd;
@@ -153,6 +176,8 @@ struct stlink_tcp_priv_s {
 	uint8_t *send_buf;
 	/** */
 	uint8_t *recv_buf;
+	/** */
+	struct stlink_tcp_version version;
 };
 
 struct stlink_backend_s {
@@ -164,6 +189,68 @@ struct stlink_backend_s {
 	int (*xfer_noerrcheck)(void *handle, const uint8_t *buf, int size);
 	/** */
 	int (*read_trace)(void *handle, const uint8_t *buf, int size);
+};
+
+/* TODO: make queue size dynamic */
+/* TODO: don't allocate queue for HLA */
+#define MAX_QUEUE_DEPTH (4096)
+
+enum queue_cmd {
+	CMD_DP_READ = 1,
+	CMD_DP_WRITE,
+
+	CMD_AP_READ,
+	CMD_AP_WRITE,
+
+	/*
+	 * encode the bytes size in the enum's value. This makes easy to extract it
+	 * with a simple logic AND, by using the macro CMD_MEM_AP_2_SIZE() below
+	 */
+	CMD_MEM_AP_READ8   = 0x10 + 1,
+	CMD_MEM_AP_READ16  = 0x10 + 2,
+	CMD_MEM_AP_READ32  = 0x10 + 4,
+
+	CMD_MEM_AP_WRITE8  = 0x20 + 1,
+	CMD_MEM_AP_WRITE16 = 0x20 + 2,
+	CMD_MEM_AP_WRITE32 = 0x20 + 4,
+};
+
+#define CMD_MEM_AP_2_SIZE(cmd) ((cmd) & 7)
+
+struct dap_queue {
+	enum queue_cmd cmd;
+	union {
+		struct dp_r {
+			unsigned int reg;
+			struct adiv5_dap *dap;
+			uint32_t *p_data;
+		} dp_r;
+		struct dp_w {
+			unsigned int reg;
+			struct adiv5_dap *dap;
+			uint32_t data;
+		} dp_w;
+		struct ap_r {
+			unsigned int reg;
+			struct adiv5_ap *ap;
+			uint32_t *p_data;
+		} ap_r;
+		struct ap_w {
+			unsigned int reg;
+			struct adiv5_ap *ap;
+			uint32_t data;
+			bool changes_csw_default;
+		} ap_w;
+		struct mem_ap {
+			uint32_t addr;
+			struct adiv5_ap *ap;
+			union {
+				uint32_t *p_data;
+				uint32_t data;
+			};
+			uint32_t csw;
+		} mem_ap;
+	};
 };
 
 /** */
@@ -209,6 +296,10 @@ struct stlink_usb_handle_s {
 	/** reconnect is needed next time we try to query the
 	 * status */
 	bool reconnect_pending;
+	/** queue of dap_direct operations */
+	struct dap_queue queue[MAX_QUEUE_DEPTH];
+	/** first element available in the queue */
+	unsigned int queue_index;
 };
 
 /** */
@@ -356,6 +447,12 @@ static inline int stlink_usb_xfer_noerrcheck(void *handle, const uint8_t *buf, i
 #define STLINK_DEBUG_APIV2_INIT_AP         0x4B
 #define STLINK_DEBUG_APIV2_CLOSE_AP_DBG    0x4C
 
+#define STLINK_DEBUG_WRITEMEM_32BIT_NO_ADDR_INC         0x50
+#define STLINK_DEBUG_APIV2_RW_MISC_OUT     0x51
+#define STLINK_DEBUG_APIV2_RW_MISC_IN      0x52
+
+#define STLINK_DEBUG_READMEM_32BIT_NO_ADDR_INC          0x54
+
 #define STLINK_APIV3_SET_COM_FREQ           0x61
 #define STLINK_APIV3_GET_COM_FREQ           0x62
 
@@ -428,6 +525,10 @@ static inline int stlink_usb_xfer_noerrcheck(void *handle, const uint8_t *buf, i
 /* aliases */
 #define STLINK_F_HAS_TARGET_VOLT        STLINK_F_HAS_TRACE
 #define STLINK_F_HAS_FPU_REG            STLINK_F_HAS_GETLASTRWSTATUS2
+#define STLINK_F_HAS_MEM_WR_NO_INC      STLINK_F_HAS_MEM_16BIT
+#define STLINK_F_HAS_MEM_RD_NO_INC      STLINK_F_HAS_DPBANKSEL
+#define STLINK_F_HAS_RW_MISC            STLINK_F_HAS_DPBANKSEL
+#define STLINK_F_HAS_CSW                STLINK_F_HAS_DPBANKSEL
 
 #define STLINK_REGSEL_IS_FPU(x)         ((x) > 0x1F)
 
@@ -475,7 +576,7 @@ static unsigned int stlink_usb_block(void *handle)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->version.flags & STLINK_F_HAS_RW8_512BYTES)
 		return STLINKV3_MAX_RW8;
@@ -568,7 +669,7 @@ static int jtag_libusb_bulk_transfer_n(
 		transfers[i].transfer_size = 0;
 		transfers[i].transfer = libusb_alloc_transfer(0);
 
-		if (transfers[i].transfer == NULL) {
+		if (!transfers[i].transfer) {
 			for (size_t j = 0; j < i; ++j)
 				libusb_free_transfer(transfers[j].transfer);
 
@@ -636,7 +737,7 @@ static int stlink_usb_xfer_v1_get_status(void *handle)
 	struct stlink_usb_handle_s *h = handle;
 	int tr, ret;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	/* read status */
 	memset(h->cmdbuf, 0, STLINK_SG_SIZE);
@@ -670,7 +771,7 @@ static int stlink_usb_xfer_rw(void *handle, int cmdsize, const uint8_t *buf, int
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	size_t n_transfers = 0;
 	struct jtag_xfer transfers[2];
@@ -709,7 +810,7 @@ static int stlink_usb_xfer_rw(void *handle, int cmdsize, const uint8_t *buf, int
 	struct stlink_usb_handle_s *h = handle;
 	int tr, ret;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	ret = jtag_libusb_bulk_write(h->usb_backend_priv.fd, h->tx_ep, (char *)h->cmdbuf,
 				     cmdsize, STLINK_WRITE_TIMEOUT, &tr);
@@ -742,7 +843,7 @@ static int stlink_usb_xfer_v1_get_sense(void *handle)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 16);
 
@@ -790,7 +891,7 @@ static int stlink_usb_usb_xfer_noerrcheck(void *handle, const uint8_t *buf, int 
 	int err, cmdsize = STLINK_CMD_SIZE_V2;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->version.stlink == 1) {
 		cmdsize = STLINK_SG_SIZE;
@@ -823,7 +924,7 @@ static int stlink_tcp_send_cmd(void *handle, int send_size, int recv_size, bool 
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	/* send the TCP command */
 	int sent_size = send(h->tcp_backend_priv.fd, (void *)h->tcp_backend_priv.send_buf, send_size, 0);
@@ -836,17 +937,35 @@ static int stlink_tcp_send_cmd(void *handle, int send_size, int recv_size, bool 
 		return ERROR_FAIL;
 	}
 
-	keep_alive();
-
 	/* read the TCP response */
-	int received_size = recv(h->tcp_backend_priv.fd, (void *)h->tcp_backend_priv.recv_buf, recv_size, 0);
-	if (received_size != recv_size) {
-		LOG_ERROR("failed to receive USB CMD response");
-		if (received_size == -1)
+	int retval = ERROR_OK;
+	int remaining_bytes = recv_size;
+	uint8_t *recv_buf = h->tcp_backend_priv.recv_buf;
+	const int64_t timeout = timeval_ms() + 1000; /* 1 second */
+
+	while (remaining_bytes > 0) {
+		if (timeval_ms() > timeout) {
+			LOG_DEBUG("received size %d (expected %d)", recv_size - remaining_bytes, recv_size);
+			retval = ERROR_TIMEOUT_REACHED;
+			break;
+		}
+
+		keep_alive();
+		int received = recv(h->tcp_backend_priv.fd, (void *)recv_buf, remaining_bytes, 0);
+
+		if (received == -1) {
 			LOG_DEBUG("socket recv error: %s (errno %d)", strerror(errno), errno);
-		else
-			LOG_DEBUG("received size %d (expected %d)", received_size, recv_size);
-		return ERROR_FAIL;
+			retval = ERROR_FAIL;
+			break;
+		}
+
+		recv_buf += received;
+		remaining_bytes -= received;
+	}
+
+	if (retval != ERROR_OK) {
+		LOG_ERROR("failed to receive USB CMD response");
+		return retval;
 	}
 
 	if (check_tcp_status) {
@@ -868,7 +987,7 @@ static int stlink_tcp_xfer_noerrcheck(void *handle, const uint8_t *buf, int size
 	int send_size = STLINK_TCP_USB_CMD_SIZE;
 	int recv_size = STLINK_TCP_SS_SIZE;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	/* prepare the TCP command */
 	h->tcp_backend_priv.send_buf[0] = STLINK_TCP_CMD_SEND_USB_CMD;
@@ -937,7 +1056,7 @@ static int stlink_usb_error_check(void *handle)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->st_mode == STLINK_MODE_DEBUG_SWIM) {
 		switch (h->databuf[0]) {
@@ -1076,7 +1195,7 @@ static int stlink_usb_read_trace(void *handle, const uint8_t *buf, int size)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	assert(h->version.flags & STLINK_F_HAS_TRACE);
 
@@ -1141,7 +1260,7 @@ static int stlink_usb_version(void *handle)
 	char *p;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 6);
 
@@ -1244,6 +1363,7 @@ static int stlink_usb_version(void *handle)
 			flags |= STLINK_F_QUIRK_JTAG_DP_READ;
 
 		/* API to read/write memory at 16 bit from J26 */
+		/* API to write memory without address increment from J26 */
 		if (h->version.jtag >= 26)
 			flags |= STLINK_F_HAS_MEM_16BIT;
 
@@ -1256,6 +1376,8 @@ static int stlink_usb_version(void *handle)
 			flags |= STLINK_F_FIX_CLOSE_AP;
 
 		/* Banked regs (DPv1 & DPv2) support from V2J32 */
+		/* API to read memory without address increment from V2J32 */
+		/* Memory R/W supports CSW from V2J32 */
 		if (h->version.jtag >= 32)
 			flags |= STLINK_F_HAS_DPBANKSEL;
 
@@ -1277,6 +1399,7 @@ static int stlink_usb_version(void *handle)
 		flags |= STLINK_F_HAS_DAP_REG;
 
 		/* API to read/write memory at 16 bit */
+		/* API to write memory without address increment */
 		flags |= STLINK_F_HAS_MEM_16BIT;
 
 		/* API required to init AP before any AP access */
@@ -1286,6 +1409,8 @@ static int stlink_usb_version(void *handle)
 		flags |= STLINK_F_FIX_CLOSE_AP;
 
 		/* Banked regs (DPv1 & DPv2) support from V3J2 */
+		/* API to read memory without address increment from V3J2 */
+		/* Memory R/W supports CSW from V3J2 */
 		if (h->version.jtag >= 2)
 			flags |= STLINK_F_HAS_DPBANKSEL;
 
@@ -1355,7 +1480,7 @@ static int stlink_usb_set_swdclk(void *handle, uint16_t clk_divisor)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_SWD_SET_FREQ))
 		return ERROR_COMMAND_NOTFOUND;
@@ -1379,7 +1504,7 @@ static int stlink_usb_set_jtagclk(void *handle, uint16_t clk_divisor)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_JTAG_SET_FREQ))
 		return ERROR_COMMAND_NOTFOUND;
@@ -1405,7 +1530,7 @@ static int stlink_usb_current_mode(void *handle, uint8_t *mode)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 2);
 
@@ -1427,7 +1552,7 @@ static int stlink_usb_mode_enter(void *handle, enum stlink_mode type)
 	int rx_size = 0;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	/* on api V2 we are able the read the latest command
 	 * status
@@ -1475,7 +1600,7 @@ static int stlink_usb_mode_leave(void *handle, enum stlink_mode type)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	/* command with no reply, use a valid endpoint but zero size */
 	stlink_usb_init_buffer(handle, h->rx_ep, 0);
@@ -1528,7 +1653,7 @@ static int stlink_usb_exit_mode(void *handle)
 	uint8_t mode;
 	enum stlink_mode emode;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	res = stlink_usb_current_mode(handle, &mode);
 
@@ -1569,7 +1694,7 @@ static int stlink_usb_init_mode(void *handle, bool connect_under_reset, int init
 	enum stlink_mode emode;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	res = stlink_usb_exit_mode(handle);
 	if (res != ERROR_OK)
@@ -1626,7 +1751,8 @@ static int stlink_usb_init_mode(void *handle, bool connect_under_reset, int init
 		}
 	}
 
-	if (h->version.jtag_api == STLINK_JTAG_API_V3) {
+	if (h->version.jtag_api == STLINK_JTAG_API_V3 &&
+			(emode == STLINK_MODE_DEBUG_JTAG || emode == STLINK_MODE_DEBUG_SWD)) {
 		struct speed_map map[STLINK_V3_MAX_FREQ_NB];
 
 		stlink_get_com_freq(h, (emode == STLINK_MODE_DEBUG_JTAG), map);
@@ -1804,7 +1930,7 @@ static int stlink_swim_writebytes(void *handle, uint32_t addr, uint32_t len, con
 	unsigned int datalen = 0;
 	int cmdsize = STLINK_CMD_SIZE_V2;
 
-	if (len > STLINK_DATA_SIZE)
+	if (len > STLINK_SWIM_DATA_SIZE)
 		return ERROR_FAIL;
 
 	if (h->version.stlink == 1)
@@ -1837,7 +1963,7 @@ static int stlink_swim_readbytes(void *handle, uint32_t addr, uint32_t len, uint
 	struct stlink_usb_handle_s *h = handle;
 	int res;
 
-	if (len > STLINK_DATA_SIZE)
+	if (len > STLINK_SWIM_DATA_SIZE)
 		return ERROR_FAIL;
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 0);
@@ -1867,7 +1993,7 @@ static int stlink_usb_idcode(void *handle, uint32_t *idcode)
 	int res, offset;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	/* there is no swim read core id cmd */
 	if (h->st_mode == STLINK_MODE_DEBUG_SWIM) {
@@ -1905,7 +2031,7 @@ static int stlink_usb_v2_read_debug_reg(void *handle, uint32_t addr, uint32_t *v
 	struct stlink_usb_handle_s *h = handle;
 	int res;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 8);
 
@@ -1926,7 +2052,7 @@ static int stlink_usb_write_debug_reg(void *handle, uint32_t addr, uint32_t val)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 2);
 
@@ -1948,7 +2074,7 @@ static int stlink_usb_trace_read(void *handle, uint8_t *buf, size_t *size)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->trace.enabled && (h->version.flags & STLINK_F_HAS_TRACE)) {
 		int res;
@@ -1999,7 +2125,7 @@ static enum target_state stlink_usb_state(void *handle)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->reconnect_pending) {
 		LOG_INFO("Previous state query failed, trying to reconnect");
@@ -2041,7 +2167,7 @@ static int stlink_usb_assert_srst(void *handle, int srst)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->st_mode == STLINK_MODE_DEBUG_SWIM)
 		return stlink_swim_assert_reset(handle, srst);
@@ -2064,7 +2190,7 @@ static void stlink_usb_trace_disable(void *handle)
 	int res = ERROR_OK;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	assert(h->version.flags & STLINK_F_HAS_TRACE);
 
@@ -2086,7 +2212,7 @@ static int stlink_usb_trace_enable(void *handle)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->version.flags & STLINK_F_HAS_TRACE) {
 		stlink_usb_init_buffer(handle, h->rx_ep, 10);
@@ -2118,7 +2244,7 @@ static int stlink_usb_reset(void *handle)
 	struct stlink_usb_handle_s *h = handle;
 	int retval;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 2);
 
@@ -2147,7 +2273,7 @@ static int stlink_usb_run(void *handle)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->version.jtag_api != STLINK_JTAG_API_V1) {
 		res = stlink_usb_write_debug_reg(handle, DCB_DHCSR, DBGKEY|C_DEBUGEN);
@@ -2169,7 +2295,7 @@ static int stlink_usb_halt(void *handle)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->version.jtag_api != STLINK_JTAG_API_V1) {
 		res = stlink_usb_write_debug_reg(handle, DCB_DHCSR, DBGKEY|C_HALT|C_DEBUGEN);
@@ -2190,7 +2316,7 @@ static int stlink_usb_step(void *handle)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->version.jtag_api != STLINK_JTAG_API_V1) {
 		/* TODO: this emulates the v1 api, it should really use a similar auto mask isr
@@ -2214,7 +2340,7 @@ static int stlink_usb_read_regs(void *handle)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	stlink_usb_init_buffer(handle, h->rx_ep, 88);
 
@@ -2239,7 +2365,7 @@ static int stlink_usb_read_reg(void *handle, unsigned int regsel, uint32_t *val)
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (STLINK_REGSEL_IS_FPU(regsel) && !(h->version.flags & STLINK_F_HAS_FPU_REG)) {
 		res = stlink_usb_write_debug_reg(h, DCB_DCRSR, regsel & 0x7f);
@@ -2279,14 +2405,14 @@ static int stlink_usb_write_reg(void *handle, unsigned int regsel, uint32_t val)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (STLINK_REGSEL_IS_FPU(regsel) && !(h->version.flags & STLINK_F_HAS_FPU_REG)) {
 		int res = stlink_usb_write_debug_reg(h, DCB_DCRDR, val);
 		if (res != ERROR_OK)
 			return res;
 
-		return stlink_usb_write_debug_reg(h, DCB_DCRSR, DCRSR_WnR | (regsel & 0x7f));
+		return stlink_usb_write_debug_reg(h, DCB_DCRSR, DCRSR_WNR | (regsel & 0x7f));
 		/* FIXME: poll DHCSR.S_REGRDY after write DCRSR */
 	}
 
@@ -2308,7 +2434,7 @@ static int stlink_usb_get_rw_status(void *handle)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (h->version.jtag_api == STLINK_JTAG_API_V1)
 		return ERROR_OK;
@@ -2326,14 +2452,17 @@ static int stlink_usb_get_rw_status(void *handle)
 }
 
 /** */
-static int stlink_usb_read_mem8(void *handle, uint32_t addr, uint16_t len,
-			  uint8_t *buffer)
+static int stlink_usb_read_mem8(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, uint8_t *buffer)
 {
 	int res;
 	uint16_t read_len = len;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
+
+	if ((ap_num != 0 || csw != 0) && !(h->version.flags & STLINK_F_HAS_CSW))
+		return ERROR_COMMAND_NOTFOUND;
 
 	/* max 8 bit read/write is 64 bytes or 512 bytes for v3 */
 	if (len > stlink_usb_block(h)) {
@@ -2349,6 +2478,9 @@ static int stlink_usb_read_mem8(void *handle, uint32_t addr, uint16_t len,
 	h->cmdidx += 4;
 	h_u16_to_le(h->cmdbuf+h->cmdidx, len);
 	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
 
 	/* we need to fix read length for single bytes */
 	if (read_len == 1)
@@ -2365,13 +2497,16 @@ static int stlink_usb_read_mem8(void *handle, uint32_t addr, uint16_t len,
 }
 
 /** */
-static int stlink_usb_write_mem8(void *handle, uint32_t addr, uint16_t len,
-			   const uint8_t *buffer)
+static int stlink_usb_write_mem8(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, const uint8_t *buffer)
 {
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
+
+	if ((ap_num != 0 || csw != 0) && !(h->version.flags & STLINK_F_HAS_CSW))
+		return ERROR_COMMAND_NOTFOUND;
 
 	/* max 8 bit read/write is 64 bytes or 512 bytes for v3 */
 	if (len > stlink_usb_block(h)) {
@@ -2387,6 +2522,9 @@ static int stlink_usb_write_mem8(void *handle, uint32_t addr, uint16_t len,
 	h->cmdidx += 4;
 	h_u16_to_le(h->cmdbuf+h->cmdidx, len);
 	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
 
 	res = stlink_usb_xfer_noerrcheck(handle, buffer, len);
 
@@ -2397,16 +2535,24 @@ static int stlink_usb_write_mem8(void *handle, uint32_t addr, uint16_t len,
 }
 
 /** */
-static int stlink_usb_read_mem16(void *handle, uint32_t addr, uint16_t len,
-			  uint8_t *buffer)
+static int stlink_usb_read_mem16(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, uint8_t *buffer)
 {
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_MEM_16BIT))
 		return ERROR_COMMAND_NOTFOUND;
+
+	if ((ap_num != 0 || csw != 0) && !(h->version.flags & STLINK_F_HAS_CSW))
+		return ERROR_COMMAND_NOTFOUND;
+
+	if (len > STLINK_MAX_RW16_32) {
+		LOG_DEBUG("max buffer (%d) length exceeded", STLINK_MAX_RW16_32);
+		return ERROR_FAIL;
+	}
 
 	/* data must be a multiple of 2 and half-word aligned */
 	if (len % 2 || addr % 2) {
@@ -2422,6 +2568,9 @@ static int stlink_usb_read_mem16(void *handle, uint32_t addr, uint16_t len,
 	h->cmdidx += 4;
 	h_u16_to_le(h->cmdbuf+h->cmdidx, len);
 	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
 
 	res = stlink_usb_xfer_noerrcheck(handle, h->databuf, len);
 
@@ -2434,16 +2583,24 @@ static int stlink_usb_read_mem16(void *handle, uint32_t addr, uint16_t len,
 }
 
 /** */
-static int stlink_usb_write_mem16(void *handle, uint32_t addr, uint16_t len,
-			   const uint8_t *buffer)
+static int stlink_usb_write_mem16(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, const uint8_t *buffer)
 {
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_MEM_16BIT))
 		return ERROR_COMMAND_NOTFOUND;
+
+	if ((ap_num != 0 || csw != 0) && !(h->version.flags & STLINK_F_HAS_CSW))
+		return ERROR_COMMAND_NOTFOUND;
+
+	if (len > STLINK_MAX_RW16_32) {
+		LOG_DEBUG("max buffer (%d) length exceeded", STLINK_MAX_RW16_32);
+		return ERROR_FAIL;
+	}
 
 	/* data must be a multiple of 2 and half-word aligned */
 	if (len % 2 || addr % 2) {
@@ -2459,6 +2616,9 @@ static int stlink_usb_write_mem16(void *handle, uint32_t addr, uint16_t len,
 	h->cmdidx += 4;
 	h_u16_to_le(h->cmdbuf+h->cmdidx, len);
 	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
 
 	res = stlink_usb_xfer_noerrcheck(handle, buffer, len);
 
@@ -2469,13 +2629,21 @@ static int stlink_usb_write_mem16(void *handle, uint32_t addr, uint16_t len,
 }
 
 /** */
-static int stlink_usb_read_mem32(void *handle, uint32_t addr, uint16_t len,
-			  uint8_t *buffer)
+static int stlink_usb_read_mem32(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, uint8_t *buffer)
 {
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
+
+	if ((ap_num != 0 || csw != 0) && !(h->version.flags & STLINK_F_HAS_CSW))
+		return ERROR_COMMAND_NOTFOUND;
+
+	if (len > STLINK_MAX_RW16_32) {
+		LOG_DEBUG("max buffer (%d) length exceeded", STLINK_MAX_RW16_32);
+		return ERROR_FAIL;
+	}
 
 	/* data must be a multiple of 4 and word aligned */
 	if (len % 4 || addr % 4) {
@@ -2491,6 +2659,9 @@ static int stlink_usb_read_mem32(void *handle, uint32_t addr, uint16_t len,
 	h->cmdidx += 4;
 	h_u16_to_le(h->cmdbuf+h->cmdidx, len);
 	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
 
 	res = stlink_usb_xfer_noerrcheck(handle, h->databuf, len);
 
@@ -2503,13 +2674,21 @@ static int stlink_usb_read_mem32(void *handle, uint32_t addr, uint16_t len,
 }
 
 /** */
-static int stlink_usb_write_mem32(void *handle, uint32_t addr, uint16_t len,
-			   const uint8_t *buffer)
+static int stlink_usb_write_mem32(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, const uint8_t *buffer)
 {
 	int res;
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
+
+	if ((ap_num != 0 || csw != 0) && !(h->version.flags & STLINK_F_HAS_CSW))
+		return ERROR_COMMAND_NOTFOUND;
+
+	if (len > STLINK_MAX_RW16_32) {
+		LOG_DEBUG("max buffer (%d) length exceeded", STLINK_MAX_RW16_32);
+		return ERROR_FAIL;
+	}
 
 	/* data must be a multiple of 4 and word aligned */
 	if (len % 4 || addr % 4) {
@@ -2525,11 +2704,96 @@ static int stlink_usb_write_mem32(void *handle, uint32_t addr, uint16_t len,
 	h->cmdidx += 4;
 	h_u16_to_le(h->cmdbuf+h->cmdidx, len);
 	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
 
 	res = stlink_usb_xfer_noerrcheck(handle, buffer, len);
 
 	if (res != ERROR_OK)
 		return res;
+
+	return stlink_usb_get_rw_status(handle);
+}
+
+static int stlink_usb_read_mem32_noaddrinc(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, uint8_t *buffer)
+{
+	struct stlink_usb_handle_s *h = handle;
+
+	assert(handle != NULL);
+
+	if (!(h->version.flags & STLINK_F_HAS_MEM_RD_NO_INC))
+		return ERROR_COMMAND_NOTFOUND;
+
+	if (len > STLINK_MAX_RW16_32) {
+		LOG_DEBUG("max buffer (%d) length exceeded", STLINK_MAX_RW16_32);
+		return ERROR_FAIL;
+	}
+
+	/* data must be a multiple of 4 and word aligned */
+	if (len % 4 || addr % 4) {
+		LOG_DEBUG("Invalid data alignment");
+		return ERROR_TARGET_UNALIGNED_ACCESS;
+	}
+
+	stlink_usb_init_buffer(handle, h->rx_ep, len);
+
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_COMMAND;
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_READMEM_32BIT_NO_ADDR_INC;
+	h_u32_to_le(h->cmdbuf + h->cmdidx, addr);
+	h->cmdidx += 4;
+	h_u16_to_le(h->cmdbuf + h->cmdidx, len);
+	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
+
+	int retval = stlink_usb_xfer_noerrcheck(handle, h->databuf, len);
+	if (retval != ERROR_OK)
+		return retval;
+
+	memcpy(buffer, h->databuf, len);
+
+	return stlink_usb_get_rw_status(handle);
+}
+
+static int stlink_usb_write_mem32_noaddrinc(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint16_t len, const uint8_t *buffer)
+{
+	struct stlink_usb_handle_s *h = handle;
+
+	assert(handle != NULL);
+
+	if (!(h->version.flags & STLINK_F_HAS_MEM_WR_NO_INC))
+		return ERROR_COMMAND_NOTFOUND;
+
+	if (len > STLINK_MAX_RW16_32) {
+		LOG_DEBUG("max buffer (%d) length exceeded", STLINK_MAX_RW16_32);
+		return ERROR_FAIL;
+	}
+
+	/* data must be a multiple of 4 and word aligned */
+	if (len % 4 || addr % 4) {
+		LOG_DEBUG("Invalid data alignment");
+		return ERROR_TARGET_UNALIGNED_ACCESS;
+	}
+
+	stlink_usb_init_buffer(handle, h->tx_ep, len);
+
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_COMMAND;
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_WRITEMEM_32BIT_NO_ADDR_INC;
+	h_u32_to_le(h->cmdbuf + h->cmdidx, addr);
+	h->cmdidx += 4;
+	h_u16_to_le(h->cmdbuf + h->cmdidx, len);
+	h->cmdidx += 2;
+	h->cmdbuf[h->cmdidx++] = ap_num;
+	h_u24_to_le(h->cmdbuf + h->cmdidx, csw >> 8);
+	h->cmdidx += 3;
+
+	int retval = stlink_usb_xfer_noerrcheck(handle, buffer, len);
+	if (retval != ERROR_OK)
+		return retval;
 
 	return stlink_usb_get_rw_status(handle);
 }
@@ -2542,8 +2806,93 @@ static uint32_t stlink_max_block_size(uint32_t tar_autoincr_block, uint32_t addr
 	return max_tar_block;
 }
 
+static int stlink_usb_read_ap_mem(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint32_t size, uint32_t count, uint8_t *buffer)
+{
+	int retval = ERROR_OK;
+	uint32_t bytes_remaining;
+	int retries = 0;
+	struct stlink_usb_handle_s *h = handle;
+
+	/* calculate byte count */
+	count *= size;
+
+	/* switch to 8 bit if stlink does not support 16 bit memory read */
+	if (size == 2 && !(h->version.flags & STLINK_F_HAS_MEM_16BIT))
+		size = 1;
+
+	while (count) {
+		bytes_remaining = (size != 1) ?
+				stlink_max_block_size(h->max_mem_packet, addr) : stlink_usb_block(h);
+
+		if (count < bytes_remaining)
+			bytes_remaining = count;
+
+		/*
+		 * all stlink support 8/32bit memory read/writes and only from
+		 * stlink V2J26 there is support for 16 bit memory read/write.
+		 * Honour 32 bit and, if possible, 16 bit too. Otherwise, handle
+		 * as 8bit access.
+		 */
+		if (size != 1) {
+			/* When in jtag mode the stlink uses the auto-increment functionality.
+			 * However it expects us to pass the data correctly, this includes
+			 * alignment and any page boundaries. We already do this as part of the
+			 * adi_v5 implementation, but the stlink is a hla adapter and so this
+			 * needs implementing manually.
+			 * currently this only affects jtag mode, according to ST they do single
+			 * access in SWD mode - but this may change and so we do it for both modes */
+
+			/* we first need to check for any unaligned bytes */
+			if (addr & (size - 1)) {
+				uint32_t head_bytes = size - (addr & (size - 1));
+				retval = stlink_usb_read_mem8(handle, ap_num, csw, addr, head_bytes, buffer);
+				if (retval == ERROR_WAIT && retries < MAX_WAIT_RETRIES) {
+					usleep((1 << retries++) * 1000);
+					continue;
+				}
+				if (retval != ERROR_OK)
+					return retval;
+				buffer += head_bytes;
+				addr += head_bytes;
+				count -= head_bytes;
+				bytes_remaining -= head_bytes;
+			}
+
+			if (bytes_remaining & (size - 1))
+				retval = stlink_usb_read_ap_mem(handle, ap_num, csw, addr, 1, bytes_remaining, buffer);
+			else if (size == 2)
+				retval = stlink_usb_read_mem16(handle, ap_num, csw, addr, bytes_remaining, buffer);
+			else
+				retval = stlink_usb_read_mem32(handle, ap_num, csw, addr, bytes_remaining, buffer);
+		} else {
+			retval = stlink_usb_read_mem8(handle, ap_num, csw, addr, bytes_remaining, buffer);
+		}
+
+		if (retval == ERROR_WAIT && retries < MAX_WAIT_RETRIES) {
+			usleep((1 << retries++) * 1000);
+			continue;
+		}
+		if (retval != ERROR_OK)
+			return retval;
+
+		buffer += bytes_remaining;
+		addr += bytes_remaining;
+		count -= bytes_remaining;
+	}
+
+	return retval;
+}
+
 static int stlink_usb_read_mem(void *handle, uint32_t addr, uint32_t size,
 		uint32_t count, uint8_t *buffer)
+{
+	return stlink_usb_read_ap_mem(handle, STLINK_HLA_AP_NUM, STLINK_HLA_CSW,
+								  addr, size, count, buffer);
+}
+
+static int stlink_usb_write_ap_mem(void *handle, uint8_t ap_num, uint32_t csw,
+		uint32_t addr, uint32_t size, uint32_t count, const uint8_t *buffer)
 {
 	int retval = ERROR_OK;
 	uint32_t bytes_remaining;
@@ -2585,7 +2934,7 @@ static int stlink_usb_read_mem(void *handle, uint32_t addr, uint32_t size,
 			if (addr & (size - 1)) {
 
 				uint32_t head_bytes = size - (addr & (size - 1));
-				retval = stlink_usb_read_mem8(handle, addr, head_bytes, buffer);
+				retval = stlink_usb_write_mem8(handle, ap_num, csw, addr, head_bytes, buffer);
 				if (retval == ERROR_WAIT && retries < MAX_WAIT_RETRIES) {
 					usleep((1<<retries++) * 1000);
 					continue;
@@ -2599,14 +2948,14 @@ static int stlink_usb_read_mem(void *handle, uint32_t addr, uint32_t size,
 			}
 
 			if (bytes_remaining & (size - 1))
-				retval = stlink_usb_read_mem(handle, addr, 1, bytes_remaining, buffer);
+				retval = stlink_usb_write_ap_mem(handle, ap_num, csw, addr, 1, bytes_remaining, buffer);
 			else if (size == 2)
-				retval = stlink_usb_read_mem16(handle, addr, bytes_remaining, buffer);
+				retval = stlink_usb_write_mem16(handle, ap_num, csw, addr, bytes_remaining, buffer);
 			else
-				retval = stlink_usb_read_mem32(handle, addr, bytes_remaining, buffer);
-		} else
-			retval = stlink_usb_read_mem8(handle, addr, bytes_remaining, buffer);
+				retval = stlink_usb_write_mem32(handle, ap_num, csw, addr, bytes_remaining, buffer);
 
+		} else
+			retval = stlink_usb_write_mem8(handle, ap_num, csw, addr, bytes_remaining, buffer);
 		if (retval == ERROR_WAIT && retries < MAX_WAIT_RETRIES) {
 			usleep((1<<retries++) * 1000);
 			continue;
@@ -2625,81 +2974,8 @@ static int stlink_usb_read_mem(void *handle, uint32_t addr, uint32_t size,
 static int stlink_usb_write_mem(void *handle, uint32_t addr, uint32_t size,
 		uint32_t count, const uint8_t *buffer)
 {
-	int retval = ERROR_OK;
-	uint32_t bytes_remaining;
-	int retries = 0;
-	struct stlink_usb_handle_s *h = handle;
-
-	/* calculate byte count */
-	count *= size;
-
-	/* switch to 8 bit if stlink does not support 16 bit memory read */
-	if (size == 2 && !(h->version.flags & STLINK_F_HAS_MEM_16BIT))
-		size = 1;
-
-	while (count) {
-
-		bytes_remaining = (size != 1) ?
-				stlink_max_block_size(h->max_mem_packet, addr) : stlink_usb_block(h);
-
-		if (count < bytes_remaining)
-			bytes_remaining = count;
-
-		/*
-		 * all stlink support 8/32bit memory read/writes and only from
-		 * stlink V2J26 there is support for 16 bit memory read/write.
-		 * Honour 32 bit and, if possible, 16 bit too. Otherwise, handle
-		 * as 8bit access.
-		 */
-		if (size != 1) {
-
-			/* When in jtag mode the stlink uses the auto-increment functionality.
-			 * However it expects us to pass the data correctly, this includes
-			 * alignment and any page boundaries. We already do this as part of the
-			 * adi_v5 implementation, but the stlink is a hla adapter and so this
-			 * needs implementing manually.
-			 * currently this only affects jtag mode, according to ST they do single
-			 * access in SWD mode - but this may change and so we do it for both modes */
-
-			/* we first need to check for any unaligned bytes */
-			if (addr & (size - 1)) {
-
-				uint32_t head_bytes = size - (addr & (size - 1));
-				retval = stlink_usb_write_mem8(handle, addr, head_bytes, buffer);
-				if (retval == ERROR_WAIT && retries < MAX_WAIT_RETRIES) {
-					usleep((1<<retries++) * 1000);
-					continue;
-				}
-				if (retval != ERROR_OK)
-					return retval;
-				buffer += head_bytes;
-				addr += head_bytes;
-				count -= head_bytes;
-				bytes_remaining -= head_bytes;
-			}
-
-			if (bytes_remaining & (size - 1))
-				retval = stlink_usb_write_mem(handle, addr, 1, bytes_remaining, buffer);
-			else if (size == 2)
-				retval = stlink_usb_write_mem16(handle, addr, bytes_remaining, buffer);
-			else
-				retval = stlink_usb_write_mem32(handle, addr, bytes_remaining, buffer);
-
-		} else
-			retval = stlink_usb_write_mem8(handle, addr, bytes_remaining, buffer);
-		if (retval == ERROR_WAIT && retries < MAX_WAIT_RETRIES) {
-			usleep((1<<retries++) * 1000);
-			continue;
-		}
-		if (retval != ERROR_OK)
-			return retval;
-
-		buffer += bytes_remaining;
-		addr += bytes_remaining;
-		count -= bytes_remaining;
-	}
-
-	return retval;
+	return stlink_usb_write_ap_mem(handle, STLINK_HLA_AP_NUM, STLINK_HLA_CSW,
+								   addr, size, count, buffer);
 }
 
 /** */
@@ -2985,7 +3261,7 @@ static int stlink_tcp_close(void *handle)
 /** */
 static int stlink_close(void *handle)
 {
-	if (handle != NULL) {
+	if (handle) {
 		struct stlink_usb_handle_s *h = handle;
 
 		stlink_usb_close(handle);
@@ -3064,7 +3340,7 @@ static char *stlink_usb_get_alternate_serial(struct libusb_device_handle *device
 	/* else (len == 26) => buggy ST-Link */
 
 	char *alternate_serial = malloc((STLINK_SERIAL_LEN + 1) * sizeof(char));
-	if (alternate_serial == NULL)
+	if (!alternate_serial)
 		return NULL;
 
 	for (unsigned int i = 0; i < STLINK_SERIAL_LEN; i += 2)
@@ -3084,7 +3360,7 @@ static int stlink_usb_usb_open(void *handle, struct hl_interface_param_s *param)
 	h->cmdbuf = malloc(STLINK_SG_SIZE);
 	h->databuf = malloc(STLINK_DATA_SIZE);
 
-	if (h->cmdbuf == NULL || h->databuf == NULL)
+	if (!h->cmdbuf || !h->databuf)
 		return ERROR_FAIL;
 
 	/*
@@ -3097,7 +3373,7 @@ static int stlink_usb_usb_open(void *handle, struct hl_interface_param_s *param)
 	  in order to become operational.
 	 */
 	do {
-		if (jtag_libusb_open(param->vid, param->pid, param->serial,
+		if (jtag_libusb_open(param->vid, param->pid,
 				&h->usb_backend_priv.fd, stlink_usb_get_alternate_serial) != ERROR_OK) {
 			LOG_ERROR("open failed");
 			return ERROR_FAIL;
@@ -3129,6 +3405,7 @@ static int stlink_usb_usb_open(void *handle, struct hl_interface_param_s *param)
 			case STLINK_V3E_PID:
 			case STLINK_V3S_PID:
 			case STLINK_V3_2VCP_PID:
+			case STLINK_V3E_NO_MSD_PID:
 				h->version.stlink = 3;
 				h->tx_ep = STLINK_V2_1_TX_EP;
 				h->trace_ep = STLINK_V2_1_TRACE_EP;
@@ -3198,7 +3475,7 @@ static int stlink_tcp_open(void *handle, struct hl_interface_param_s *param)
 	h->tcp_backend_priv.send_buf = malloc(STLINK_TCP_SEND_BUFFER_SIZE);
 	h->tcp_backend_priv.recv_buf = malloc(STLINK_TCP_RECV_BUFFER_SIZE);
 
-	if (h->tcp_backend_priv.send_buf == NULL || h->tcp_backend_priv.recv_buf == NULL)
+	if (!h->tcp_backend_priv.send_buf || !h->tcp_backend_priv.recv_buf)
 		return ERROR_FAIL;
 
 	h->cmdbuf = &h->tcp_backend_priv.send_buf[8];
@@ -3264,16 +3541,19 @@ static int stlink_tcp_open(void *handle, struct hl_interface_param_s *param)
 		return ERROR_FAIL;
 	}
 
-	uint32_t api_ver = le_to_h_u32(&h->tcp_backend_priv.recv_buf[0]);
-	uint32_t ver_major = le_to_h_u32(&h->tcp_backend_priv.recv_buf[4]);
-	uint32_t ver_minor = le_to_h_u32(&h->tcp_backend_priv.recv_buf[8]);
-	uint32_t ver_build = le_to_h_u32(&h->tcp_backend_priv.recv_buf[12]);
+	h->tcp_backend_priv.version.api = le_to_h_u32(&h->tcp_backend_priv.recv_buf[0]);
+	h->tcp_backend_priv.version.major = le_to_h_u32(&h->tcp_backend_priv.recv_buf[4]);
+	h->tcp_backend_priv.version.minor = le_to_h_u32(&h->tcp_backend_priv.recv_buf[8]);
+	h->tcp_backend_priv.version.build = le_to_h_u32(&h->tcp_backend_priv.recv_buf[12]);
 	LOG_INFO("stlink-server API v%d, version %d.%d.%d",
-			api_ver, ver_major, ver_minor, ver_build);
+			h->tcp_backend_priv.version.api,
+			h->tcp_backend_priv.version.major,
+			h->tcp_backend_priv.version.minor,
+			h->tcp_backend_priv.version.build);
 
 	/* in stlink-server API v1 sending more than 1428 bytes will cause stlink-server
 	 * to crash in windows: select a safe default value (1K) */
-	if (api_ver < 2)
+	if (h->tcp_backend_priv.version.api < 2)
 		h->max_mem_packet = (1 << 10);
 
 	/* refresh stlink list (re-enumerate) */
@@ -3307,7 +3587,8 @@ static int stlink_tcp_open(void *handle, struct hl_interface_param_s *param)
 	char serial[STLINK_TCP_SERIAL_SIZE + 1] = {0};
 	uint8_t stlink_used;
 	bool stlink_id_matched = false;
-	bool stlink_serial_matched = (param->serial == NULL);
+	const char *adapter_serial = adapter_get_required_serial();
+	bool stlink_serial_matched = !adapter_serial;
 
 	for (uint32_t stlink_id = 0; stlink_id < connected_stlinks; stlink_id++) {
 		/* get the stlink info */
@@ -3337,27 +3618,28 @@ static int stlink_tcp_open(void *handle, struct hl_interface_param_s *param)
 			continue;
 
 		/* check the serial if specified */
-		if (param->serial) {
+		if (adapter_serial) {
 			/* ST-Link server fixes the buggy serial returned by old ST-Link DFU
 			 * for further details refer to stlink_usb_get_alternate_serial
 			 * so if the user passes the buggy serial, we need to fix it before
 			 * comparing with the serial returned by ST-Link server */
-			if (strlen(param->serial) == STLINK_SERIAL_LEN / 2) {
+			if (strlen(adapter_serial) == STLINK_SERIAL_LEN / 2) {
 				char fixed_serial[STLINK_SERIAL_LEN + 1];
 
 				for (unsigned int i = 0; i < STLINK_SERIAL_LEN; i += 2)
-					sprintf(fixed_serial + i, "%02X", param->serial[i / 2]);
+					sprintf(fixed_serial + i, "%02X", adapter_serial[i / 2]);
 
 				fixed_serial[STLINK_SERIAL_LEN] = '\0';
 
 				stlink_serial_matched = strcmp(fixed_serial, serial) == 0;
-			} else
-				stlink_serial_matched = strcmp(param->serial, serial) == 0;
+			} else {
+				stlink_serial_matched = strcmp(adapter_serial, serial) == 0;
+			}
 		}
 
 		if (!stlink_serial_matched)
 			LOG_DEBUG("Device serial number '%s' doesn't match requested serial '%s'",
-					serial, param->serial);
+					serial, adapter_serial);
 		else /* exit the search loop if there is match */
 			break;
 	}
@@ -3426,7 +3708,7 @@ static int stlink_open(struct hl_interface_param_s *param, enum stlink_mode mode
 	for (unsigned i = 0; param->vid[i]; i++) {
 		LOG_DEBUG("transport: %d vid: 0x%04x pid: 0x%04x serial: %s",
 			  h->st_mode, param->vid[i], param->pid[i],
-			  param->serial ? param->serial : "");
+			  adapter_get_required_serial() ? adapter_get_required_serial() : "");
 	}
 
 	if (param->use_stlink_tcp)
@@ -3478,7 +3760,7 @@ static int stlink_open(struct hl_interface_param_s *param, enum stlink_mode mode
 			goto error_open;
 		}
 		*fd = h;
-		h->max_mem_packet = STLINK_DATA_SIZE;
+		h->max_mem_packet = STLINK_SWIM_DATA_SIZE;
 		return ERROR_OK;
 	}
 
@@ -3489,8 +3771,8 @@ static int stlink_open(struct hl_interface_param_s *param, enum stlink_mode mode
 		h->max_mem_packet = (1 << 10);
 
 		uint8_t buffer[4];
-		stlink_usb_open_ap(h, 0);
-		err = stlink_usb_read_mem32(h, CPUID, 4, buffer);
+		stlink_usb_open_ap(h, STLINK_HLA_AP_NUM);
+		err = stlink_usb_read_mem32(h, STLINK_HLA_AP_NUM, STLINK_HLA_CSW, CPUID, 4, buffer);
 		if (err == ERROR_OK) {
 			uint32_t cpuid = le_to_h_u32(buffer);
 			int i = (cpuid >> 4) & 0xf;
@@ -3534,8 +3816,8 @@ static int stlink_config_trace(void *handle, bool enabled,
 		return ERROR_OK;
 	}
 
-	assert(trace_freq != NULL);
-	assert(prescaler != NULL);
+	assert(trace_freq);
+	assert(prescaler);
 
 	if (pin_protocol != TPIU_PIN_PROTOCOL_ASYNC_UART) {
 		LOG_ERROR("The attached ST-LINK version doesn't support this trace mode");
@@ -3585,7 +3867,7 @@ static int stlink_usb_init_access_port(void *handle, unsigned char ap_num)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_AP_INIT))
 		return ERROR_COMMAND_NOTFOUND;
@@ -3604,7 +3886,7 @@ static int stlink_usb_close_access_port(void *handle, unsigned char ap_num)
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_AP_INIT))
 		return ERROR_COMMAND_NOTFOUND;
@@ -3623,6 +3905,53 @@ static int stlink_usb_close_access_port(void *handle, unsigned char ap_num)
 
 }
 
+static int stlink_usb_rw_misc_out(void *handle, uint32_t items, const uint8_t *buffer)
+{
+	struct stlink_usb_handle_s *h = handle;
+	unsigned int buflen = ALIGN_UP(items, 4) + 4 * items;
+
+	LOG_DEBUG_IO("%s(%" PRIu32 ")", __func__, items);
+
+	assert(handle != NULL);
+
+	if (!(h->version.flags & STLINK_F_HAS_RW_MISC))
+		return ERROR_COMMAND_NOTFOUND;
+
+	stlink_usb_init_buffer(handle, h->tx_ep, buflen);
+
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_COMMAND;
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_APIV2_RW_MISC_OUT;
+	h_u32_to_le(&h->cmdbuf[2], items);
+
+	return stlink_usb_xfer_noerrcheck(handle, buffer, buflen);
+}
+
+static int stlink_usb_rw_misc_in(void *handle, uint32_t items, uint8_t *buffer)
+{
+	struct stlink_usb_handle_s *h = handle;
+	unsigned int buflen = 2 * 4 * items;
+
+	LOG_DEBUG_IO("%s(%" PRIu32 ")", __func__, items);
+
+	assert(handle != NULL);
+
+	if (!(h->version.flags & STLINK_F_HAS_RW_MISC))
+		return ERROR_COMMAND_NOTFOUND;
+
+	stlink_usb_init_buffer(handle, h->rx_ep, buflen);
+
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_COMMAND;
+	h->cmdbuf[h->cmdidx++] = STLINK_DEBUG_APIV2_RW_MISC_IN;
+
+	int res = stlink_usb_xfer_noerrcheck(handle, h->databuf, buflen);
+	if (res != ERROR_OK)
+		return res;
+
+	memcpy(buffer, h->databuf, buflen);
+
+	return ERROR_OK;
+}
+
 /** */
 static int stlink_read_dap_register(void *handle, unsigned short dap_port,
 			unsigned short addr, uint32_t *val)
@@ -3630,7 +3959,7 @@ static int stlink_read_dap_register(void *handle, unsigned short dap_port,
 	struct stlink_usb_handle_s *h = handle;
 	int retval;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_DAP_REG))
 		return ERROR_COMMAND_NOTFOUND;
@@ -3653,7 +3982,7 @@ static int stlink_write_dap_register(void *handle, unsigned short dap_port,
 {
 	struct stlink_usb_handle_s *h = handle;
 
-	assert(handle != NULL);
+	assert(handle);
 
 	if (!(h->version.flags & STLINK_F_HAS_DAP_REG))
 		return ERROR_COMMAND_NOTFOUND;
@@ -3717,10 +4046,8 @@ struct hl_layout_api_s stlink_usb_layout_api = {
 static struct stlink_usb_handle_s *stlink_dap_handle;
 static struct hl_interface_param_s stlink_dap_param;
 static DECLARE_BITMAP(opened_ap, DP_APSEL_MAX + 1);
+static uint32_t last_csw_default[DP_APSEL_MAX + 1];
 static int stlink_dap_error = ERROR_OK;
-
-static int stlink_dap_op_queue_dp_read(struct adiv5_dap *dap, unsigned reg,
-		uint32_t *data);
 
 /** */
 static int stlink_dap_record_error(int error)
@@ -3736,6 +4063,11 @@ static int stlink_dap_get_and_clear_error(void)
 	int retval = stlink_dap_error;
 	stlink_dap_error = ERROR_OK;
 	return retval;
+}
+
+static int stlink_dap_get_error(void)
+{
+	return stlink_dap_error;
 }
 
 static int stlink_usb_open_ap(void *handle, unsigned short apsel)
@@ -3759,6 +4091,7 @@ static int stlink_usb_open_ap(void *handle, unsigned short apsel)
 
 	LOG_DEBUG("AP %d enabled", apsel);
 	set_bit(apsel, opened_ap);
+	last_csw_default[apsel] = 0;
 	return ERROR_OK;
 }
 
@@ -3842,6 +4175,8 @@ static int stlink_dap_op_connect(struct adiv5_dap *dap)
 
 	dap->do_reconnect = false;
 	dap_invalidate_cache(dap);
+	for (unsigned int i = 0; i <= DP_APSEL_MAX; i++)
+		last_csw_default[i] = 0;
 
 	retval = dap_dp_init(dap);
 	if (retval != ERROR_OK) {
@@ -3883,8 +4218,7 @@ static int stlink_dap_op_send_sequence(struct adiv5_dap *dap, enum swd_special_s
 }
 
 /** */
-static int stlink_dap_op_queue_dp_read(struct adiv5_dap *dap, unsigned reg,
-		uint32_t *data)
+static int stlink_dap_dp_read(struct adiv5_dap *dap, unsigned int reg, uint32_t *data)
 {
 	uint32_t dummy;
 	int retval;
@@ -3894,10 +4228,6 @@ static int stlink_dap_op_queue_dp_read(struct adiv5_dap *dap, unsigned reg,
 			LOG_ERROR("Banked DP registers not supported in current STLink FW");
 			return ERROR_COMMAND_NOTFOUND;
 		}
-
-	retval = stlink_dap_check_reconnect(dap);
-	if (retval != ERROR_OK)
-		return retval;
 
 	data = data ? data : &dummy;
 	if (stlink_dap_handle->version.flags & STLINK_F_QUIRK_JTAG_DP_READ
@@ -3913,12 +4243,11 @@ static int stlink_dap_op_queue_dp_read(struct adiv5_dap *dap, unsigned reg,
 					STLINK_DEBUG_PORT_ACCESS, reg, data);
 	}
 
-	return stlink_dap_record_error(retval);
+	return retval;
 }
 
 /** */
-static int stlink_dap_op_queue_dp_write(struct adiv5_dap *dap, unsigned reg,
-		uint32_t data)
+static int stlink_dap_dp_write(struct adiv5_dap *dap, unsigned int reg, uint32_t data)
 {
 	int retval;
 
@@ -3934,30 +4263,21 @@ static int stlink_dap_op_queue_dp_write(struct adiv5_dap *dap, unsigned reg,
 		data &= ~DP_SELECT_DPBANK;
 	}
 
-	retval = stlink_dap_check_reconnect(dap);
-	if (retval != ERROR_OK)
-		return retval;
-
 	/* ST-Link does not like that we set CORUNDETECT */
 	if (reg == DP_CTRL_STAT)
 		data &= ~CORUNDETECT;
 
 	retval = stlink_write_dap_register(stlink_dap_handle,
 				STLINK_DEBUG_PORT_ACCESS, reg, data);
-	return stlink_dap_record_error(retval);
+	return retval;
 }
 
 /** */
-static int stlink_dap_op_queue_ap_read(struct adiv5_ap *ap, unsigned reg,
-		uint32_t *data)
+static int stlink_dap_ap_read(struct adiv5_ap *ap, unsigned int reg, uint32_t *data)
 {
 	struct adiv5_dap *dap = ap->dap;
 	uint32_t dummy;
 	int retval;
-
-	retval = stlink_dap_check_reconnect(dap);
-	if (retval != ERROR_OK)
-		return retval;
 
 	if (reg != AP_REG_IDR) {
 		retval = stlink_dap_open_ap(ap->ap_num);
@@ -3968,19 +4288,14 @@ static int stlink_dap_op_queue_ap_read(struct adiv5_ap *ap, unsigned reg,
 	retval = stlink_read_dap_register(stlink_dap_handle, ap->ap_num, reg,
 				 data);
 	dap->stlink_flush_ap_write = false;
-	return stlink_dap_record_error(retval);
+	return retval;
 }
 
 /** */
-static int stlink_dap_op_queue_ap_write(struct adiv5_ap *ap, unsigned reg,
-		uint32_t data)
+static int stlink_dap_ap_write(struct adiv5_ap *ap, unsigned int reg, uint32_t data)
 {
 	struct adiv5_dap *dap = ap->dap;
 	int retval;
-
-	retval = stlink_dap_check_reconnect(dap);
-	if (retval != ERROR_OK)
-		return retval;
 
 	retval = stlink_dap_open_ap(ap->ap_num);
 	if (retval != ERROR_OK)
@@ -3989,7 +4304,7 @@ static int stlink_dap_op_queue_ap_write(struct adiv5_ap *ap, unsigned reg,
 	retval = stlink_write_dap_register(stlink_dap_handle, ap->ap_num, reg,
 				data);
 	dap->stlink_flush_ap_write = true;
-	return stlink_dap_record_error(retval);
+	return retval;
 }
 
 /** */
@@ -3999,8 +4314,305 @@ static int stlink_dap_op_queue_ap_abort(struct adiv5_dap *dap, uint8_t *ack)
 	return ERROR_OK;
 }
 
+#define RW_MISC_CMD_ADDRESS     1
+#define RW_MISC_CMD_WRITE       2
+#define RW_MISC_CMD_READ        3
+#define RW_MISC_CMD_APNUM       5
+
+static int stlink_usb_misc_rw_segment(void *handle, const struct dap_queue *q, unsigned int len, unsigned int items)
+{
+	uint8_t buf[2 * 4 * items];
+
+	LOG_DEBUG("Queue: %u commands in %u items", len, items);
+
+	int ap_num = DP_APSEL_INVALID;
+	unsigned int cmd_index = 0;
+	unsigned int val_index = ALIGN_UP(items, 4);
+	for (unsigned int i = 0; i < len; i++) {
+		if (ap_num != q[i].mem_ap.ap->ap_num) {
+			ap_num = q[i].mem_ap.ap->ap_num;
+			buf[cmd_index++] = RW_MISC_CMD_APNUM;
+			h_u32_to_le(&buf[val_index], ap_num);
+			val_index += 4;
+		}
+
+		switch (q[i].cmd) {
+		case CMD_MEM_AP_READ32:
+			buf[cmd_index++] = RW_MISC_CMD_READ;
+			h_u32_to_le(&buf[val_index], q[i].mem_ap.addr);
+			val_index += 4;
+			break;
+		case CMD_MEM_AP_WRITE32:
+			buf[cmd_index++] = RW_MISC_CMD_ADDRESS;
+			h_u32_to_le(&buf[val_index], q[i].mem_ap.addr);
+			val_index += 4;
+			buf[cmd_index++] = RW_MISC_CMD_WRITE;
+			h_u32_to_le(&buf[val_index], q[i].mem_ap.data);
+			val_index += 4;
+			break;
+		default:
+			/* Not supposed to happen */
+			return ERROR_FAIL;
+		}
+	}
+	/* pad after last command */
+	while (!IS_ALIGNED(cmd_index, 4))
+		buf[cmd_index++] = 0;
+
+	int retval = stlink_usb_rw_misc_out(handle, items, buf);
+	if (retval != ERROR_OK)
+		return retval;
+
+	retval = stlink_usb_rw_misc_in(handle, items, buf);
+	if (retval != ERROR_OK)
+		return retval;
+
+	ap_num = DP_APSEL_INVALID;
+	val_index = 0;
+	unsigned int err_index = 4 * items;
+	for (unsigned int i = 0; i < len; i++) {
+		uint32_t errcode = le_to_h_u32(&buf[err_index]);
+		if (errcode != STLINK_DEBUG_ERR_OK) {
+			LOG_ERROR("unknown/unexpected STLINK status code 0x%x", errcode);
+			return ERROR_FAIL;
+		}
+		if (ap_num != q[i].mem_ap.ap->ap_num) {
+			ap_num = q[i].mem_ap.ap->ap_num;
+			err_index += 4;
+			val_index += 4;
+			errcode = le_to_h_u32(&buf[err_index]);
+			if (errcode != STLINK_DEBUG_ERR_OK) {
+				LOG_ERROR("unknown/unexpected STLINK status code 0x%x", errcode);
+				return ERROR_FAIL;
+			}
+		}
+
+		if (q[i].cmd == CMD_MEM_AP_READ32) {
+			*q[i].mem_ap.p_data = le_to_h_u32(&buf[val_index]);
+		} else { /* q[i]->cmd == CMD_MEM_AP_WRITE32 */
+			err_index += 4;
+			val_index += 4;
+			errcode = le_to_h_u32(&buf[err_index]);
+			if (errcode != STLINK_DEBUG_ERR_OK) {
+				LOG_ERROR("unknown/unexpected STLINK status code 0x%x", errcode);
+				return ERROR_FAIL;
+			}
+		}
+		err_index += 4;
+		val_index += 4;
+	}
+
+	return ERROR_OK;
+}
+
+static int stlink_usb_buf_rw_segment(void *handle, const struct dap_queue *q, unsigned int count)
+{
+	uint32_t bufsize = count * CMD_MEM_AP_2_SIZE(q[0].cmd);
+	uint8_t buf[bufsize];
+	uint8_t ap_num = q[0].mem_ap.ap->ap_num;
+	uint32_t addr = q[0].mem_ap.addr;
+	uint32_t csw = q[0].mem_ap.csw;
+
+	int retval = stlink_dap_open_ap(ap_num);
+	if (retval != ERROR_OK)
+		return retval;
+
+	switch (q[0].cmd) {
+	case CMD_MEM_AP_WRITE8:
+		for (unsigned int i = 0; i < count; i++)
+			buf[i] = q[i].mem_ap.data >> 8 * (q[i].mem_ap.addr & 3);
+		return stlink_usb_write_mem8(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+
+	case CMD_MEM_AP_WRITE16:
+		for (unsigned int i = 0; i < count; i++)
+			h_u16_to_le(&buf[2 * i], q[i].mem_ap.data >> 8 * (q[i].mem_ap.addr & 2));
+		return stlink_usb_write_mem16(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+
+	case CMD_MEM_AP_WRITE32:
+		for (unsigned int i = 0; i < count; i++)
+			h_u32_to_le(&buf[4 * i], q[i].mem_ap.data);
+		if (count > 1 && q[0].mem_ap.addr == q[1].mem_ap.addr)
+			return stlink_usb_write_mem32_noaddrinc(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+		else
+			return stlink_usb_write_mem32(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+
+	case CMD_MEM_AP_READ8:
+		retval = stlink_usb_read_mem8(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+		if (retval == ERROR_OK)
+			for (unsigned int i = 0; i < count; i++)
+				*q[i].mem_ap.p_data = buf[i] << 8 * (q[i].mem_ap.addr & 3);
+		return retval;
+
+	case CMD_MEM_AP_READ16:
+		retval = stlink_usb_read_mem16(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+		if (retval == ERROR_OK)
+			for (unsigned int i = 0; i < count; i++)
+				*q[i].mem_ap.p_data = le_to_h_u16(&buf[2 * i]) << 8 * (q[i].mem_ap.addr & 2);
+		return retval;
+
+	case CMD_MEM_AP_READ32:
+		if (count > 1 && q[0].mem_ap.addr == q[1].mem_ap.addr)
+			retval = stlink_usb_read_mem32_noaddrinc(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+		else
+			retval = stlink_usb_read_mem32(stlink_dap_handle, ap_num, csw, addr, bufsize, buf);
+		if (retval == ERROR_OK)
+			for (unsigned int i = 0; i < count; i++)
+				*q[i].mem_ap.p_data = le_to_h_u32(&buf[4 * i]);
+		return retval;
+
+	default:
+		return ERROR_FAIL;
+	};
+}
+
+/* TODO: recover these values with cmd STLINK_DEBUG_APIV2_RW_MISC_GET_MAX (0x53) */
+#define STLINK_V2_RW_MISC_SIZE (64)
+#define STLINK_V3_RW_MISC_SIZE (1227)
+
+static int stlink_usb_count_misc_rw_queue(void *handle, const struct dap_queue *q, unsigned int len,
+		unsigned int *pkt_items)
+{
+	struct stlink_usb_handle_s *h = handle;
+	unsigned int i, items = 0;
+	int ap_num = DP_APSEL_INVALID;
+	unsigned int misc_max_items = (h->version.stlink == 2) ? STLINK_V2_RW_MISC_SIZE : STLINK_V3_RW_MISC_SIZE;
+
+	if (!(h->version.flags & STLINK_F_HAS_RW_MISC))
+		return 0;
+	/*
+	 * Before stlink-server API v3, RW_MISC sequence doesn't lock the st-link,
+	 * so are not safe in shared mode.
+	 * Don't use it with TCP backend to prevent any issue in case of sharing.
+	 * This further degrades the performance, on top of TCP server overhead.
+	 */
+	if (h->backend == &stlink_tcp_backend && h->tcp_backend_priv.version.api < 3)
+		return 0;
+
+	for (i = 0; i < len; i++) {
+		if (q[i].cmd != CMD_MEM_AP_READ32 && q[i].cmd != CMD_MEM_AP_WRITE32)
+			break;
+		unsigned int count = 1;
+		if (ap_num != q[i].mem_ap.ap->ap_num) {
+			count++;
+			ap_num = q[i].mem_ap.ap->ap_num;
+		}
+		if (q[i].cmd == CMD_MEM_AP_WRITE32)
+			count++;
+		if (items + count > misc_max_items)
+			break;
+		items += count;
+	}
+
+	*pkt_items = items;
+
+	return i;
+}
+
+static int stlink_usb_count_buf_rw_queue(const struct dap_queue *q, unsigned int len)
+{
+	uint32_t incr = CMD_MEM_AP_2_SIZE(q[0].cmd);
+	unsigned int len_max;
+
+	if (incr == 1)
+		len_max = stlink_usb_block(stlink_dap_handle);
+	else
+		len_max = STLINK_MAX_RW16_32 / incr;
+
+	/* check for no address increment, 32 bits only */
+	if (len > 1 && incr == 4 && q[0].mem_ap.addr == q[1].mem_ap.addr)
+		incr = 0;
+
+	if (len > len_max)
+		len = len_max;
+
+	for (unsigned int i = 1; i < len; i++)
+		if (q[i].cmd != q[0].cmd ||
+			q[i].mem_ap.ap != q[0].mem_ap.ap ||
+			q[i].mem_ap.csw != q[0].mem_ap.csw ||
+			q[i].mem_ap.addr != q[i - 1].mem_ap.addr + incr)
+			return i;
+
+	return len;
+}
+
+static int stlink_usb_mem_rw_queue(void *handle, const struct dap_queue *q, unsigned int len, unsigned int *skip)
+{
+	unsigned int count, misc_items = 0;
+	int retval;
+
+	unsigned int count_misc = stlink_usb_count_misc_rw_queue(handle, q, len, &misc_items);
+	unsigned int count_buf = stlink_usb_count_buf_rw_queue(q, len);
+
+	if (count_misc > count_buf) {
+		count = count_misc;
+		retval = stlink_usb_misc_rw_segment(handle, q, count, misc_items);
+	} else {
+		count = count_buf;
+		retval = stlink_usb_buf_rw_segment(handle, q, count_buf);
+	}
+	if (retval != ERROR_OK)
+		return retval;
+
+	*skip = count;
+	return ERROR_OK;
+}
+
+static void stlink_dap_run_internal(struct adiv5_dap *dap)
+{
+	int retval = stlink_dap_check_reconnect(dap);
+	if (retval != ERROR_OK) {
+		stlink_dap_handle->queue_index = 0;
+		stlink_dap_record_error(retval);
+		return;
+	}
+
+	unsigned int i = stlink_dap_handle->queue_index;
+	struct dap_queue *q = &stlink_dap_handle->queue[0];
+
+	while (i && stlink_dap_get_error() == ERROR_OK) {
+		unsigned int skip = 1;
+
+		switch (q->cmd) {
+		case CMD_DP_READ:
+			retval = stlink_dap_dp_read(q->dp_r.dap, q->dp_r.reg, q->dp_r.p_data);
+			break;
+		case CMD_DP_WRITE:
+			retval = stlink_dap_dp_write(q->dp_w.dap, q->dp_w.reg, q->dp_w.data);
+			break;
+		case CMD_AP_READ:
+			retval = stlink_dap_ap_read(q->ap_r.ap, q->ap_r.reg, q->ap_r.p_data);
+			break;
+		case CMD_AP_WRITE:
+			/* ignore increment packed, not supported */
+			if (q->ap_w.reg == MEM_AP_REG_CSW)
+				q->ap_w.data &= ~CSW_ADDRINC_PACKED;
+			retval = stlink_dap_ap_write(q->ap_w.ap, q->ap_w.reg, q->ap_w.data);
+			break;
+
+		case CMD_MEM_AP_READ8:
+		case CMD_MEM_AP_READ16:
+		case CMD_MEM_AP_READ32:
+		case CMD_MEM_AP_WRITE8:
+		case CMD_MEM_AP_WRITE16:
+		case CMD_MEM_AP_WRITE32:
+			retval = stlink_usb_mem_rw_queue(stlink_dap_handle, q, i, &skip);
+			break;
+
+		default:
+			LOG_ERROR("ST-Link: Unknown queue command %d", q->cmd);
+			retval = ERROR_FAIL;
+			break;
+		}
+		stlink_dap_record_error(retval);
+		q += skip;
+		i -= skip;
+	}
+
+	stlink_dap_handle->queue_index = 0;
+}
+
 /** */
-static int stlink_dap_op_run(struct adiv5_dap *dap)
+static int stlink_dap_run_finalize(struct adiv5_dap *dap)
 {
 	uint32_t ctrlstat, pwrmask;
 	int retval, saved_retval;
@@ -4015,7 +4627,7 @@ static int stlink_dap_op_run(struct adiv5_dap *dap)
 	 */
 	if (dap->stlink_flush_ap_write) {
 		dap->stlink_flush_ap_write = false;
-		retval = stlink_dap_op_queue_dp_read(dap, DP_RDBUFF, NULL);
+		retval = stlink_dap_dp_read(dap, DP_RDBUFF, NULL);
 		if (retval != ERROR_OK) {
 			dap->do_reconnect = true;
 			return retval;
@@ -4024,12 +4636,7 @@ static int stlink_dap_op_run(struct adiv5_dap *dap)
 
 	saved_retval = stlink_dap_get_and_clear_error();
 
-	retval = stlink_dap_op_queue_dp_read(dap, DP_CTRL_STAT, &ctrlstat);
-	if (retval != ERROR_OK) {
-		dap->do_reconnect = true;
-		return retval;
-	}
-	retval = stlink_dap_get_and_clear_error();
+	retval = stlink_dap_dp_read(dap, DP_CTRL_STAT, &ctrlstat);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Fail reading CTRL/STAT register. Force reconnect");
 		dap->do_reconnect = true;
@@ -4038,15 +4645,10 @@ static int stlink_dap_op_run(struct adiv5_dap *dap)
 
 	if (ctrlstat & SSTICKYERR) {
 		if (stlink_dap_handle->st_mode == STLINK_MODE_DEBUG_JTAG)
-			retval = stlink_dap_op_queue_dp_write(dap, DP_CTRL_STAT,
+			retval = stlink_dap_dp_write(dap, DP_CTRL_STAT,
 					ctrlstat & (dap->dp_ctrl_stat | SSTICKYERR));
 		else
-			retval = stlink_dap_op_queue_dp_write(dap, DP_ABORT, STKERRCLR);
-		if (retval != ERROR_OK) {
-			dap->do_reconnect = true;
-			return retval;
-		}
-		retval = stlink_dap_get_and_clear_error();
+			retval = stlink_dap_dp_write(dap, DP_ABORT, STKERRCLR);
 		if (retval != ERROR_OK) {
 			dap->do_reconnect = true;
 			return retval;
@@ -4061,6 +4663,12 @@ static int stlink_dap_op_run(struct adiv5_dap *dap)
 	return saved_retval;
 }
 
+static int stlink_dap_op_queue_run(struct adiv5_dap *dap)
+{
+	stlink_dap_run_internal(dap);
+	return stlink_dap_run_finalize(dap);
+}
+
 /** */
 static void stlink_dap_op_quit(struct adiv5_dap *dap)
 {
@@ -4069,6 +4677,182 @@ static void stlink_dap_op_quit(struct adiv5_dap *dap)
 	retval = stlink_dap_closeall_ap();
 	if (retval != ERROR_OK)
 		LOG_ERROR("Error closing APs");
+}
+
+static int stlink_dap_op_queue_dp_read(struct adiv5_dap *dap, unsigned int reg,
+	uint32_t *data)
+{
+	if (stlink_dap_get_error() != ERROR_OK)
+		return ERROR_OK;
+
+	unsigned int i = stlink_dap_handle->queue_index++;
+	struct dap_queue *q = &stlink_dap_handle->queue[i];
+	q->cmd = CMD_DP_READ;
+	q->dp_r.reg = reg;
+	q->dp_r.dap = dap;
+	q->dp_r.p_data = data;
+
+	if (i == MAX_QUEUE_DEPTH - 1)
+		stlink_dap_run_internal(dap);
+
+	return ERROR_OK;
+}
+
+static int stlink_dap_op_queue_dp_write(struct adiv5_dap *dap, unsigned int reg,
+	uint32_t data)
+{
+	if (stlink_dap_get_error() != ERROR_OK)
+		return ERROR_OK;
+
+	unsigned int i = stlink_dap_handle->queue_index++;
+	struct dap_queue *q = &stlink_dap_handle->queue[i];
+	q->cmd = CMD_DP_WRITE;
+	q->dp_w.reg = reg;
+	q->dp_w.dap = dap;
+	q->dp_w.data = data;
+
+	if (i == MAX_QUEUE_DEPTH - 1)
+		stlink_dap_run_internal(dap);
+
+	return ERROR_OK;
+}
+
+static int stlink_dap_op_queue_ap_read(struct adiv5_ap *ap, unsigned int reg,
+	uint32_t *data)
+{
+	if (stlink_dap_get_error() != ERROR_OK)
+		return ERROR_OK;
+
+	unsigned int i = stlink_dap_handle->queue_index++;
+	struct dap_queue *q = &stlink_dap_handle->queue[i];
+
+	/* test STLINK_F_HAS_CSW implicitly tests STLINK_F_HAS_MEM_16BIT, STLINK_F_HAS_MEM_RD_NO_INC
+	 * and STLINK_F_HAS_RW_MISC */
+	if ((stlink_dap_handle->version.flags & STLINK_F_HAS_CSW) &&
+			(reg == MEM_AP_REG_DRW || reg == MEM_AP_REG_BD0 || reg == MEM_AP_REG_BD1 ||
+			 reg == MEM_AP_REG_BD2 || reg == MEM_AP_REG_BD3)) {
+		/* de-queue previous write-TAR */
+		struct dap_queue *prev_q = q - 1;
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_TAR) {
+			stlink_dap_handle->queue_index = i;
+			i--;
+			q = prev_q;
+			prev_q--;
+		}
+		/* de-queue previous write-CSW if it didn't changed ap->csw_default */
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_CSW &&
+				!prev_q->ap_w.changes_csw_default) {
+			stlink_dap_handle->queue_index = i;
+			q = prev_q;
+		}
+
+		switch (ap->csw_value & CSW_SIZE_MASK) {
+		case CSW_8BIT:
+			q->cmd = CMD_MEM_AP_READ8;
+			break;
+		case CSW_16BIT:
+			q->cmd = CMD_MEM_AP_READ16;
+			break;
+		case CSW_32BIT:
+			q->cmd = CMD_MEM_AP_READ32;
+			break;
+		default:
+			LOG_ERROR("ST-Link: Unsupported CSW size %d", ap->csw_value & CSW_SIZE_MASK);
+			stlink_dap_record_error(ERROR_FAIL);
+			return ERROR_FAIL;
+		}
+
+		q->mem_ap.addr = (reg == MEM_AP_REG_DRW) ? ap->tar_value : ((ap->tar_value & ~0x0f) | (reg & 0x0c));
+		q->mem_ap.ap = ap;
+		q->mem_ap.p_data = data;
+		q->mem_ap.csw = ap->csw_default;
+
+		/* force TAR and CSW update */
+		ap->tar_valid = false;
+		ap->csw_value = 0;
+	} else {
+		q->cmd = CMD_AP_READ;
+		q->ap_r.reg = reg;
+		q->ap_r.ap = ap;
+		q->ap_r.p_data = data;
+	}
+
+	if (i == MAX_QUEUE_DEPTH - 1)
+		stlink_dap_run_internal(ap->dap);
+
+	return ERROR_OK;
+}
+
+static int stlink_dap_op_queue_ap_write(struct adiv5_ap *ap, unsigned int reg,
+	uint32_t data)
+{
+	if (stlink_dap_get_error() != ERROR_OK)
+		return ERROR_OK;
+
+	unsigned int i = stlink_dap_handle->queue_index++;
+	struct dap_queue *q = &stlink_dap_handle->queue[i];
+
+	/* test STLINK_F_HAS_CSW implicitly tests STLINK_F_HAS_MEM_16BIT, STLINK_F_HAS_MEM_WR_NO_INC
+	 * and STLINK_F_HAS_RW_MISC */
+	if ((stlink_dap_handle->version.flags & STLINK_F_HAS_CSW) &&
+			(reg == MEM_AP_REG_DRW || reg == MEM_AP_REG_BD0 || reg == MEM_AP_REG_BD1 ||
+			 reg == MEM_AP_REG_BD2 || reg == MEM_AP_REG_BD3)) {
+		/* de-queue previous write-TAR */
+		struct dap_queue *prev_q = q - 1;
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_TAR) {
+			stlink_dap_handle->queue_index = i;
+			i--;
+			q = prev_q;
+			prev_q--;
+		}
+		/* de-queue previous write-CSW if it didn't changed ap->csw_default */
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_CSW &&
+				!prev_q->ap_w.changes_csw_default) {
+			stlink_dap_handle->queue_index = i;
+			q = prev_q;
+		}
+
+		switch (ap->csw_value & CSW_SIZE_MASK) {
+		case CSW_8BIT:
+			q->cmd = CMD_MEM_AP_WRITE8;
+			break;
+		case CSW_16BIT:
+			q->cmd = CMD_MEM_AP_WRITE16;
+			break;
+		case CSW_32BIT:
+			q->cmd = CMD_MEM_AP_WRITE32;
+			break;
+		default:
+			LOG_ERROR("ST-Link: Unsupported CSW size %d", ap->csw_value & CSW_SIZE_MASK);
+			stlink_dap_record_error(ERROR_FAIL);
+			return ERROR_FAIL;
+		}
+
+		q->mem_ap.addr = (reg == MEM_AP_REG_DRW) ? ap->tar_value : ((ap->tar_value & ~0x0f) | (reg & 0x0c));
+		q->mem_ap.ap = ap;
+		q->mem_ap.data = data;
+		q->mem_ap.csw = ap->csw_default;
+
+		/* force TAR and CSW update */
+		ap->tar_valid = false;
+		ap->csw_value = 0;
+	} else {
+		q->cmd = CMD_AP_WRITE;
+		q->ap_w.reg = reg;
+		q->ap_w.ap = ap;
+		q->ap_w.data = data;
+		if (reg == MEM_AP_REG_CSW && ap->csw_default != last_csw_default[ap->ap_num]) {
+			q->ap_w.changes_csw_default = true;
+			last_csw_default[ap->ap_num] = ap->csw_default;
+		} else {
+			q->ap_w.changes_csw_default = false;
+		}
+	}
+
+	if (i == MAX_QUEUE_DEPTH - 1)
+		stlink_dap_run_internal(ap->dap);
+
+	return ERROR_OK;
 }
 
 static int stlink_swim_op_srst(void)
@@ -4086,7 +4870,7 @@ static int stlink_swim_op_read_mem(uint32_t addr, uint32_t size,
 	count *= size;
 
 	while (count) {
-		bytes_remaining = (count > STLINK_DATA_SIZE) ? STLINK_DATA_SIZE : count;
+		bytes_remaining = (count > STLINK_SWIM_DATA_SIZE) ? STLINK_SWIM_DATA_SIZE : count;
 		retval = stlink_swim_readbytes(stlink_dap_handle, addr, bytes_remaining, buffer);
 		if (retval != ERROR_OK)
 			return retval;
@@ -4109,7 +4893,7 @@ static int stlink_swim_op_write_mem(uint32_t addr, uint32_t size,
 	count *= size;
 
 	while (count) {
-		bytes_remaining = (count > STLINK_DATA_SIZE) ? STLINK_DATA_SIZE : count;
+		bytes_remaining = (count > STLINK_SWIM_DATA_SIZE) ? STLINK_SWIM_DATA_SIZE : count;
 		retval = stlink_swim_writebytes(stlink_dap_handle, addr, bytes_remaining, buffer);
 		if (retval != ERROR_OK)
 			return retval;
@@ -4146,25 +4930,6 @@ static int stlink_dap_config_trace(bool enabled,
 static int stlink_dap_trace_read(uint8_t *buf, size_t *size)
 {
 	return stlink_usb_trace_read(stlink_dap_handle, buf, size);
-}
-
-/** */
-COMMAND_HANDLER(stlink_dap_serial_command)
-{
-	LOG_DEBUG("stlink_dap_serial_command");
-
-	if (CMD_ARGC != 1) {
-		LOG_ERROR("Expected exactly one argument for \"st-link serial <serial-number>\".");
-		return ERROR_COMMAND_SYNTAX_ERROR;
-	}
-
-	if (stlink_dap_param.serial) {
-		LOG_WARNING("Command \"st-link serial\" already used. Replacing previous value");
-		free((void *)stlink_dap_param.serial);
-	}
-
-	stlink_dap_param.serial = strdup(CMD_ARGV[0]);
-	return ERROR_OK;
 }
 
 /** */
@@ -4218,15 +4983,45 @@ COMMAND_HANDLER(stlink_dap_backend_command)
 	return ERROR_OK;
 }
 
+#define BYTES_PER_LINE 16
+COMMAND_HANDLER(stlink_dap_cmd_command)
+{
+	unsigned int rx_n, tx_n;
+	struct stlink_usb_handle_s *h = stlink_dap_handle;
+
+	if (CMD_ARGC < 2)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], rx_n);
+	tx_n = CMD_ARGC - 1;
+	if (tx_n > STLINK_SG_SIZE || rx_n > STLINK_DATA_SIZE) {
+		LOG_ERROR("max %x byte sent and %d received", STLINK_SG_SIZE, STLINK_DATA_SIZE);
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+
+	stlink_usb_init_buffer(h, h->rx_ep, rx_n);
+
+	for (unsigned int i = 0; i < tx_n; i++) {
+		uint8_t byte;
+		COMMAND_PARSE_NUMBER(u8, CMD_ARGV[i + 1], byte);
+		h->cmdbuf[h->cmdidx++] = byte;
+	}
+
+	int retval = stlink_usb_xfer_noerrcheck(h, h->databuf, rx_n);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Error %d", retval);
+		return retval;
+	}
+
+	for (unsigned int i = 0; i < rx_n; i++)
+		command_print_sameline(CMD, "0x%02x%c", h->databuf[i],
+			((i == (rx_n - 1)) || ((i % BYTES_PER_LINE) == (BYTES_PER_LINE - 1))) ? '\n' : ' ');
+
+	return ERROR_OK;
+}
+
 /** */
 static const struct command_registration stlink_dap_subcommand_handlers[] = {
-	{
-		.name = "serial",
-		.handler = stlink_dap_serial_command,
-		.mode = COMMAND_CONFIG,
-		.help = "set the serial number of the adapter",
-		.usage = "<serial_number>",
-	},
 	{
 		.name = "vid_pid",
 		.handler = stlink_dap_vid_pid,
@@ -4240,6 +5035,13 @@ static const struct command_registration stlink_dap_subcommand_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "select which ST-Link backend to use",
 		.usage = "usb | tcp [port]",
+	},
+	{
+		.name = "cmd",
+		.handler = stlink_dap_cmd_command,
+		.mode = COMMAND_EXEC,
+		.help = "send arbitrary command",
+		.usage = "rx_n (tx_byte)+",
 	},
 	COMMAND_REGISTRATION_DONE
 };
@@ -4300,9 +5102,6 @@ static int stlink_dap_quit(void)
 {
 	LOG_DEBUG("stlink_dap_quit()");
 
-	free((void *)stlink_dap_param.serial);
-	stlink_dap_param.serial = NULL;
-
 	return stlink_close(stlink_dap_handle);
 }
 
@@ -4355,7 +5154,7 @@ static const struct dap_ops stlink_dap_ops = {
 	.queue_ap_read = stlink_dap_op_queue_ap_read,
 	.queue_ap_write = stlink_dap_op_queue_ap_write,
 	.queue_ap_abort = stlink_dap_op_queue_ap_abort,
-	.run = stlink_dap_op_run,
+	.run = stlink_dap_op_queue_run,
 	.sync = NULL, /* optional */
 	.quit = stlink_dap_op_quit, /* optional */
 };

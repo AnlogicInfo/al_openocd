@@ -44,6 +44,8 @@
 #include "algorithm.h"
 #include "register.h"
 #include "semihosting_common.h"
+#include <helper/log.h>
+#include <helper/binarybuffer.h>
 
 #if 0
 #define _DEBUG_INSTRUCTION_EXECUTION_
@@ -249,7 +251,7 @@ static int armv7m_set_core_reg(struct reg *reg, uint8_t *buf)
 	return ERROR_OK;
 }
 
-static uint32_t armv7m_map_id_to_regsel(unsigned int arm_reg_id)
+uint32_t armv7m_map_id_to_regsel(unsigned int arm_reg_id)
 {
 	switch (arm_reg_id) {
 	case ARMV7M_R0 ... ARMV7M_R14:
@@ -287,7 +289,7 @@ static uint32_t armv7m_map_id_to_regsel(unsigned int arm_reg_id)
 	}
 }
 
-static bool armv7m_map_reg_packing(unsigned int arm_reg_id,
+bool armv7m_map_reg_packing(unsigned int arm_reg_id,
 					unsigned int *reg32_id, uint32_t *offset)
 {
 
@@ -474,7 +476,7 @@ int armv7m_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
 		size = ARMV7M_NUM_CORE_REGS;
 
 	*reg_list = malloc(sizeof(struct reg *) * size);
-	if (*reg_list == NULL)
+	if (!*reg_list)
 		return ERROR_FAIL;
 
 	for (i = 0; i < size; i++)
@@ -967,7 +969,7 @@ int armv7m_blank_check_memory(struct target *target,
 		blocks_to_check = num_blocks;
 
 	struct algo_block *params = malloc((blocks_to_check+1)*sizeof(struct algo_block));
-	if (params == NULL) {
+	if (!params) {
 		retval = ERROR_FAIL;
 		goto cleanup1;
 	}

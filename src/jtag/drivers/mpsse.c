@@ -151,7 +151,7 @@ static bool device_location_equal(struct libusb_device *device, const char *loca
 	LOG_DEBUG("device path has %i steps", path_len);
 
 	ptr = strtok(loc, "-:");
-	if (ptr == NULL) {
+	if (!ptr) {
 		LOG_DEBUG("no ':' in path");
 		goto done;
 	}
@@ -163,7 +163,7 @@ static bool device_location_equal(struct libusb_device *device, const char *loca
 	path_step = 0;
 	while (path_step < 7) {
 		ptr = strtok(NULL, ".,");
-		if (ptr == NULL) {
+		if (!ptr) {
 			LOG_DEBUG("no more tokens in path at step %i", path_step);
 			break;
 		}
@@ -1251,14 +1251,20 @@ error_check:
 		retval = ERROR_OK;
 	}
 
+	if (retval != ERROR_OK)
+		mpsse_purge(ctx);
+
 	libusb_free_transfer(write_transfer);
 	if (read_transfer)
 		libusb_free_transfer(read_transfer);
 
+<<<<<<< HEAD
 	if (retval != ERROR_OK)
 		mpsse_purge(ctx);
 
 	BACKEND_DIVERGENCE_END
 
+=======
+>>>>>>> riscv/riscv
 	return retval;
 }

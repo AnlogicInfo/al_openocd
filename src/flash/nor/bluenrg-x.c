@@ -20,6 +20,7 @@
 #include "config.h"
 #endif
 
+#include <helper/binarybuffer.h>
 #include "helper/types.h"
 #include <target/algorithm.h>
 #include <target/armv7m.h>
@@ -94,7 +95,7 @@ FLASH_BANK_COMMAND_HANDLER(bluenrgx_flash_bank_command)
 	bluenrgx_info = calloc(1, sizeof(*bluenrgx_info));
 
 	/* Check allocation */
-	if (bluenrgx_info == NULL) {
+	if (!bluenrgx_info) {
 		LOG_ERROR("failed to allocate bank structure");
 		return ERROR_FAIL;
 	}

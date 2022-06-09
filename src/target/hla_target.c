@@ -37,11 +37,12 @@
 #include "target_type.h"
 #include "armv7m.h"
 #include "cortex_m.h"
+#include "arm_adi_v5.h"
 #include "arm_semihosting.h"
 #include "target_request.h"
 #include <rtt/rtt.h>
 
-#define savedDCRDR  dbgbase  /* FIXME: using target->dbgbase to preserve DCRDR */
+#define SAVED_DCRDR  dbgbase  /* FIXME: using target->dbgbase to preserve DCRDR */
 
 #define ARMV7M_SCS_DCRSR	DCB_DCRSR
 #define ARMV7M_SCS_DCRDR	DCB_DCRDR
@@ -202,16 +203,18 @@ static int adapter_target_create(struct target *target,
 {
 	LOG_DEBUG("%s", __func__);
 	struct adiv5_private_config *pc = target->private_config;
-	if (pc != NULL && pc->ap_num > 0) {
+	if (pc && pc->ap_num > 0) {
 		LOG_ERROR("hla_target: invalid parameter -ap-num (> 0)");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
 	struct cortex_m_common *cortex_m = calloc(1, sizeof(struct cortex_m_common));
-	if (cortex_m == NULL) {
+	if (!cortex_m) {
 		LOG_ERROR("No memory creating target");
 		return ERROR_FAIL;
 	}
+
+	cortex_m->common_magic = CORTEX_M_COMMON_MAGIC;
 
 	adapter_init_arch_info(target, cortex_m, target->tap);
 
@@ -243,7 +246,7 @@ static int adapter_debug_entry(struct target *target)
 	int retval;
 
 	/* preserve the DCRDR across halts */
-	retval = target_read_u32(target, DCB_DCRDR, &target->savedDCRDR);
+	retval = target_read_u32(target, DCB_DCRDR, &target->SAVED_DCRDR);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -405,7 +408,7 @@ static int hl_deassert_reset(struct target *target)
 	if (jtag_reset_config & RESET_HAS_SRST)
 		adapter_deassert_reset();
 
-	target->savedDCRDR = 0;  /* clear both DCC busy bits on initial resume */
+	target->SAVED_DCRDR = 0;  /* clear both DCC busy bits on initial resume */
 
 	return target->reset_halt ? ERROR_OK : target_resume(target, 1, 0, 0, 0);
 }
@@ -481,8 +484,8 @@ static int adapter_resume(struct target *target, int current,
 
 	armv7m_restore_context(target);
 
-	/* restore savedDCRDR */
-	res = target_write_u32(target, DCB_DCRDR, target->savedDCRDR);
+	/* restore SAVED_DCRDR */
+	res = target_write_u32(target, DCB_DCRDR, target->SAVED_DCRDR);
 	if (res != ERROR_OK)
 		return res;
 
@@ -564,8 +567,8 @@ static int adapter_step(struct target *target, int current,
 
 	armv7m_restore_context(target);
 
-	/* restore savedDCRDR */
-	res = target_write_u32(target, DCB_DCRDR, target->savedDCRDR);
+	/* restore SAVED_DCRDR */
+	res = target_write_u32(target, DCB_DCRDR, target->SAVED_DCRDR);
 	if (res != ERROR_OK)
 		return res;
 
@@ -620,7 +623,7 @@ static int adapter_write_memory(struct target *target, target_addr_t address,
 	return adapter->layout->api->write_mem(adapter->handle, address, size, count, buffer);
 }
 
-static const struct command_registration adapter_command_handlers[] = {
+static const struct command_registration hla_command_handlers[] = {
 	{
 		.chain = arm_command_handlers,
 	},
@@ -646,7 +649,7 @@ struct target_type hla_target = {
 	.target_create = adapter_target_create,
 	.target_jim_configure = adiv5_jim_configure,
 	.examine = cortex_m_examine,
-	.commands = adapter_command_handlers,
+	.commands = hla_command_handlers,
 
 	.poll = adapter_poll,
 	.arch_state = armv7m_arch_state,

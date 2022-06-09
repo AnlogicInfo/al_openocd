@@ -159,7 +159,6 @@ struct stm8_algorithm {
 struct stm8_core_reg {
 	uint32_t num;
 	struct target *target;
-	struct stm8_common *stm8_common;
 };
 
 enum hw_break_type {
@@ -1221,7 +1220,6 @@ static struct reg_cache *stm8_build_reg_cache(struct target *target)
 	for (i = 0; i < num_regs; i++) {
 		arch_info[i].num = stm8_regs[i].id;
 		arch_info[i].target = target;
-		arch_info[i].stm8_common = stm8;
 
 		reg_list[i].name = stm8_regs[i].name;
 		reg_list[i].size = stm8_regs[i].bits;
@@ -1372,7 +1370,7 @@ static void stm8_enable_breakpoints(struct target *target)
 
 	/* set any pending breakpoints */
 	while (breakpoint) {
-		if (breakpoint->set == 0)
+		if (!breakpoint->is_set)
 			stm8_set_breakpoint(target, breakpoint);
 		breakpoint = breakpoint->next;
 	}
@@ -1385,7 +1383,7 @@ static int stm8_set_breakpoint(struct target *target,
 	struct stm8_comparator *comparator_list = stm8->hw_break_list;
 	int retval;
 
-	if (breakpoint->set) {
+	if (breakpoint->is_set) {
 		LOG_WARNING("breakpoint already set");
 		return ERROR_OK;
 	}
@@ -1400,7 +1398,7 @@ static int stm8_set_breakpoint(struct target *target,
 					breakpoint->unique_id);
 			return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
 		}
-		breakpoint->set = bp_num + 1;
+		breakpoint_hw_set(breakpoint, bp_num);
 		comparator_list[bp_num].used = true;
 		comparator_list[bp_num].bp_value = breakpoint->address;
 		comparator_list[bp_num].type = HWBRK_EXEC;
@@ -1437,7 +1435,7 @@ static int stm8_set_breakpoint(struct target *target,
 		} else {
 			return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
 		}
-		breakpoint->set = 1; /* Any nice value but 0 */
+		breakpoint->is_set = true;
 	}
 
 	return ERROR_OK;
@@ -1478,14 +1476,14 @@ static int stm8_unset_breakpoint(struct target *target,
 	struct stm8_comparator *comparator_list = stm8->hw_break_list;
 	int retval;
 
-	if (!breakpoint->set) {
+	if (!breakpoint->is_set) {
 		LOG_WARNING("breakpoint not set");
 		return ERROR_OK;
 	}
 
 	if (breakpoint->type == BKPT_HARD) {
-		int bp_num = breakpoint->set - 1;
-		if ((bp_num < 0) || (bp_num >= stm8->num_hw_bpoints)) {
+		int bp_num = breakpoint->number;
+		if (bp_num >= stm8->num_hw_bpoints) {
 			LOG_DEBUG("Invalid comparator number in breakpoint (bpid: %" PRIu32 ")",
 					  breakpoint->unique_id);
 			return ERROR_OK;
@@ -1519,7 +1517,7 @@ static int stm8_unset_breakpoint(struct target *target,
 		} else
 			return ERROR_FAIL;
 	}
-	breakpoint->set = 0;
+	breakpoint->is_set = false;
 
 	return ERROR_OK;
 }
@@ -1535,7 +1533,7 @@ static int stm8_remove_breakpoint(struct target *target,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	if (breakpoint->set)
+	if (breakpoint->is_set)
 		stm8_unset_breakpoint(target, breakpoint);
 
 	if (breakpoint->type == BKPT_HARD)
@@ -1552,7 +1550,7 @@ static int stm8_set_watchpoint(struct target *target,
 	int wp_num = 0;
 	int ret;
 
-	if (watchpoint->set) {
+	if (watchpoint->is_set) {
 		LOG_WARNING("watchpoint already set");
 		return ERROR_OK;
 	}
@@ -1595,7 +1593,7 @@ static int stm8_set_watchpoint(struct target *target,
 		return ret;
 	}
 
-	watchpoint->set = wp_num + 1;
+	watchpoint_set(watchpoint, wp_num);
 
 	LOG_DEBUG("wp_num %i bp_value 0x%" PRIx32 "",
 			wp_num,
@@ -1629,7 +1627,7 @@ static void stm8_enable_watchpoints(struct target *target)
 
 	/* set any pending watchpoints */
 	while (watchpoint) {
-		if (watchpoint->set == 0)
+		if (!watchpoint->is_set)
 			stm8_set_watchpoint(target, watchpoint);
 		watchpoint = watchpoint->next;
 	}
@@ -1642,18 +1640,18 @@ static int stm8_unset_watchpoint(struct target *target,
 	struct stm8_common *stm8 = target_to_stm8(target);
 	struct stm8_comparator *comparator_list = stm8->hw_break_list;
 
-	if (!watchpoint->set) {
+	if (!watchpoint->is_set) {
 		LOG_WARNING("watchpoint not set");
 		return ERROR_OK;
 	}
 
-	int wp_num = watchpoint->set - 1;
-	if ((wp_num < 0) || (wp_num >= stm8->num_hw_bpoints)) {
+	int wp_num = watchpoint->number;
+	if (wp_num >= stm8->num_hw_bpoints) {
 		LOG_DEBUG("Invalid hw comparator number in watchpoint");
 		return ERROR_OK;
 	}
 	comparator_list[wp_num].used = false;
-	watchpoint->set = 0;
+	watchpoint->is_set = false;
 
 	stm8_set_hwbreak(target, comparator_list);
 
@@ -1671,7 +1669,7 @@ static int stm8_remove_watchpoint(struct target *target,
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	if (watchpoint->set)
+	if (watchpoint->is_set)
 		stm8_unset_watchpoint(target, watchpoint);
 
 	stm8->num_hw_bpoints_avail++;

@@ -123,8 +123,10 @@ m4_define([USB1_ADAPTERS],
 	[[opendous], [eStick/opendous JTAG Programmer], [OPENDOUS]],
 	[[armjtagew], [Olimex ARM-JTAG-EW Programmer], [ARMJTAGEW]],
 	[[rlink], [Raisonance RLink JTAG Programmer], [RLINK]],
-	[[usbprog], [USBProg JTAG Programmer], [USBPROG]],
-	[[aice], [Andes JTAG Programmer], [AICE]]])
+	[[usbprog], [USBProg JTAG Programmer], [USBPROG]]])
+
+m4_define([DEPRECATED_USB1_ADAPTERS],
+	[[[aice], [Andes JTAG Programmer (deprecated)], [AICE]]])
 
 m4_define([HIDAPI_ADAPTERS],
 	[[[cmsis_dap], [CMSIS-DAP Compliant Debugger], [CMSIS_DAP_HID]],
@@ -257,6 +259,8 @@ AC_ARG_ADAPTERS([
   LIBJAYLINK_ADAPTERS
   ],[auto])
 
+AC_ARG_ADAPTERS([DEPRECATED_USB1_ADAPTERS],[no])
+
 AC_ARG_ENABLE([parport],
   AS_HELP_STRING([--enable-parport], [Enable building the pc parallel port driver]),
   [build_parport=$enableval], [build_parport=no])
@@ -274,6 +278,10 @@ AC_ARG_ENABLE([parport_giveio],
 AC_ARG_ENABLE([jtag_vpi],
   AS_HELP_STRING([--enable-jtag_vpi], [Enable building support for JTAG VPI]),
   [build_jtag_vpi=$enableval], [build_jtag_vpi=no])
+
+AC_ARG_ENABLE([vdebug],
+  AS_HELP_STRING([--enable-vdebug], [Enable building support for Cadence Virtual Debug Interface]),
+  [build_vdebug=$enableval], [build_vdebug=no])
 
 AC_ARG_ENABLE([jtag_dpi],
   AS_HELP_STRING([--enable-jtag_dpi], [Enable building support for JTAG DPI]),
@@ -350,6 +358,10 @@ AS_CASE([$host_os],
 AC_ARG_ENABLE([internal-jimtcl],
   AS_HELP_STRING([--disable-internal-jimtcl], [Disable building internal jimtcl]),
   [use_internal_jimtcl=$enableval], [use_internal_jimtcl=yes])
+
+AC_ARG_ENABLE([jimtcl-maintainer],
+  AS_HELP_STRING([--enable-jimtcl-maintainer], [Enable maintainer mode when building internal jimtcl]),
+  [use_internal_jimtcl_maintainer=$enableval], [use_internal_jimtcl_maintainer=no])
 
 AC_ARG_ENABLE([internal-libjaylink],
   AS_HELP_STRING([--disable-internal-libjaylink],
@@ -529,6 +541,12 @@ AS_IF([test "x$build_jtag_vpi" = "xyes"], [
   AC_DEFINE([BUILD_JTAG_VPI], [0], [0 if you don't want JTAG VPI.])
 ])
 
+AS_IF([test "x$build_vdebug" = "xyes"], [
+  AC_DEFINE([BUILD_VDEBUG], [1], [1 if you want Cadence vdebug interface.])
+], [
+  AC_DEFINE([BUILD_VDEBUG], [0], [0 if you don't want Cadence vdebug interface.])
+])
+
 AS_IF([test "x$build_jtag_dpi" = "xyes"], [
   AC_DEFINE([BUILD_JTAG_DPI], [1], [1 if you want JTAG DPI.])
 ], [
@@ -556,7 +574,12 @@ AS_IF([test "x$enable_buspirate" != "xno"], [
 
 AS_IF([test "x$use_internal_jimtcl" = "xyes"], [
   AS_IF([test -f "$srcdir/jimtcl/configure.ac"], [
-    AX_CONFIG_SUBDIR_OPTION([jimtcl], [--disable-install-jim])
+    AS_IF([test "x$use_internal_jimtcl_maintainer" = "xyes"], [
+      jimtcl_config_options="--disable-install-jim --maintainer"
+    ], [
+      jimtcl_config_options="--disable-install-jim"
+    ])
+    AX_CONFIG_SUBDIR_OPTION([jimtcl], [$jimtcl_config_options])
   ], [
     AC_MSG_ERROR([jimtcl not found, run git submodule init and git submodule update.])
   ])
@@ -592,9 +615,6 @@ AS_IF([test "x$build_ftd2xx" = "xyes"], [
 PKG_CHECK_MODULES([LIBUSB1], [libusb-1.0], [
 	use_libusb1=yes
 	AC_DEFINE([HAVE_LIBUSB1], [1], [Define if you have libusb-1.x])
-	PKG_CHECK_EXISTS([libusb-1.0 >= 1.0.9],
-		[AC_DEFINE([HAVE_LIBUSB_ERROR_NAME], [1], [Define if your libusb has libusb_error_name()])],
-		[AC_MSG_WARN([libusb-1.x older than 1.0.9 detected, consider updating])])
 	LIBUSB1_CFLAGS=`echo $LIBUSB1_CFLAGS | sed 's/-I/-isystem /'`
 	AC_MSG_NOTICE([libusb-1.0 header bug workaround: LIBUSB1_CFLAGS changed to "$LIBUSB1_CFLAGS"])
 	PKG_CHECK_EXISTS([libusb-1.0 >= 1.0.16],
@@ -666,6 +686,7 @@ m4_define([PROCESS_ADAPTERS], [
 ])
 
 PROCESS_ADAPTERS([USB1_ADAPTERS], ["x$use_libusb1" = "xyes"], [libusb-1.x])
+PROCESS_ADAPTERS([DEPRECATED_USB1_ADAPTERS], ["x$use_libusb1" = "xyes"], [libusb-1.x])
 PROCESS_ADAPTERS([HIDAPI_ADAPTERS], ["x$use_hidapi" = "xyes"], [hidapi])
 PROCESS_ADAPTERS([HIDAPI_USB1_ADAPTERS], ["x$use_hidapi" = "xyes" -a "x$use_libusb1" = "xyes"], [hidapi and libusb-1.x])
 PROCESS_ADAPTERS([LIBFTDI_ADAPTERS], ["x$use_libftdi" = "xyes"], [libftdi])
@@ -713,8 +734,9 @@ AM_CONDITIONAL([AT91RM9200], [test "x$build_at91rm9200" = "xyes"])
 AM_CONDITIONAL([BCM2835GPIO], [test "x$build_bcm2835gpio" = "xyes"])
 AM_CONDITIONAL([IMX_GPIO], [test "x$build_imx_gpio" = "xyes"])
 AM_CONDITIONAL([BITBANG], [test "x$build_bitbang" = "xyes"])
-AM_CONDITIONAL([JTAG_VPI], [test "x$build_jtag_vpi" = "xyes" -o "x$build_jtag_vpi" = "xyes"])
-AM_CONDITIONAL([JTAG_DPI], [test "x$build_jtag_dpi" = "xyes" -o "x$build_jtag_dpi" = "xyes"])
+AM_CONDITIONAL([JTAG_VPI], [test "x$build_jtag_vpi" = "xyes"])
+AM_CONDITIONAL([VDEBUG], [test "x$build_vdebug" = "xyes"])
+AM_CONDITIONAL([JTAG_DPI], [test "x$build_jtag_dpi" = "xyes"])
 AM_CONDITIONAL([USB_BLASTER_DRIVER], [test "x$enable_usb_blaster" != "xno" -o "x$enable_usb_blaster_2" != "xno"])
 AM_CONDITIONAL([AMTJTAGACCEL], [test "x$build_amtjtagaccel" = "xyes"])
 AM_CONDITIONAL([GW16012], [test "x$build_gw16012" = "xyes"])
@@ -804,6 +826,7 @@ echo
 echo OpenOCD configuration summary
 echo --------------------------------------------------
 m4_foreach([adapter], [USB1_ADAPTERS,
+	DEPRECATED_USB1_ADAPTERS,
 	HIDAPI_ADAPTERS, HIDAPI_USB1_ADAPTERS, LIBFTDI_ADAPTERS,
 	LIBFTDI_USB1_ADAPTERS,
 	LIBGPIOD_ADAPTERS,

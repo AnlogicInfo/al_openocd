@@ -31,14 +31,15 @@ DIST_SUBDIRS += jimtcl
 endif
 
 # common flags used in openocd build
-AM_CFLAGS = $(GCC_WARNINGS)
+AM_CFLAGS = $(GCC_WARNINGS)\
+			  -DFD_SETSIZE=128
 
 AM_CPPFLAGS = $(HOST_CPPFLAGS)\
 			  -I$(top_srcdir)/src \
 			  -I$(top_builddir)/src \
-			  -I$(top_srcdir)/src/helper \
 			  -DPKGDATADIR=\"$(pkgdatadir)\" \
-			  -DBINDIR=\"$(bindir)\"
+			  -DBINDIR=\"$(bindir)\"\
+			  -DFD_SETSIZE=128
 
 if INTERNAL_JIMTCL
 AM_CPPFLAGS += -I$(top_srcdir)/jimtcl \
@@ -126,8 +127,6 @@ uninstall-hook:
 distclean-local:
 	rm -rf Doxyfile doxygen
 	rm -f $(srcdir)/jimtcl/configure.gnu
-# FIXME: workaround for jimtcl 0.80 only. Remove from jimtcl 0.81
-	rm -f jimtcl/examples.api/Makefile
 
 # We want every change to have Signed-off-by. This is tricky to enforce in
 # Travis, because it automatically makes temporary commits when merging. So

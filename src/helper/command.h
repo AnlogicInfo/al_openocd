@@ -24,8 +24,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <jim-nvp.h>
 
+#include <helper/jim-nvp.h>
 #include <helper/list.h>
 #include <helper/types.h>
 
@@ -38,6 +38,15 @@
 #define PRINTF_ATTRIBUTE_FORMAT printf
 #endif
 
+/**
+ * OpenOCD command mode is COMMAND_CONFIG at start, then switches to COMMAND_EXEC
+ * during the execution of command 'init'.
+ * The field 'mode' in struct command_registration specifies in which command mode
+ * the command can be executed:
+ * - during COMMAND_CONFIG only,
+ * - during COMMAND_EXEC only,
+ * - in both modes (COMMAND_ANY).
+ */
 enum command_mode {
 	COMMAND_EXEC,
 	COMMAND_CONFIG,
@@ -427,7 +436,7 @@ DECLARE_PARSE_WRAPPER(_target_addr, target_addr_t);
 #define COMMAND_PARSE_NUMBER(type, in, out) \
 	do { \
 		int retval_macro_tmp = parse_ ## type(in, &(out)); \
-		if (ERROR_OK != retval_macro_tmp) { \
+		if (retval_macro_tmp != ERROR_OK) { \
 			command_print(CMD, stringify(out) \
 				" option value ('%s') is not valid", in); \
 			return retval_macro_tmp; \
@@ -489,7 +498,7 @@ DECLARE_PARSE_WRAPPER(_target_addr, target_addr_t);
 	do { \
 		bool value; \
 		int retval_macro_tmp = command_parse_bool_arg(in, &value); \
-		if (ERROR_OK != retval_macro_tmp) { \
+		if (retval_macro_tmp != ERROR_OK) { \
 			command_print(CMD, stringify(out) \
 				" option value ('%s') is not valid", in); \
 			command_print(CMD, "  choices are '%s' or '%s'", \
