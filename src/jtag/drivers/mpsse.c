@@ -1258,13 +1258,10 @@ error_check:
 	if (read_transfer)
 		libusb_free_transfer(read_transfer);
 
-<<<<<<< HEAD
 	if (retval != ERROR_OK)
 		mpsse_purge(ctx);
 
 	BACKEND_DIVERGENCE_END
 
-=======
->>>>>>> riscv/riscv
 	return retval;
 }
