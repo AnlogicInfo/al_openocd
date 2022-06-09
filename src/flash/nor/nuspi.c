@@ -945,7 +945,7 @@ err:
 	return retval;
 }
 
-static int nuspi_read(struct flash_bank *bank, const uint8_t *buffer,
+static int nuspi_read(struct flash_bank *bank, uint8_t *buffer,
 		uint32_t offset, uint32_t count)
 {
 	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
@@ -1020,6 +1020,7 @@ static int gdb_flash_write_end_callback(struct target *target,
 		if (nuspi_set_xip_read_cmd(priv) != ERROR_OK)
 			return ERROR_FAIL;
 	}
+	return ERROR_OK;
 }
 
 static int nuspi_probe(struct flash_bank *bank)
@@ -1152,23 +1153,6 @@ static int nuspi_protect_check(struct flash_bank *bank)
 	return ERROR_OK;
 }
 
-static int get_nuspi_info(struct flash_bank *bank, char *buf, int buf_size)
-{
-	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
-
-	if (!(nuspi_info->probed)) {
-		snprintf(buf, buf_size,
-				"\nNUSPI flash bank not probed yet\n");
-		return ERROR_OK;
-	}
-
-	snprintf(buf, buf_size, "\nNUSPI flash information:\n"
-			"  Device \'%s\' (ID 0x%08" PRIx32 ")\n",
-			nuspi_info->dev->name, nuspi_info->dev->device_id);
-
-	return ERROR_OK;
-}
-
 const struct flash_driver nuspi_flash = {
 	.name = "nuspi",
 	.flash_bank_command = nuspi_flash_bank_command,
@@ -1180,6 +1164,5 @@ const struct flash_driver nuspi_flash = {
 	.auto_probe = nuspi_auto_probe,
 	.erase_check = default_flash_blank_check,
 	.protect_check = nuspi_protect_check,
-	.info = get_nuspi_info,
 	.free_driver_priv = default_flash_free_driver_priv
 };
