@@ -261,6 +261,12 @@ proc ftdi_tdo_sample_edge args {
 	eval ftdi tdo_sample_edge $args
 }
 
+lappend _telnet_autocomplete_skip ftdi_oscan1_mode
+proc ftdi_oscan1_mode args {
+	echo "DEPRECATED! use 'ftdi oscan1_mode' not 'ftdi_oscan1_mode'"
+	eval ftdi oscan1_mode $args
+}
+
 lappend _telnet_autocomplete_skip remote_bitbang_host
 proc remote_bitbang_host args {
 	echo "DEPRECATED! use 'remote_bitbang host' not 'remote_bitbang_host'"
