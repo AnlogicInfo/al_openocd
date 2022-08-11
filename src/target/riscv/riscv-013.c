@@ -1505,7 +1505,7 @@ static int set_group(struct target *target, bool *supported, unsigned group, gro
 	uint32_t write_val = DM_DMCS2_HGWRITE;
 	assert(group <= 31);
 	write_val = set_field(write_val, DM_DMCS2_GROUP, group);
-	write_val = set_field(write_val, DM_DMCS2_GROUPTYPE, (grouptype == HALTGROUP) ? 1 : 0);
+	write_val = set_field(write_val, DM_DMCS2_GROUPTYPE, (grouptype == HALTGROUP) ? 0 : 1);
 	if (dmi_write(target, DM_DMCS2, write_val) != ERROR_OK)
 		return ERROR_FAIL;
 	uint32_t read_val;
@@ -3834,10 +3834,10 @@ static int write_memory_progbuf(struct target *target, target_addr_t address,
 	riscv_program_write(&program);
 
 	riscv_addr_t cur_addr = address;
-	riscv_addr_t fin_addr = address + (count * size);
+	riscv_addr_t distance = (riscv_addr_t)count * size;
 	bool setup_needed = true;
-	LOG_DEBUG("writing until final address 0x%016" PRIx64, fin_addr);
-	while (cur_addr < fin_addr) {
+	LOG_DEBUG("writing until final address 0x%016" PRIx64, cur_addr + distance);
+	while (cur_addr - address < distance) {
 		LOG_DEBUG("transferring burst starting at address 0x%016" PRIx64,
 				cur_addr);
 
@@ -3849,14 +3849,12 @@ static int write_memory_progbuf(struct target *target, target_addr_t address,
 			goto error;
 
 		/* To write another word, we put it in S1 and execute the program. */
-		unsigned start = (cur_addr - address) / size;
-		for (unsigned i = start; i < count; ++i) {
-			unsigned offset = size*i;
+		for (riscv_addr_t offset = cur_addr - address; offset < distance; offset += size) {
 			const uint8_t *t_buffer = buffer + offset;
 
 			uint64_t value = buf_get_u64(t_buffer, 0, 8 * size);
 
-			log_memory_access(address + offset, value, size, false);
+			log_memory_access(cur_addr, value, size, false);
 			cur_addr += size;
 
 			if (setup_needed) {
