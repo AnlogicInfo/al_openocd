@@ -1,5 +1,9 @@
 #ifndef DWCSSI_FLASH_H
 #define DWCSSI_FALSH_H
+
+// qspi flash mio defines
+#define   MIO_BASE                             0xF8803000
+
 // s25f1256s flash defines
 #define   FLASH_RD_CONFIG_REG_CMD              0x35
 #define   FLASH_WR_CONFIG_REG_CMD              0x01
@@ -34,27 +38,6 @@ typedef union sp_flash_cr1_t
     } reg_fields;
 
 } sp_flash_cr1_t;
-
-// typedef struct flash_input_t
-// {
-//     uint32_t bytes_to_send;
-//     uint8_t  buf[512];
-
-// } flash_input_t;
-
-// typedef struct flash_output_t
-// {
-//     uint32_t bytes_to_read;
-//     uint8_t  buf[512];
-// } flash_output_t;
-
-// typedef struct flash_intf_t
-// {
-//     uint8_t        flash_status;
-//     flash_input_t  input;
-//     flash_output_t output;
-// } flash_intf_t;
-
 
 
 #define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
