@@ -69,15 +69,16 @@ static int custom_run_algorithm(struct flash_bank *bank)
 		rewind(fd);
 		if (target->working_area_size < bin_size) {
 			LOG_ERROR("working_area_size less than loader_bin_size");
-			return ERROR_FAIL;
+			goto err;
 		}
 		if (1 != fread(bin, bin_size, 1, fd)) {
 			LOG_ERROR("read loader error");
+			goto err;
 		}
 		fclose(fd);
 	} else {
 		LOG_ERROR("Failed to open loader:%s ", bank_msg->loader_path);
-		return ERROR_FAIL;
+		goto err;
 	}
 
 	unsigned data_wa_size = 0;
@@ -264,6 +265,9 @@ static int custom_run_algorithm(struct flash_bank *bank)
 	}
 
 err:
+	if (bin) {
+		free(bin);
+	}
 	if (algorithm_wa) {
 		target_free_working_area(target, data_wa);
 		target_free_working_area(target, algorithm_wa);
