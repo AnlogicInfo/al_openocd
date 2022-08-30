@@ -163,7 +163,7 @@ static int dpm_read_reg_u64(struct arm_dpm *dpm, struct reg *r, unsigned regnum)
 		buf_set_u32(r->value + 4, 0, 32, value_r1);
 		r->valid = true;
 		r->dirty = false;
-		LOG_DEBUG("READ: %s, %8.8x, %8.8x", r->name,
+		LOG_INFO("READ: %s, %8.8x, %8.8x", r->name,
 				(unsigned) value_r0, (unsigned) value_r1);
 	}
 
@@ -231,7 +231,7 @@ int arm_dpm_read_reg(struct arm_dpm *dpm, struct reg *r, unsigned regnum)
 		buf_set_u32(r->value, 0, 32, value);
 		r->valid = true;
 		r->dirty = false;
-		LOG_DEBUG("READ: %s, %8.8x", r->name, (unsigned) value);
+		LOG_INFO("READ: %s, %8.8x", r->name, (unsigned) value);
 	}
 
 	return retval;
@@ -243,6 +243,8 @@ static int dpm_write_reg_u64(struct arm_dpm *dpm, struct reg *r, unsigned regnum
 	int retval = ERROR_FAIL;
 	uint32_t value_r0 = buf_get_u32(r->value, 0, 32);
 	uint32_t value_r1 = buf_get_u32(r->value + 4, 0, 32);
+
+	LOG_DEBUG("dpm write reg 64");
 
 	switch (regnum) {
 		case ARM_VFP_V3_D0 ... ARM_VFP_V3_D31:
@@ -279,7 +281,7 @@ static int dpm_write_reg(struct arm_dpm *dpm, struct reg *r, unsigned regnum)
 {
 	int retval;
 	uint32_t value = buf_get_u32(r->value, 0, 32);
-
+	LOG_DEBUG("dpm write reg");
 	switch (regnum) {
 		case 0 ... 14:
 			/* load register from DCC:  "MRC p14, 0, Rnum, c0, c5, 0" */

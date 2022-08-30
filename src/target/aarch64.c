@@ -291,7 +291,7 @@ static int aarch64_check_state_one(struct target *target,
 		uint32_t mask, uint32_t val, int *p_result, uint32_t *p_prsr)
 {
 	struct armv8_common *armv8 = target_to_armv8(target);
-	uint32_t prsr;
+	uint32_t prsr=0;
 	int retval;
 
 	// LOG_DEBUG("check state one addr %llx", (armv8->debug_base + CPUV8_DBG_PRSR));
@@ -313,15 +313,17 @@ static int aarch64_check_state_one(struct target *target,
 static int aarch64_wait_halt_one(struct target *target)
 {
 	int retval = ERROR_OK;
-	uint32_t prsr;
 
 	int64_t then = timeval_ms();
 	for (;;) {
 		int halted;
-
+		uint32_t prsr=0;
 		retval = aarch64_check_state_one(target, PRSR_HALT, PRSR_HALT, &halted, &prsr);
 		if (retval != ERROR_OK || halted)
+		{
+			LOG_INFO("wait halt prsr %08x", prsr);
 			break;
+		}
 
 		if (timeval_ms() > then + 1000) {
 			retval = ERROR_TARGET_TIMEOUT;
@@ -579,7 +581,7 @@ static int aarch64_restore_one(struct target *target, int current,
 {
 	struct armv8_common *armv8 = target_to_armv8(target);
 	struct arm *arm = &armv8->arm;
-	int retval;
+	int retval=ERROR_OK;
 	uint64_t resume_pc;
 
 	LOG_DEBUG("%s", target_name(target));
@@ -676,6 +678,8 @@ static int aarch64_prepare_restart_one(struct target *target)
 		/* clear sticky bits in PRSR, SDR is now 0 */
 		retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 				armv8->debug_base + CPUV8_DBG_PRSR, &tmp);
+		LOG_INFO("mem ap rd addr %llx val %08x", (armv8->debug_base + CPUV8_DBG_PRSR), tmp);		
+
 	}
 
 	return retval;
@@ -697,14 +701,18 @@ static int aarch64_do_restart_one(struct target *target, enum restart_mode mode)
 		int64_t then = timeval_ms();
 		for (;;) {
 			int resumed;
+			uint32_t prsr = 0;
 			/*
 			 * if PRSR.SDR is set now, the target did restart, even
 			 * if it's now already halted again (e.g. due to breakpoint)
 			 */
 			retval = aarch64_check_state_one(target,
-						PRSR_SDR, PRSR_SDR, &resumed, NULL);
+						PRSR_SDR, PRSR_SDR, &resumed, &prsr);
 			if (retval != ERROR_OK || resumed)
+			{
+				LOG_INFO("restart prsr %08x", prsr);
 				break;
+			}
 
 			if (timeval_ms() > then + 1000) {
 				LOG_ERROR("%s: Timeout waiting for resume"PRIx32, target_name(target));
@@ -1014,6 +1022,7 @@ static int aarch64_debug_entry(struct target *target)
 		armv8->dpm.wp_addr = edwar;
 	}
 
+	LOG_INFO("start read current registers");
 	retval = armv8_dpm_read_current_registers(&armv8->dpm);
 
 	if (retval == ERROR_OK && armv8->post_debug_entry)
@@ -1087,6 +1096,8 @@ static int aarch64_post_debug_entry(struct target *target)
 		(aarch64->system_control_reg & 0x4U) ? 1 : 0;
 	armv8->armv8_mmu.armv8_cache.i_cache_enabled =
 		(aarch64->system_control_reg & 0x1000U) ? 1 : 0;
+	
+	LOG_INFO("aarch64 post debug entry done");
 	return ERROR_OK;
 }
 
@@ -1157,12 +1168,15 @@ static int aarch64_step(struct target *target, int current, target_addr_t addres
 	int64_t then = timeval_ms();
 	for (;;) {
 		int stepped;
-		uint32_t prsr;
-
+		uint32_t prsr=0;
 		retval = aarch64_check_state_one(target,
 					PRSR_SDR|PRSR_HALT, PRSR_SDR|PRSR_HALT, &stepped, &prsr);
 		if (retval != ERROR_OK || stepped)
+		{
+			LOG_INFO("stepped prsr %08x", prsr);
 			break;
+		}
+
 
 		if (timeval_ms() > then + 100) {
 			LOG_ERROR("timeout waiting for target %s halt after step",
@@ -1171,6 +1185,7 @@ static int aarch64_step(struct target *target, int current, target_addr_t addres
 			break;
 		}
 	}
+
 
 	/*
 	 * At least on one SoC (Renesas R8A7795) stepping over a WFI instruction
@@ -2960,6 +2975,81 @@ COMMAND_HANDLER(aarch64_mask_interrupts_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(aarch64_ap_rw_command)
+{
+	struct target *target = get_current_target(CMD_CTX);
+	struct armv8_common *armv8 = target_to_armv8(target);
+	target_addr_t address;
+	uint32_t      data;
+	uint32_t rd_val;
+	int retval;
+
+	COMMAND_PARSE_ADDRESS(CMD_ARGV[1], address);
+	if(strcmp(CMD_ARGV[0], "wr") == 0)
+	{
+
+		COMMAND_PARSE_NUMBER(uint, CMD_ARGV[2], data);
+		retval = mem_ap_write_atomic_u32(armv8->debug_ap, address, data);
+	}
+	else if(strcmp(CMD_ARGV[0], "rd") == 0)
+	{
+		retval = mem_ap_read_atomic_u32(armv8->debug_ap, address, &rd_val);
+		if((address & 0xFFF) == 0x314)
+		{
+			LOG_INFO("CPUV8_DBG_PRSR 0x314 rd val %x", rd_val);
+		}
+	}
+	else
+	{
+		retval = ERROR_FAIL;
+	}
+		
+
+	if(retval != ERROR_OK)
+		return retval;
+
+	return ERROR_OK;
+
+}
+
+
+COMMAND_HANDLER(aarch64_dpm_rw)
+{
+	struct target *target = get_current_target(CMD_CTX);
+	struct armv8_common *armv8 = target_to_armv8(target);
+	struct arm_dpm *dpm = &armv8->dpm;
+
+	int regnum;
+	uint64_t value_64;
+	uint64_t rd_val=0;
+	int retval;
+
+	COMMAND_PARSE_NUMBER(int, CMD_ARGV[1], regnum);
+
+	retval = dpm->prepare(dpm);
+	if (retval != ERROR_OK)
+		goto done;
+
+	if(strcmp(CMD_ARGV[0], "wr") == 0)
+	{
+		COMMAND_PARSE_ADDRESS(CMD_ARGV[2], value_64);
+		retval = armv8->write_reg_u64(armv8, regnum, value_64);	
+	}
+	else if(strcmp(CMD_ARGV[0], "rd") == 0)
+	{
+		retval = armv8->read_reg_u64(armv8, regnum, &rd_val);
+	}
+	else
+	{
+		retval = ERROR_FAIL;
+	}
+
+done:
+	dpm->finish(dpm);
+	return retval;
+
+}
+
 static int jim_mcrmrc(Jim_Interp *interp, int argc, Jim_Obj * const *argv)
 {
 	struct command *c = jim_to_command(interp);
@@ -3169,6 +3259,22 @@ static const struct command_registration aarch64_command_handlers[] = {
 		.usage = "",
 		.chain = aarch64_exec_command_handlers,
 	},
+	{
+		.name = "ap_rw",
+		.handler = aarch64_ap_rw_command,
+		.mode = COMMAND_ANY,
+		.help = "aarch64 ap rw",
+		.usage = "cmd address [data]",
+	},
+	{
+		.name = "dpm_rw",
+		.handler = aarch64_dpm_rw,
+		.mode = COMMAND_ANY,
+		.help = "aarch64 dpm wr",
+		.usage = "regnum [value]",
+	},
+
+
 	COMMAND_REGISTRATION_DONE
 };
 

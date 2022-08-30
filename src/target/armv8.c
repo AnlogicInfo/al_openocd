@@ -209,7 +209,11 @@ static int armv8_read_reg(struct armv8_common *armv8, int regnum, uint64_t *regv
 	}
 
 	if (retval == ERROR_OK && regval)
+	{
 		*regval = value_64;
+		LOG_INFO("rd arm reg %llx", value_64);
+
+	}
 	else
 		retval = ERROR_FAIL;
 
@@ -245,6 +249,7 @@ static int armv8_write_reg(struct armv8_common *armv8, int regnum, uint64_t valu
 	int retval;
 	uint32_t value;
 
+	LOG_DEBUG("armv8 write reg");
 	switch (regnum) {
 	case 0 ... 30:
 		retval = dpm->instr_write_data_dcc_64(dpm,

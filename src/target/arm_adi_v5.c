@@ -249,10 +249,25 @@ int mem_ap_read_u32(struct adiv5_ap *ap, target_addr_t address,
 	retval = mem_ap_setup_transfer(ap,
 			CSW_32BIT | (ap->csw_value & CSW_ADDRINC_MASK),
 			address & 0xFFFFFFFFFFFFFFF0ull);
+
+
 	if (retval != ERROR_OK)
 		return retval;
 
-	return dap_queue_ap_read(ap, MEM_AP_REG_BD0 | (address & 0xC), value);
+	retval = dap_queue_ap_read(ap, MEM_AP_REG_BD0 | (address & 0xC), value);
+	if (retval != ERROR_OK)
+		return retval;
+
+
+	retval = dap_run(ap->dap);
+	if (retval != ERROR_OK)
+		return retval;	
+	if((address & 0xFFF)!= 0x314)
+	{
+	LOG_INFO("mem ap rd addr %llx val %08x", address, *value);
+	}
+	
+	return retval;
 }
 
 /**
@@ -271,7 +286,6 @@ int mem_ap_read_atomic_u32(struct adiv5_ap *ap, target_addr_t address,
 		uint32_t *value)
 {
 	int retval;
-
 	retval = mem_ap_read_u32(ap, address, value);
 	if (retval != ERROR_OK)
 		return retval;
@@ -298,6 +312,8 @@ int mem_ap_write_u32(struct adiv5_ap *ap, target_addr_t address,
 	/* Use banked addressing (REG_BDx) to avoid some link traffic
 	 * (updating TAR) when writing several consecutive addresses.
 	 */
+	LOG_INFO("mem ap write addr %llx val %08x", address, value);
+
 	retval = mem_ap_setup_transfer(ap,
 			CSW_32BIT | (ap->csw_value & CSW_ADDRINC_MASK),
 			address & 0xFFFFFFFFFFFFFFF0ull);
