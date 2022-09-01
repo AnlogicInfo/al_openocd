@@ -1696,6 +1696,7 @@ static int riscv_read_phys_memory(struct target *target, target_addr_t phys_addr
 static int riscv_read_memory(struct target *target, target_addr_t address,
 		uint32_t size, uint32_t count, uint8_t *buffer)
 {
+	LOG_ERROR("riscv_read_memory start");
 	if (count == 0) {
 		LOG_WARNING("0-length read from 0x%" TARGET_PRIxADDR, address);
 		return ERROR_OK;
