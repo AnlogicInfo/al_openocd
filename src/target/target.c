@@ -2717,7 +2717,6 @@ int target_write_u64(struct target *target, target_addr_t address, uint64_t valu
 
 int target_write_u32(struct target *target, target_addr_t address, uint32_t value)
 {
-	LOG_ERROR("target_write_u32 function start");
 	int retval;
 	uint8_t value_buf[4];
 	if (!target_was_examined(target)) {
@@ -2734,7 +2733,6 @@ int target_write_u32(struct target *target, target_addr_t address, uint32_t valu
 	if (retval != ERROR_OK)
 		LOG_DEBUG("failed: %i", retval);
 
-	LOG_ERROR("target_write_u32 function end");
 
 	return retval;
 }

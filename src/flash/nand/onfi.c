@@ -94,6 +94,7 @@ void SmcReadData(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Len
 void SmcReadData_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length)
 {
 	LOG_ERROR("SmcReadData function start");
+	struct target *target = nand->target;
 	uint32_t endCmdReq = 0;
 	volatile uint64_t dataPhaseAddr = 0;
 	uint32_t eccLast = 0;
@@ -119,7 +120,7 @@ void SmcReadData_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhas
 	{
 		LOG_ERROR("index %d", Index);
 		//Buf[Index] = *((uint8_t *)dataPhaseAddr);
-		target_read_u8(nand, dataPhaseAddr, &Buf[Index]);
+		target_read_u8(target, dataPhaseAddr, &Buf[Index]);
 		LOG_ERROR("read data %d", Buf[Index]);
 	}
 
@@ -322,7 +323,7 @@ uint8_t Onfi_CmdBlockErase(uint32_t Page)
 
 uint8_t Onfi_CmdReadPage(uint32_t Page, uint32_t Column)
 {
-	uint8_t Status;
+	// uint8_t Status;
 
 	SmcSendCommand(ONFI_CMD_READ_PAGE1, ONFI_CMD_READ_PAGE2, ONFI_CMD_READ_PAGE_CYCLES,
 				ONFI_CMD_READ_PAGE_END_TIMING, Page, Column);
@@ -368,7 +369,6 @@ uint8_t Onfi_CmdProgramCachePage(uint32_t Page, uint32_t Column)
 	if (!(Status & ONFI_STATUS_WP))
 	{
 		return FAILED_FLAG;
-		printf("fff\r\n");
 	}
 
 	SmcSendCommand(ONFI_CMD_PROGRAM_CACHE1, ONFI_CMD_PROGRAM_CACHE2, ONFI_CMD_PROGRAM_CACHE_CYCLES,
@@ -380,7 +380,7 @@ uint8_t Onfi_CmdProgramCachePage(uint32_t Page, uint32_t Column)
 
 uint8_t Onfi_CmdReadCachePage(uint32_t Page, uint32_t Column)
 {
-	uint8_t Status;
+	// uint8_t Status;
 #if 0
 	/* Restore the ECC mem command1 and ECC mem command2 register if the previous command is read page cache */
 	/* Set SMC_REG_ECC1_MEMCMD0 Reg*/
@@ -417,7 +417,7 @@ uint8_t Onfi_CmdReadCachePage(uint32_t Page, uint32_t Column)
 
 uint8_t Onfi_CmdReadCachePageEnd(uint32_t Page, uint32_t Column)
 {
-	uint8_t Status;
+	// uint8_t Status;
 
 	/* Restore the ECC mem command1 and ECC mem command2 register if the previous command is read page cache */
 	/* Set SMC_REG_ECC1_MEMCMD0 Reg*/
@@ -604,7 +604,7 @@ uint8_t Nand_ReadSpareBytes(uint32_t Page, uint32_t Column, uint8_t *Buf, Nand_S
 uint8_t Nand_CheakIsBadBlock(uint32_t Page, uint32_t Column, uint8_t *Buf,Nand_Size_TypeDef *nandSize)
 {
 	uint8_t Status;
-	volatile uint32_t i=0;
+	// volatile uint32_t i=0;
 
 	Status = Nand_ReadSpareBytes(Page, Column, Buf, nandSize);
 
@@ -1058,7 +1058,7 @@ uint32_t Csu_NandInit(void)
  */
 uint32_t Csu_NandRead(uint32_t offset, uint8_t* dest, uint32_t length)
 {
-	uint32_t tempNumPages;
+	// uint32_t tempNumPages;
 
 	/*
 	tempNumPages = offset/(nandSize.dataBytesPerPage);

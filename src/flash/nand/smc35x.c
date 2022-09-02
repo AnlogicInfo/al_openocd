@@ -22,6 +22,7 @@ struct smc35x_nand_controller {
 
     uint32_t pin_mux_base;
 	uint32_t cmd;
+	uint32_t data;
 };
 
 NAND_DEVICE_COMMAND_HANDLER(smc35x_nand_device_command)
@@ -42,13 +43,53 @@ NAND_DEVICE_COMMAND_HANDLER(smc35x_nand_device_command)
 	return ERROR_OK;
 }
 
+int smc35x_commit(struct nand_device* nand)
+{
+	struct target *target = nand->target;
+	struct smc35x_nand_controller  *smc35x_info = nand->controller_priv;
+	uint32_t cmd_phase = 0, data_phase = 0;
+
+	cmd_phase  = smc35x_info->cmd;
+	data_phase = smc35x_info->data;
+
+	if (target->state != TARGET_HALTED)
+		return ERROR_NAND_OPERATION_FAILED;
+
+	LOG_INFO("commit nand command %x data %x", cmd_phase, data_phase);
+	target_write_u32(target, cmd_phase, data_phase);
+
+	return ERROR_OK;
+
+}
+
 int smc35x_command(struct nand_device *nand, uint8_t command)
 {
+	LOG_INFO("smc send cmd %x", command);
+	// struct smc35x_nand_controller  *smc35x_info = nand->controller_priv;
+	// struct target *target = nand->target;
+
+	// create cmdphase 
+	// if(command == ) // start cmd?
+	// {
+
+
+	// }
+
+	// else{    // end cmd
+
+
+	// }
+
+
 	return ERROR_OK;
 }
+
+
+
+
 int smc35x_command_re(struct nand_device *nand, uint8_t startCmd, uint8_t endCmd, uint8_t addrCycles, uint8_t endCmdPhase, int Page, int Column)
 {
-	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
+	// struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	struct target *target = nand->target;
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use NAND flash controller");
@@ -123,24 +164,26 @@ int smc35x_reset_re(struct nand_device *nand)
 	//return smc35x_command(nand, NAND_CMD_RESET);
 	smc35x_command_re(nand, ONFI_CMD_RESET1, ONFI_CMD_RESET2, ONFI_CMD_RESET_CYCLES,
 			ONFI_CMD_RESET_END_TIMING, ONFI_PAGE_NOT_VALID, ONFI_COLUMN_NOT_VALID);
+
+	return 0;
 }
 
 int smc35x_read_id(struct nand_device *nand)
 {
-	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
+	// struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	struct target *target = nand->target;
-	LOG_ERROR("target is %s", target->cmd_name);
+	LOG_INFO("target is %s", target->cmd_name);
 	if (target == NULL) {
-		LOG_ERROR("target error");
+		LOG_INFO("target error");
 		return ERROR_NAND_OPERATION_FAILED;
 	}
 
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("target must be halted to use NAND flash controller");
+		LOG_INFO("target must be halted to use NAND flash controller");
 		return ERROR_NAND_OPERATION_FAILED;
 	}
 
-	LOG_ERROR("smc35x_read_id function start");
+	LOG_INFO("smc35x_read_id function start");
 	/*SMC_WriteReg(PS_MIO0, 0x02);
 	//SMC_WriteReg(PS_MIO1, 0x02);
 	SMC_WriteReg(PS_MIO2, 0x02);
@@ -206,7 +249,7 @@ int smc35x_read_id(struct nand_device *nand)
 
 COMMAND_HANDLER(handle_smc35x_id_command)
 {
-	struct smc35x_nand_controller *smc35x_info = NULL;
+	// struct smc35x_nand_controller *smc35x_info = NULL;
 	
     unsigned num;
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], num);
@@ -216,7 +259,7 @@ COMMAND_HANDLER(handle_smc35x_id_command)
 		return ERROR_OK;
 	}
 
-	smc35x_info = nand->controller_priv;
+	// smc35x_info = nand->controller_priv;
 
 	smc35x_read_id(nand);
 
@@ -390,6 +433,32 @@ static int smc35x_nand_ready(struct nand_device *nand, int timeout)
 
 static int smc35x_init(struct nand_device *nand)
 {
+	struct target *target = nand->target;
+
+	if (target->state != TARGET_HALTED) {
+		LOG_ERROR("target must be halted to use NAND flash controller");
+		return ERROR_NAND_OPERATION_FAILED;
+	}
+
+	LOG_INFO("smc init");
+
+	target_write_u32(target, PS_MIO0, 0x02);
+	target_write_u32(target, PS_MIO2, 0x02);
+	target_write_u32(target, PS_MIO3, 0x02);
+	target_write_u32(target, PS_MIO4, 0x02);
+	target_write_u32(target, PS_MIO5, 0x02);
+	target_write_u32(target, PS_MIO6, 0x02);
+	target_write_u32(target, PS_MIO7, 0x02);
+	target_write_u32(target, PS_MIO8, 0x02);
+	target_write_u32(target, PS_MIO9, 0x02);
+	target_write_u32(target, PS_MIO10, 0x02);
+	target_write_u32(target, PS_MIO11, 0x02);
+	target_write_u32(target, PS_MIO12, 0x02);
+	target_write_u32(target, PS_MIO13, 0x02);
+	target_write_u32(target, PS_MIO14, 0x02);
+
+
+
 	return ERROR_OK;
 }
 
@@ -400,6 +469,7 @@ struct nand_flash_controller smc35x_nand_controller = {
 	.init = smc35x_init,
 	.reset = NULL,
 	.command = smc35x_command,
+	.commit = smc35x_commit,
 	.address = NULL,
 	.write_data = NULL,
 	.read_data = NULL,
