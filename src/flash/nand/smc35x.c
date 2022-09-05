@@ -132,6 +132,8 @@ int smc35x_command_re(struct nand_device *nand, uint8_t startCmd, uint8_t endCmd
 		cmdPhaseData = Column;
 	}
 
+	LOG_INFO("smc send cmdPhase %llx dataPhase %x\n", cmdPhaseAddr, cmdPhaseData);
+
 	//SMC_WriteReg((volatile void *)cmdPhaseAddr, cmdPhaseData);
 	target_write_u32(target, cmdPhaseAddr, cmdPhaseData);
 	
@@ -184,22 +186,6 @@ int smc35x_read_id(struct nand_device *nand)
 	}
 
 	LOG_INFO("smc35x_read_id function start");
-	/*SMC_WriteReg(PS_MIO0, 0x02);
-	//SMC_WriteReg(PS_MIO1, 0x02);
-	SMC_WriteReg(PS_MIO2, 0x02);
-	SMC_WriteReg(PS_MIO3, 0x02);
-	SMC_WriteReg(PS_MIO4, 0x02);
-	SMC_WriteReg(PS_MIO5, 0x02);
-	SMC_WriteReg(PS_MIO6, 0x02);
-	SMC_WriteReg(PS_MIO7, 0x02);
-	SMC_WriteReg(PS_MIO8, 0x02);
-	SMC_WriteReg(PS_MIO9, 0x02);
-	SMC_WriteReg(PS_MIO10, 0x02);
-	SMC_WriteReg(PS_MIO11, 0x02);
-	SMC_WriteReg(PS_MIO12, 0x02);
-	SMC_WriteReg(PS_MIO13, 0x02);
-	SMC_WriteReg(PS_MIO14, 0x02);*/
-
 	target_write_u32(target, PS_MIO0, 0x02);
 	target_write_u32(target, PS_MIO2, 0x02);
 	target_write_u32(target, PS_MIO3, 0x02);
@@ -217,22 +203,14 @@ int smc35x_read_id(struct nand_device *nand)
 
     uint8_t device_id[5]={0};
 
-    /*((volatile uint32_t *)(SMC_BASE+SMC_REG_SET_CYCLES)) =
-            ((2 <<	SMC_SetCycles_Trr_FIELD		)|		//busy to data out
-            (1 <<	SMC_SetCycles_Tar_FIELD   	)|		//ale to data out
-            (1 << 	SMC_SetCycles_Tclr_FIELD 	)|		//cle to data out
-            (2 << 	SMC_SetCycles_Twp_FIELD    	)|	 //we width
-            (1 << 	SMC_SetCycles_Trea_FIELD    )|	//RE before output data
-            (3 <<	SMC_SetCycles_Twc_FIELD     )|	//WE (cmd/addr) width
-            (3 << 	SMC_SetCycles_Trc_FIELD		));	//RE width*/
-	target_write_u32(target, (SMC_BASE+SMC_REG_SET_CYCLES),
-	        (2 <<	SMC_SetCycles_Trr_FIELD		)|		//busy to data out
-            (1 <<	SMC_SetCycles_Tar_FIELD   	)|		//ale to data out
-            (1 << 	SMC_SetCycles_Tclr_FIELD 	)|		//cle to data out
-            (2 << 	SMC_SetCycles_Twp_FIELD    	)|	 //we width
-            (1 << 	SMC_SetCycles_Trea_FIELD    )|	//RE before output data
-            (3 <<	SMC_SetCycles_Twc_FIELD     )|	//WE (cmd/addr) width
-            (3 << 	SMC_SetCycles_Trc_FIELD		));
+	// target_write_u32(target, (SMC_BASE+SMC_REG_SET_CYCLES),
+	//         (2 <<	SMC_SetCycles_Trr_FIELD		)|		//busy to data out
+    //         (1 <<	SMC_SetCycles_Tar_FIELD   	)|		//ale to data out
+    //         (1 << 	SMC_SetCycles_Tclr_FIELD 	)|		//cle to data out
+    //         (2 << 	SMC_SetCycles_Twp_FIELD    	)|	 //we width
+    //         (1 << 	SMC_SetCycles_Trea_FIELD    )|	//RE before output data
+    //         (3 <<	SMC_SetCycles_Twc_FIELD     )|	//WE (cmd/addr) width
+    //         (3 << 	SMC_SetCycles_Trc_FIELD		));
 
 	//Onfi_CmdReset();
     smc35x_reset_re(nand);
@@ -241,8 +219,8 @@ int smc35x_read_id(struct nand_device *nand)
 	smc35x_command_re(nand, ONFI_CMD_READ_ID1, ONFI_CMD_READ_ID2, ONFI_CMD_READ_ID_CYCLES,ONFI_CMD_READ_ID_END_TIMING, ONFI_PAGE_NOT_VALID, 0x00);
 	SmcReadData_re(nand, ONFI_CMD_READ_ID2, ONFI_CMD_READ_ID_END_TIMING, &device_id[0], 5);
 
-    printf("%x %x %x %x %x\r\n",device_id[0],device_id[1],device_id[2],device_id[3],device_id[4]);
-	LOG_ERROR("%x %x %x %x %x\r\n",device_id[0],device_id[1],device_id[2],device_id[3],device_id[4]);
+    // printf("%x %x %x %x %x\r\n",device_id[0],device_id[1],device_id[2],device_id[3],device_id[4]);
+	// LOG_ERROR("%x %x %x %x %x\r\n",device_id[0],device_id[1],device_id[2],device_id[3],device_id[4]);
 
     return ERROR_OK;
 }

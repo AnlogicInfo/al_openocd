@@ -93,7 +93,6 @@ void SmcReadData(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Len
 
 void SmcReadData_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length)
 {
-	LOG_ERROR("SmcReadData function start");
 	struct target *target = nand->target;
 	uint32_t endCmdReq = 0;
 	volatile uint64_t dataPhaseAddr = 0;
@@ -114,14 +113,14 @@ void SmcReadData_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhas
 			(endCmd 	<< 11)		|
 			(eccLast 	<< 10);
 
+	LOG_INFO("smc read %llx", dataPhaseAddr);
+	
 	/* Read Data */
-	LOG_ERROR("read data lenght %x", Length);
 	for(Index = 0;Index < Length;Index++)
 	{
-		LOG_ERROR("index %d", Index);
 		//Buf[Index] = *((uint8_t *)dataPhaseAddr);
 		target_read_u8(target, dataPhaseAddr, &Buf[Index]);
-		LOG_ERROR("read data %d", Buf[Index]);
+		LOG_INFO("read %d data %x", Index, Buf[Index]);
 	}
 
 }

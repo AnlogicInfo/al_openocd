@@ -412,7 +412,6 @@ void target_buffer_set_u64(struct target *target, uint8_t *buffer, uint64_t valu
 /* write a uint32_t to a buffer in target memory endianness */
 void target_buffer_set_u32(struct target *target, uint8_t *buffer, uint32_t value)
 {
-	LOG_ERROR("target_buffer_set_u32 function start");
 	if (target->endianness == TARGET_LITTLE_ENDIAN)
 		h_u32_to_le(buffer, value);
 	else
@@ -1311,7 +1310,6 @@ int target_run_read_async_algorithm(struct target *target,
 int target_read_memory(struct target *target,
 		target_addr_t address, uint32_t size, uint32_t count, uint8_t *buffer)
 {
-	LOG_ERROR("target_read_memory start");
 
 	if (!target_was_examined(target)) {
 		LOG_ERROR("Target not examined yet");
@@ -2670,7 +2668,6 @@ int target_read_u16(struct target *target, target_addr_t address, uint16_t *valu
 
 int target_read_u8(struct target *target, target_addr_t address, uint8_t *value)
 {
-	LOG_ERROR("target_read_u8 function start");
 
 	if (!target_was_examined(target)) {
 		LOG_ERROR("Target not examined yet");
@@ -2688,8 +2685,6 @@ int target_read_u8(struct target *target, target_addr_t address, uint8_t *value)
 		LOG_DEBUG("address: " TARGET_ADDR_FMT " failed",
 				  address);
 	}
-
-	LOG_ERROR("target_write_u32 function end");
 
 	return retval;
 }
