@@ -232,6 +232,33 @@ static int armv8_handle_inner_cache_info_command(struct command_invocation *cmd,
 	return ERROR_OK;
 }
 
+int armv8_flush_all_instr(struct armv8_common *armv8)
+{
+	struct arm_dpm *dpm = &armv8->dpm;
+	uint32_t opcode;
+	int retval;
+
+	opcode = armv8_opcode(armv8, ARMV8_OPC_ICIALLU);
+	retval = dpm->instr_execute(dpm, opcode);
+	if (retval != ERROR_OK)
+		return retval;
+
+	opcode = armv8_opcode(armv8, ARMV8_OPC_DSB_NSH);
+	retval = dpm->instr_execute(dpm, opcode);
+	if (retval != ERROR_OK)
+		return retval;
+	
+	opcode = armv8_opcode(armv8, ARMV8_OPC_ISB_SY);
+	retval = dpm->instr_execute(dpm, opcode);
+	if (retval != ERROR_OK)
+		return retval;
+
+
+	return ERROR_OK;
+
+}
+
+
 static int _armv8_flush_all_data(struct target *target)
 {
 	return armv8_cache_d_inner_clean_inval_all(target_to_armv8(target));

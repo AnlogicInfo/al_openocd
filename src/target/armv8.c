@@ -211,7 +211,7 @@ static int armv8_read_reg(struct armv8_common *armv8, int regnum, uint64_t *regv
 	if (retval == ERROR_OK && regval)
 	{
 		*regval = value_64;
-		LOG_INFO("rd arm reg %llx", value_64);
+		LOG_DEBUG("rd arm reg %llx", value_64);
 
 	}
 	else

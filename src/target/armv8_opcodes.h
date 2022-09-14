@@ -134,8 +134,11 @@
 
 #define ARMV8_DSB_SY				0xd5033F9F
 #define ARMV8_DSB_SY_T1				0xf3bf8f4f
-#define ARMV8_ISB				0xd5033fdf
+#define ARMV8_ISB				    0xd5033fdf
 #define ARMV8_ISB_SY_T1				0xf3bf8f6f
+
+#define ARMV8_IC_IALLU              0xd508751f
+#define ARMV8_DSB_NSH               0xd503379f
 
 #define ARMV8_MRS(system, rt)	(0xd5300000 | ((system) << 5) | (rt))
 /* ARM V8 Move to system register. */
@@ -198,12 +201,14 @@ enum armv8_opcode {
 	WRITE_REG_DSPSR,
 	READ_REG_DSPSR,
 	ARMV8_OPC_DSB_SY,
+	ARMV8_OPC_DSB_NSH,
 	ARMV8_OPC_DCPS,
 	ARMV8_OPC_DRPS,
 	ARMV8_OPC_ISB_SY,
 	ARMV8_OPC_DCCISW,
 	ARMV8_OPC_DCCIVAC,
 	ARMV8_OPC_ICIVAU,
+	ARMV8_OPC_ICIALLU,
 	ARMV8_OPC_HLT,
 	ARMV8_OPC_STRB_IP,
 	ARMV8_OPC_STRH_IP,

@@ -678,7 +678,7 @@ static int aarch64_prepare_restart_one(struct target *target)
 		/* clear sticky bits in PRSR, SDR is now 0 */
 		retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 				armv8->debug_base + CPUV8_DBG_PRSR, &tmp);
-		LOG_INFO("mem ap rd addr %llx val %08x", (armv8->debug_base + CPUV8_DBG_PRSR), tmp);		
+		// LOG_DEBUG("mem ap rd addr %llx val %08x", (armv8->debug_base + CPUV8_DBG_PRSR), tmp);		
 
 	}
 
@@ -1022,7 +1022,6 @@ static int aarch64_debug_entry(struct target *target)
 		armv8->dpm.wp_addr = edwar;
 	}
 
-	LOG_INFO("start read current registers");
 	retval = armv8_dpm_read_current_registers(&armv8->dpm);
 
 	if (retval == ERROR_OK && armv8->post_debug_entry)
@@ -1097,7 +1096,8 @@ static int aarch64_post_debug_entry(struct target *target)
 	armv8->armv8_mmu.armv8_cache.i_cache_enabled =
 		(aarch64->system_control_reg & 0x1000U) ? 1 : 0;
 	
-	LOG_INFO("aarch64 post debug entry done");
+
+	armv8_flush_all_instr(armv8);
 	return ERROR_OK;
 }
 
@@ -1172,10 +1172,7 @@ static int aarch64_step(struct target *target, int current, target_addr_t addres
 		retval = aarch64_check_state_one(target,
 					PRSR_SDR|PRSR_HALT, PRSR_SDR|PRSR_HALT, &stepped, &prsr);
 		if (retval != ERROR_OK || stepped)
-		{
-			LOG_INFO("stepped prsr %08x", prsr);
 			break;
-		}
 
 
 		if (timeval_ms() > then + 100) {
@@ -2894,6 +2891,71 @@ static int aarch64_jim_configure(struct target *target, struct jim_getopt_info *
 	return JIM_OK;
 }
 
+static int aarch64_run_algorithm(struct target *target, int num_mem_params,
+		struct mem_param *mem_params, int num_reg_params,
+		struct reg_param *reg_params, target_addr_t entry_point,
+		target_addr_t exit_point, int timeout_ms, void *arch_info)
+{
+	// struct arm *arm = target_to_arm(target);
+	// int current = 1;
+	// target_addr_t addr;
+	// int retval = ERROR_OK;
+
+	// // check target
+	// if (arm->common_magic != ARM_COMMON_MAGIC) {
+	// 	LOG_ERROR("BUG: called for a non-ARM target");
+	// 	return ERROR_FAIL;
+	// }
+
+	// if (target->state != TARGET_HALTED) {
+	// 	LOG_WARNING("target not halted");
+	// 	return ERROR_TARGET_NOT_HALTED;
+	// }
+	// // save registers
+	// for(i = 0; i< num_mem_params; i++)
+	// {
+	// 	if(mem_params[i].direction == PARAM_IN)
+	// 		continue;
+	// 	retval = target_write_buffer(target, mem_params[i].address, mem_params[i].size,
+	// 			mem_params[i].value);
+	// 	if (retval != ERROR_OK)
+	// 		return retval;
+	// }
+
+	// for(i = 0; i < num_reg_params; i++)
+	// {
+	// 	if (reg_params[i].direction == PARAM_IN)
+	// 		continue;
+
+	// 	struct reg *reg = register_get_by_name(arm->core_cache, reg_params[i].reg_name, false);
+
+	// 	if (!reg) {
+	// 		LOG_ERROR("BUG: register '%s' not found", reg_params[i].reg_name);
+	// 		return ERROR_COMMAND_SYNTAX_ERROR;
+	// 	}
+
+	// 	if (reg->size != reg_params[i].size) {
+	// 		LOG_ERROR("BUG: register '%s' size doesn't match reg_params[i].size",
+	// 			reg_params[i].reg_name);
+	// 		return ERROR_COMMAND_SYNTAX_ERROR;
+	// 	}
+
+	// 	retval = armv8_set_core_reg(reg, reg_params[i].value);
+	// 	if (retval != ERROR_OK)
+	// 		return retval;
+	// }
+
+	// // run algorithm
+
+
+
+	// // restore
+	// aarch64_restore_one(target, current, &addr, 0, 0);
+
+	return ERROR_OK;
+}
+
+
 COMMAND_HANDLER(aarch64_handle_cache_info_command)
 {
 	struct target *target = get_current_target(CMD_CTX);
@@ -3298,6 +3360,8 @@ struct target_type aarch64_target = {
 	.read_memory = aarch64_read_memory,
 	.write_memory = aarch64_write_memory,
 
+
+	.run_algorithm = aarch64_run_algorithm,
 	.add_breakpoint = aarch64_add_breakpoint,
 	.add_context_breakpoint = aarch64_add_context_breakpoint,
 	.add_hybrid_breakpoint = aarch64_add_hybrid_breakpoint,

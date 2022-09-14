@@ -163,7 +163,7 @@ static int dpm_read_reg_u64(struct arm_dpm *dpm, struct reg *r, unsigned regnum)
 		buf_set_u32(r->value + 4, 0, 32, value_r1);
 		r->valid = true;
 		r->dirty = false;
-		LOG_INFO("READ: %s, %8.8x, %8.8x", r->name,
+		LOG_DEBUG("READ: %s, %8.8x, %8.8x", r->name,
 				(unsigned) value_r0, (unsigned) value_r1);
 	}
 
@@ -231,7 +231,7 @@ int arm_dpm_read_reg(struct arm_dpm *dpm, struct reg *r, unsigned regnum)
 		buf_set_u32(r->value, 0, 32, value);
 		r->valid = true;
 		r->dirty = false;
-		LOG_INFO("READ: %s, %8.8x", r->name, (unsigned) value);
+		LOG_DEBUG("READ: %s, %8.8x", r->name, (unsigned) value);
 	}
 
 	return retval;

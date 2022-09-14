@@ -23,4 +23,6 @@
 extern int armv8_cache_d_inner_flush_virt(struct armv8_common *armv8, target_addr_t va, size_t size);
 extern int armv8_cache_i_inner_inval_virt(struct armv8_common *armv8, target_addr_t va, size_t size);
 
+extern int armv8_flush_all_instr(struct armv8_common *armv8);
+
 #endif /* OPENOCD_TARGET_ARMV8_CACHE_H_ */
