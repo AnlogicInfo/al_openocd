@@ -321,7 +321,6 @@ static int aarch64_wait_halt_one(struct target *target)
 		retval = aarch64_check_state_one(target, PRSR_HALT, PRSR_HALT, &halted, &prsr);
 		if (retval != ERROR_OK || halted)
 		{
-			LOG_INFO("wait halt prsr %08x", prsr);
 			break;
 		}
 
