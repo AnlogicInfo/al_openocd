@@ -49,6 +49,9 @@ struct nand_flash_controller {
 	/** Reset the NAND device. */
 	int (*reset)(struct nand_device *nand);
 
+	/** smc35x need erase function. */
+	int (*erase)(struct nand_device *nand, int bolck);
+
 	/** Issue a command to the NAND device. */
 	int (*command)(struct nand_device *nand, uint8_t command);
 

@@ -337,11 +337,11 @@ int nand_probe(struct nand_device *nand)
 
 	nand->controller->command(nand, NAND_CMD_RESET);
 	nand->controller->reset(nand);
-	nand->controller->commit(nand);
+	// nand->controller->commit(nand);
 	
 	nand->controller->command(nand, NAND_CMD_READID);
 	nand->controller->address(nand, 0x0);
-	nand->controller->commit(nand);
+	// nand->controller->commit(nand);
 	
 	if (nand->bus_width == 8) {
 		nand->controller->read_data(nand, &manufacturer_id);
@@ -534,6 +534,40 @@ int nand_erase(struct nand_device *nand, int first_block, int last_block)
 		}
 	}
 
+	LOG_INFO("nand devices is %s, nand controller is %s", nand->name, nand->controller->name);
+	if (!strcmp(nand->controller->name, "smc35x"))
+	{
+		LOG_INFO("smc35x nand erase start");
+		for (i = first_block; i <= last_block; i++) {
+			nand->controller->erase(nand, i);
+
+			retval = nand->controller->nand_ready ?
+			nand->controller->nand_ready(nand, 1000) :
+			nand_poll_ready(nand, 1000);
+			if (!retval) {
+				LOG_ERROR("timeout waiting for NAND flash block erase to complete");
+				return ERROR_NAND_OPERATION_TIMEOUT;
+			}
+
+			retval = nand_read_status(nand, &status);
+			if (retval != ERROR_OK) {
+				LOG_ERROR("couldn't read status");
+				return ERROR_NAND_OPERATION_FAILED;
+			}
+
+			if (status & 0x1) {
+				LOG_ERROR("didn't erase %sblock %d; status: 0x%2.2x",
+					(nand->blocks[i].is_bad == 1)
+					? "bad " : "",
+					i, status);
+				/* continue; other blocks might still be erasable */
+			}
+
+			nand->blocks[i].is_erased = 1;
+		}
+		
+		return ERROR_OK;
+	}
 	for (i = first_block; i <= last_block; i++) {
 		/* Send erase setup command */
 		nand->controller->command(nand, NAND_CMD_ERASE1);
@@ -566,7 +600,7 @@ int nand_erase(struct nand_device *nand, int first_block, int last_block)
 		/* Send erase confirm command */
 		nand->controller->command(nand, NAND_CMD_ERASE2);
 
-		nand->controller->commit(nand);
+		// nand->controller->commit(nand);
 
 		retval = nand->controller->nand_ready ?
 			nand->controller->nand_ready(nand, 1000) :
