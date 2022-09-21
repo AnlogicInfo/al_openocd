@@ -43,6 +43,23 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
     return ERROR_OK;
 }
 
+static void qspi_mio_init(struct flash_bank *bank)
+{
+    struct target *target = bank->target;
+    uint8_t mio_num;
+    uint32_t value=0;
+    for (mio_num = 0; mio_num < 28; mio_num = mio_num + 4)
+    {
+        target_read_u32(target, MIO_BASE + mio_num, &value);
+        if(value != 0)
+        {
+            LOG_INFO("mio reg %x init ", (MIO_BASE + mio_num));
+            target_write_u32(target,  MIO_BASE + mio_num, 0);
+        }
+    }
+}
+
+
 static int dwcssi_read_reg(struct flash_bank *bank, uint32_t *value, target_addr_t address)
 {
     struct target *target = bank->target;
@@ -872,6 +889,9 @@ static int dwcssi_probe(struct flash_bank *bank)
     // LOG_INFO("test dwcssi probe");
 
     dwcssi_info_init(bank, dwcssi_info);
+    
+    qspi_mio_init(bank);
+
     dwcssi_config_init(bank);
     if(dwcssi_reset_flash(bank) == ERROR_OK)
     {
