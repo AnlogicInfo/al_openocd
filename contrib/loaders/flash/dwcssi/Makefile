@@ -1,72 +1,90 @@
+.PHONY: all run gdb clean latest $(ALL)
+
+
+ifeq ($(MAKECMDGOALS),)
+  MAKECMDGOALS  = image
+  .DEFAULT_GOAL = image
+endif
+
+
+## arch init
 BIN2C = ../../../../src/helper/bin2char.sh
+ARCH_SPLIT = $(subst _, ,$(ARCH))
+ISA        = $(word 1,$(ARCH_SPLIT))
+PLATFORM   = $(word 2,$(ARCH_SPLIT))
 
-CROSS_COMPILE_RV ?= riscv64-unknown-elf-
-CROSS_COMPILE_AARCH64 ?= aarch64-none-elf-
 
-RISCV_CC=$(CROSS_COMPILE_RV)gcc
-RISCV_OBJCOPY=$(CROSS_COMPILE_RV)objcopy
-RISCV_OBJDUMP=$(CROSS_COMPILE_RV)objdump
+## dir config
+WORK_DIR  = $(shell pwd)
+SRC_DIR   = $(WORK_DIR)/src
+DST_DIR   = $(WORK_DIR)/build/$(ARCH)
+$(info # dst dir $(DST_DIR))
+$(shell mkdir -p $(DST_DIR))
 
-AARCH64_CC=$(CROSS_COMPILE_AARCH64)gcc
-AARCH64_OBJCOPY=$(CROSS_COMPILE_AARCH64)objcopy
-AARCH64_OBJDUMP=$(CROSS_COMPILE_AARCH64)objdump
+IMAGE_REL = build/dwcssi_$(ARCH)
+IMAGE     = $(abspath $(IMAGE_REL))
 
-CFLAGS = -nostdlib -nostartfiles -Wall -Werror -Os -fPIC -Wunused-result -g
-RISCV32_CFLAGS = -march=rv32e -mabi=ilp32e $(CFLAGS)
-RISCV64_CFLAGS = -march=rv64i -mabi=lp64 $(CFLAGS)
 
-all: riscv32_dwcssi.inc riscv64_dwcssi.inc riscv64_dwcssi.lst
-riscv: riscv32_dwcssi.inc riscv64_dwcssi.inc riscv64_dwcssi.lst
-aarch64: aarch64_dwcssi.inc aarch64_dwcssi.lst
+SRCS		 	+= $(WORK_DIR)/src/dwcssi.c \
+				   $(WORK_DIR)/src/boot/$(ISA)/wrapper.S
 
-.PHONY: clean
+				
+OBJS 		   	= $(addprefix $(DST_DIR)/, $(addsuffix .o, $(basename $(SRCS))))
 
-# .c -> .o
-aarch64_%.o: aarch64_%.c
-	$(AARCH64_CC) -c $(AARCH64_CFLAGS) $< -o $@ 
+$(info # OBJS $(OBJS))
+LD_SCRIPT		= $(WORK_DIR)/scripts/$(ISA).lds
 
-riscv32_%.o:  riscv_%.c
-	$(RISCV_CC) -c $(RISCV32_CFLAGS) $^ -o $@
 
-riscv64_%.o:  riscv_%.c
-	$(RISCV_CC) -c $(RISCV64_CFLAGS) $< -o $@
+## comilation config
+ifeq ($(ISA),aarch)
+	CROSS_COMPILE := aarch64-none-elf-
+	COMMON_FLAGS  :=
+else
+	CROSS_COMPILE := riscv64-unknown-elf-
+	ifeq ($(PLATFORM),32)
+		COMMON_FLAGS  := -march=rv32e -mabi=ilp32e
+	else
+		COMMON_FLAGS  := -march=rv64i -mabi=lp64
+	endif
+endif
 
-# .S -> .o
-aarch64_%.o:  aarch64_%.S
-	$(AARCH64_CC) -c $(AARCH64_CFLAGS) $^ -o $@
+AS        = $(CROSS_COMPILE)gcc
+CC        = $(CROSS_COMPILE)gcc
+CXX       = $(CROSS_COMPILE)g++
+LD        = $(CROSS_COMPILE)ld
+OBJDUMP   = $(CROSS_COMPILE)objdump
+OBJCOPY   = $(CROSS_COMPILE)objcopy
+READELF   = $(CROSS_COMPILE)readelf
 
-riscv32_%.o:  riscv_%.S
-	$(RISCV_CC) -c $(RISCV32_CFLAGS) $^ -o $@
 
-riscv64_%.o:  riscv_%.S
-	$(RISCV_CC) -c $(RISCV64_CFLAGS) $^ -o $@
+INC_PATH += $(WORK_DIR)/src/boot/$(ISA)
+INCFLAGS += $(addprefix -I, $(INC_PATH))
 
-# .o -> .elf
-aarch64_%.elf:  aarch64_%.o aarch64_wrapper.o
-	$(AARCH64_CC) -T aarch64.lds $(AARCH64_CFLAGS) $^ -o $@
+CFLAGS   += -nostdlib -nostartfiles -Wall -Werror -Os -fPIC -Wunused-result -g
+ASFLAGS  += -MMD $(INCFLAGS)
 
-riscv32_%.elf:	riscv32_%.o riscv32_wrapper.o
-	$(RISCV_CC) -T riscv.lds $(RISCV32_CFLAGS) $^ -o $@
+$(info # Compiler $(CROSS_COMPILE))
 
-riscv64_%.elf:	riscv64_%.o riscv64_wrapper.o
-	$(RISCV_CC) -T riscv.lds $(RISCV64_CFLAGS) $^ -o $@
+$(DST_DIR)/%.o: %.c
+	@mkdir -p $(dir $@) && echo + CC $<
+	@$(CC) $(CFLAGS) -c -o $@ $(realpath $<)
 
-# .elf -> .bin
-aarch64%.bin: aarch64_%.elf
-	$(AARCH64_OBJCOPY) -Obinary $< $@
-%.bin: %.elf
-	$(RISCV_OBJCOPY) -Obinary $< $@
+$(DST_DIR)/%.o: %.S
+	@mkdir -p $(dir $@) && echo + AS $<
+	@$(CC) $(CFLAGS) -c -o $@ $(realpath $<)
 
-# .bin -> .inc
-%.inc: %.bin
+$(IMAGE).elf: $(OBJS)
+	$(LD) -T $(LD_SCRIPT) -o $(IMAGE).elf $(OBJS)
+
+
+$(IMAGE).bin: $(IMAGE).elf
+	@$(OBJDUMP) -S $(IMAGE).elf > $(IMAGE).txt
+	@$(OBJCOPY) -S -Obinary $(IMAGE).elf $(IMAGE).bin
+
+$(IMAGE).inc: $(IMAGE).bin
 	$(BIN2C) < $< > $@
 
-# utility
-aarch64_%.lst: aarch64_elf
-	$(AARCH64_OBJDUMP) -S $< > $@
-
-%.lst: %.elf
-	$(RISCV_OBJDUMP) -S $< > $@
+image: $(IMAGE).inc
 
 clean:
-	-rm -f *.elf *.o *.lst *.bin *.inc
+	rm -rf $(WORK_DIR)/build

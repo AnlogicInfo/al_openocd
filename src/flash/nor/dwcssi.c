@@ -644,13 +644,16 @@ static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uin
 }
 
 static const uint8_t riscv32_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/riscv32_dwcssi.inc"
+#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_32.inc"
 };
 
 static const uint8_t riscv64_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/riscv64_dwcssi.inc"
+#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_64.inc"
 };
 
+static const uint8_t aarch64_bin[] = {
+#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_aarch_64.inc"
+};
 
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
@@ -671,23 +674,37 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 		return ERROR_TARGET_NOT_HALTED;        
     }
 
-    uint32_t xlen = riscv_xlen(target);
+    uint32_t xlen = 0;
     struct working_area *algorithm_wa = NULL;
     struct working_area *data_wa      = NULL;
     const uint8_t *bin;
     size_t bin_size;
     uint64_t start, now, used_time;
+    int   loader_target;
 
-    if(xlen == 32)
+    if(strncmp(target_name(target), "riscv", 4) == 0)
     {
-        // LOG_INFO("rv 32");
-        bin = riscv32_bin;
-        bin_size = sizeof(riscv32_bin);
-    } else {
-        // LOG_INFO("rv 64");
-        bin = riscv64_bin;
-        bin_size = sizeof(riscv64_bin);
+        // LOG_INFO("loader on riscv");
+        loader_target = RISCV; 
+        xlen = riscv_xlen(target);
+        if(xlen == 32)
+        {
+            // LOG_INFO("rv 32");
+            bin = riscv32_bin;
+            bin_size = sizeof(riscv32_bin);
+        } else {
+            // LOG_INFO("rv 64");
+            bin = riscv64_bin;
+            bin_size = sizeof(riscv64_bin);
+        }
     }
+    else{
+        loader_target = ARM;
+        xlen = 64;
+        bin = aarch64_bin;
+        bin_size = sizeof(aarch64_bin);
+    }
+
 
     uint32_t data_wa_size = 0;
 
@@ -730,12 +747,25 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     {
         // LOG_INFO("wa allocate success");
         struct reg_param reg_params[6];
-		init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
-		init_reg_param(&reg_params[1], "a1", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[2], "a2", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[3], "a3", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[4], "a4", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[5], "a5", xlen, PARAM_OUT);
+	
+        if(loader_target == RISCV)
+        {
+    	    init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
+		    init_reg_param(&reg_params[1], "a1", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[2], "a2", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[3], "a3", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[4], "a4", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[5], "a5", xlen, PARAM_OUT);
+        }
+        else if(loader_target == ARM)
+        {
+    	    init_reg_param(&reg_params[0], "x0", xlen, PARAM_IN_OUT);
+		    init_reg_param(&reg_params[1], "x1", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[2], "x2", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[3], "x3", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[4], "x4", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[5], "x5", xlen, PARAM_OUT);
+        }
 
         while(count > 0)
         {

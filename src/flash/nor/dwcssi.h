@@ -182,5 +182,7 @@ struct dwcssi_target {
     uint32_t ctrl_base;
 };
 
+#define RISCV     0
+#define ARM       1
 
 #endif

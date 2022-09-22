@@ -1,11 +1,16 @@
-#define REGBYTES 8
-		.section .text.entry
-		.global _start
+.section ".text.boot"
+.global	_start
+
+# define LREG lw
+# define SREG sw
+# define REGBYTES 4
+
 _start:
 		ldr x28, =stack_end
         mov sp, x28
 		b    	flash_dwcssi
-        bkpt	#0
+        hlt #0xF00
+
 
 		.section .data
 		.balign REGBYTES

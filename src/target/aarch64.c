@@ -24,6 +24,7 @@
 #include "breakpoints.h"
 #include "aarch64.h"
 #include "a64_disassembler.h"
+#include "algorithm.h"
 #include "register.h"
 #include "target_request.h"
 #include "target_type.h"
@@ -2898,6 +2899,7 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 	// struct arm *arm = target_to_arm(target);
 	// int current = 1;
 	// target_addr_t addr;
+	// int i;
 	// int retval = ERROR_OK;
 
 	// // check target
@@ -2906,47 +2908,74 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 	// 	return ERROR_FAIL;
 	// }
 
+	// if(num_mem_params > 0)
+	// {
+	// 	LOG_ERROR("Memory parameters are not supported for AARCH64 algorithms.");
+	// 	return ERROR_FAIL;		
+	// }
+
 	// if (target->state != TARGET_HALTED) {
 	// 	LOG_WARNING("target not halted");
 	// 	return ERROR_TARGET_NOT_HALTED;
 	// }
 	// // save registers
-	// for(i = 0; i< num_mem_params; i++)
-	// {
-	// 	if(mem_params[i].direction == PARAM_IN)
-	// 		continue;
-	// 	retval = target_write_buffer(target, mem_params[i].address, mem_params[i].size,
-	// 			mem_params[i].value);
-	// 	if (retval != ERROR_OK)
-	// 		return retval;
-	// }
+	// struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
+	// if (!reg_pc || reg_pc->type->get(reg_pc) != ERROR_OK)
+	// 	return ERROR_FAIL;
+	// uint64_t saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
+	// LOG_DEBUG("saved_pc=0x%" PRIx64, saved_pc);
 
-	// for(i = 0; i < num_reg_params; i++)
-	// {
-	// 	if (reg_params[i].direction == PARAM_IN)
-	// 		continue;
-
-	// 	struct reg *reg = register_get_by_name(arm->core_cache, reg_params[i].reg_name, false);
-
-	// 	if (!reg) {
-	// 		LOG_ERROR("BUG: register '%s' not found", reg_params[i].reg_name);
-	// 		return ERROR_COMMAND_SYNTAX_ERROR;
+	// uint64_t saved_regs[31];
+	// for (int i = 0; i < num_reg_params; i++) {
+	// 	LOG_DEBUG("save %s", reg_params[i].reg_name);
+	// 	struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
+	// 	if (!r) {
+	// 		LOG_ERROR("Couldn't find register named '%s'", reg_params[i].reg_name);
+	// 		return ERROR_FAIL;
 	// 	}
 
-	// 	if (reg->size != reg_params[i].size) {
-	// 		LOG_ERROR("BUG: register '%s' size doesn't match reg_params[i].size",
-	// 			reg_params[i].reg_name);
-	// 		return ERROR_COMMAND_SYNTAX_ERROR;
+	// 	if (r->size != reg_params[i].size) {
+	// 		LOG_ERROR("Register %s is %d bits instead of %d bits.",
+	// 				reg_params[i].reg_name, r->size, reg_params[i].size);
+	// 		return ERROR_FAIL;
 	// 	}
 
-	// 	retval = armv8_set_core_reg(reg, reg_params[i].value);
-	// 	if (retval != ERROR_OK)
-	// 		return retval;
+	// 	if (r->number > 30) {
+	// 		LOG_ERROR("Only GPRs can be use as argument registers.");
+	// 		return ERROR_FAIL;
+	// 	}
+
+	// 	if (r->type->get(r) != ERROR_OK)
+	// 		return ERROR_FAIL;
+	// 	saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
+
+	// 	if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
+	// 		if (r->type->set(r, reg_params[i].value) != ERROR_OK)
+	// 			return ERROR_FAIL;
+	// 	}
 	// }
 
 	// // run algorithm
+	// if(aarch64_resume(target, 0, entry_point, 0, 0) != ERROR_OK)
+	// 	return ERROR_FAIL;
 
+	// int64_t start = timeval_ms();
+	// while(target->state != TARGET_HALTED)
+	// {
+	// 	int64_t now = timeval_ms();
+	// 	if(now - start > timeout_ms)
+	// 	{
+	// 		aarch64_halt(target);
+	// 		return ERROR_TARGET_TIMEOUT;
+	// 	}
+	// }
 
+	// /* Restore registers */
+	// //restore pc
+	// uint8_t buf[8] = { 0 };
+	// buf_set_u64(buf, 0, info->xlen, saved_pc);
+	// if (reg_pc->type->set(reg_pc, buf) != ERROR_OK)
+	// 	return ERROR_FAIL;
 
 	// // restore
 	// aarch64_restore_one(target, current, &addr, 0, 0);
