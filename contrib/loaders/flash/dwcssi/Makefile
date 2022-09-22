@@ -85,6 +85,7 @@ $(IMAGE).inc: $(IMAGE).bin
 	$(BIN2C) < $< > $@
 
 image: $(IMAGE).inc
+	rm -rf $(DST_DIR)
 
 clean:
 	rm -rf $(WORK_DIR)/build
