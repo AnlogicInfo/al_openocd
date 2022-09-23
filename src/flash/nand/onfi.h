@@ -1,7 +1,7 @@
 #ifndef ONFI_H
 #define ONFI_H
 
-#include "smc35x.h"
+#include <stdint.h>
 
 #define SMC_MAX_TARGETS			1		/* Max number of targets supported */
 #define SMC_MAX_BLOCKS			32768	/* Max number of Blocks */
@@ -234,10 +234,8 @@ typedef struct{
 
 void SmcSendCommand(uint8_t startCmd, uint8_t endCmd, uint8_t addrCycles, uint8_t endCmdPhase, int Page, int Column);
 void SmcReadData(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length);
-void SmcReadData_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length);
 void SmcReadBuf(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length, uint32_t clearCs, uint32_t eccLast);
 void SmcWriteBuf(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length, uint32_t clearCs, uint32_t eccLast);
-void SmcWriteBuf_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length, uint32_t clearCs, uint32_t eccLast);
 
 void Onfi_CmdReadId(uint8_t Address, uint8_t *Id, uint8_t idSize);
 void Onfi_CmdReset(void);
@@ -260,7 +258,6 @@ void Onfi_CmdGetFeature(uint8_t Address, uint8_t *Value);
 uint8_t Nand_ReadSpareBytes(uint32_t Page, uint32_t Column, uint8_t *Buf, Nand_Size_TypeDef *nandSize);
 uint8_t Nand_ReadPage(uint32_t Page, uint32_t Column, uint8_t *Buf, Nand_Size_TypeDef *nandSize);
 uint8_t Nand_ProgramPage(uint32_t Page, uint32_t Column, uint8_t *Buf, Nand_Size_TypeDef *nandSize);
-uint8_t Nand_ProgramPage_re(struct nand_device *nand, uint32_t Page, uint32_t Column, uint8_t *Buf, Nand_Size_TypeDef *nandSize);
 uint8_t Nand_IsBusy(void);
 uint8_t Nand_CheakIsBadBlock(uint32_t Page, uint32_t Column, uint8_t *Buf,Nand_Size_TypeDef *nandSize);
 

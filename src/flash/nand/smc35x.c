@@ -1,6 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "onfi.h"
+#include "imp.h"
 #include "smc35x.h"
+#include <target/target.h>
 
 typedef struct{
 	uint8_t ecc_read:5;
@@ -15,6 +16,8 @@ typedef struct{
 
 #define TEST ((test* )(SMC_BASE+SMC_REG_ECC1_STATUS))
 
+uint32_t buf[256];
+
 typedef struct{
 	uint32_t dataBytesPerPage;		/* per page contains data byte numbers*/
 	uint16_t spareBytesPerPage;		/* per page contains spare byte numbers*/
@@ -24,8 +27,9 @@ typedef struct{
 }nand_size_type;
 
 struct smc35x_nand_controller{
-	int Page;
-	int Column;
+	uint32_t ecc;
+	uint32_t nand_base;
+	uint32_t smc_base;
 
 	uint64_t cmd_phase_addr;
 	uint32_t cmd_phase_data;
@@ -35,7 +39,19 @@ struct smc35x_nand_controller{
 
 NAND_DEVICE_COMMAND_HANDLER(smc35x_nand_device_command)
 {
+	// unsigned long chip = 0, smc = 0, ecc = 0;
 	struct smc35x_nand_controller* smc35x_info;
+
+	// if (CMD_ARGC < 3 || CMD_ARGC > 4) {
+	// 	LOG_ERROR("parameters: %s target chip_addr", CMD_ARGV[0]);
+	// 	return ERROR_NAND_OPERATION_FAILED;
+	// }
+
+	// COMMAND_PARSE_NUMBER(ulong, CMD_ARGV[2], chip);
+	// if (chip == 0) {
+	// 	LOG_ERROR("invalid NAND chip address: %s", CMD_ARGV[2]);
+	// 	return ERROR_NAND_OPERATION_FAILED;
+	// }
 
 	smc35x_info = calloc(1, sizeof(struct smc35x_nand_controller));
 	if (!smc35x_info) {
@@ -45,7 +61,6 @@ NAND_DEVICE_COMMAND_HANDLER(smc35x_nand_device_command)
 
 	/* fill in the address fields for the core device */
 	nand->controller_priv = smc35x_info;
-
 	smc35x_info->cmd_phase_addr = 0;
 	smc35x_info->cmd_phase_data = 0;
 	smc35x_info->data_phase_addr = 0;
@@ -57,6 +72,7 @@ int smc35x_commit(struct nand_device* nand)
 {
 	struct target* target = nand->target;
 	struct smc35x_nand_controller* smc35x_info = nand->controller_priv;
+	
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
 		return ERROR_NAND_OPERATION_FAILED;
@@ -67,7 +83,7 @@ int smc35x_commit(struct nand_device* nand)
 	cmd_addr  = smc35x_info->cmd_phase_addr;
 	cmd_data = smc35x_info->cmd_phase_data;
 
-	LOG_INFO("commit nand command %x data %x\n", cmd_addr, cmd_data);
+	LOG_INFO("commit nand command %llx data %x\n", cmd_addr, cmd_data);
 	target_write_u32(target, cmd_addr, cmd_data);
 
 	return ERROR_OK;
@@ -79,6 +95,7 @@ int smc35x_command(struct nand_device* nand, uint8_t command)
 
 	struct smc35x_nand_controller* smc35x_info = nand->controller_priv;
 	struct target* target = nand->target;
+	
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
 		return ERROR_NAND_OPERATION_FAILED;
@@ -103,26 +120,16 @@ int smc35x_command(struct nand_device* nand, uint8_t command)
 		smc35x_info->data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG;
 		break;
 
-	case NAND_CMD_ERASE1:
+	case NAND_CMD_ERASE2:
 		smc35x_info->cmd_phase_addr = NAND_BASE | (ONFI_CMD_ERASE_BLOCK_CYCLES << 21) |
 		(ONFI_CMD_ERASE_BLOCK_END_TIMING << 20) | (ONFI_CMD_ERASE_BLOCK2 << 11) | (ONFI_CMD_ERASE_BLOCK1 << 3);
 		break;
-	
-	case NAND_CMD_READSTART:
-		
-		break;
-
-	case NAND_CMD_PAGEPROG:
-		
-		break;
-
-	case ONFI_CMD_READ_PARAMETER1:
-
-		break;
 
 	default: 
-		break;
+		LOG_INFO("no action\n");
+		return ERROR_OK;
 	}
+
 	smc35x_commit(nand);
 
 	return ERROR_OK;
@@ -130,17 +137,6 @@ int smc35x_command(struct nand_device* nand, uint8_t command)
 
 int smc35x_reset(struct nand_device* nand)
 {
-	// struct target* target = nand->target;
-
-	// if (target->state != TARGET_HALTED) {
-	// 	LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
-	// 	return ERROR_NAND_OPERATION_FAILED;
-	// }
-
-	// target_write_u32(target, (NAND_BASE | (ONFI_CMD_RESET1 << 3)), ONFI_COLUMN_NOT_VALID);
-
-	// return ERROR_OK;
-
 	return smc35x_command(nand, NAND_CMD_RESET);
 }
 
@@ -189,9 +185,9 @@ int smc35x_read_parameter(struct nand_device* nand, nand_size_type* nand_size)
 	return ERROR_OK;
 }
 
-int smc35x_erase(struct nand_device* nand, int bolck)
+int smc35x_erase(struct nand_device* nand, int page)
 {
-	nand_size_type nand_size;
+	// nand_size_type nand_size;
 	struct target* target = nand->target;
 	struct smc35x_nand_controller* smc35x_info = nand->controller_priv;
 
@@ -200,19 +196,19 @@ int smc35x_erase(struct nand_device* nand, int bolck)
 		return ERROR_NAND_OPERATION_FAILED;
 	}
 
-	smc35x_read_parameter(nand, &nand_size);
+	// smc35x_read_parameter(nand, &nand_size);
+	// smc35x_info->cmd_phase_data = bolck * nand_size.pagesPerBlock;
+	smc35x_reset(nand);
 
-	smc35x_info->cmd_phase_data = bolck * nand_size.pagesPerBlock;
+	smc35x_info->cmd_phase_data = page;
 
-	smc35x_command(nand, NAND_CMD_ERASE1);
+	smc35x_command(nand, NAND_CMD_ERASE2);
 
 	return ERROR_OK;
 }
 
 int smc35x_address(struct nand_device* nand, uint8_t address)
 {
-	//smc35x_info->cmd_phase_data = address;
-
 	return ERROR_OK;
 }
 
@@ -232,22 +228,23 @@ int smc35x_read_data(struct nand_device* nand, void* data)
 }
 
                                             //    页号
-int smc35x_read_page(struct nand_device* nand, uint32_t page, uint8_t* data, uint32_t data_size,
-			uint8_t* oob, uint32_t oob_size)
+int smc35x_read_page(struct nand_device* nand, uint32_t page, uint8_t* data_p, uint32_t data_size,
+			uint8_t* oob_p, uint32_t oob_size)
 {
 	uint32_t index = 0;
 	nand_size_type nand_size;
 	uint64_t cmd_phase_addr;
 	uint32_t cmd_phase_data;
 	uint64_t data_phase_addr;
+	data_size >>= 2, oob_size >>= 2;
+	uint32_t *data = (uint32_t *)data_p;
+	uint32_t *oob = (uint32_t *)oob_p;
 	struct target* target = nand->target;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
 		return ERROR_NAND_OPERATION_FAILED;
 	}
-	
-	LOG_INFO("page number %d data size %d oob size %d\n", page, data_size, oob_size);
 
 	smc35x_read_parameter(nand, &nand_size);
     LOG_INFO("blocksPerUnit:%d pagesPerBlock:%d dataBytesPerPage:%d spareBytesPerPage:%d \r\n",
@@ -263,29 +260,31 @@ int smc35x_read_page(struct nand_device* nand, uint32_t page, uint8_t* data, uin
 	cmd_phase_addr = NAND_BASE;
 	target_write_u32(target, cmd_phase_addr, 0x00);
 
-	LOG_INFO("read data from addr %x", data_phase_addr);
+	LOG_INFO("read data from addr %llx", data_phase_addr);
 	for (index = 0; index < data_size; ++index, ++data)
 	{
-		target_read_u8(target, data_phase_addr, data);
+		target_read_u32(target, data_phase_addr, data);
 		LOG_INFO("page %d index %d read data %x", page, index, *data);
 	}
 	for (index = 0; index < oob_size; ++index, ++oob)
 	{
-		target_read_u8(target, data_phase_addr, oob);
+		target_read_u32(target, data_phase_addr, oob);
 		LOG_INFO("page %d index %d read oob %x", page, index, *oob);
 	}
 
 	return ERROR_OK;
 }
 
-int smc35x_write_page(struct nand_device* nand, uint32_t page, uint8_t* data, uint32_t data_size,
-			uint8_t* oob, uint32_t oob_size)
+int smc35x_write_page(struct nand_device* nand, uint32_t page, uint8_t* data_p, uint32_t data_size,
+			uint8_t* oob_p, uint32_t oob_size)
 {
-	uint32_t index, block;
+	uint32_t index;
     nand_size_type nand_size;
 	uint64_t cmd_phase_addr;
 	uint32_t cmd_phase_data;
 	uint64_t data_phase_addr;
+	uint32_t *data = (uint32_t *)data_p;
+	uint32_t *oob = (uint32_t *)oob_p;
 	struct target* target = nand->target;
 
 	if (target->state != TARGET_HALTED) {
@@ -299,7 +298,6 @@ int smc35x_write_page(struct nand_device* nand, uint32_t page, uint8_t* data, ui
 	LOG_INFO("blocksPerUnit:%d pagesPerBlock:%d dataBytesPerPage:%d spareBytesPerPage:%d \r\n",
 	nand_size.blocksPerUnit,nand_size.pagesPerBlock,nand_size.dataBytesPerPage,nand_size.spareBytesPerPage);
 	
-	// block = page / nand_size.pagesPerBlock;
 	// smc35x_erase(nand, page / nand_size.pagesPerBlock);
 	
 	cmd_phase_addr = NAND_BASE | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3);
@@ -310,47 +308,63 @@ int smc35x_write_page(struct nand_device* nand, uint32_t page, uint8_t* data, ui
 	cmd_phase_data = page >> (32 - (2*8));
 	target_write_u32(target, cmd_phase_addr, cmd_phase_data);
 
-	LOG_INFO("write data to addr %x", data_phase_addr);
-	for (index = 0; index < data_size; ++index)
+	LOG_INFO("write data to addr %llx", data_phase_addr);
+	for (index = 0; index < (data_size >> 2); ++index)
 	{
 		LOG_INFO("page %d index %d write data %x", page, index, data[index]);
-		target_write_u8(target, data_phase_addr, data[index]);
+		target_write_u32(target, data_phase_addr, data[index]);
 	}
 
-	oob = (oob == NULL) ? data : oob;
-	oob_size = nand_size.spareBytesPerPage - ONFI_AXI_DATA_WIDTH;
-	LOG_INFO("write data to addr %x", data_phase_addr);
-	for (index = 0; index < oob_size; ++index)
+	memset(buf, 0xFF, sizeof(buf));
+	oob = (oob == NULL) ? buf : oob;
+	oob_size = nand_size.spareBytesPerPage-ONFI_AXI_DATA_WIDTH;
+	LOG_INFO("write data to addr %llx", data_phase_addr);
+	for (index = 0; index < (oob_size >> 2); ++index)
 	{
 		LOG_INFO("page %d index %d write data %x", page, index, oob[index]);
-		target_write_u8(target, data_phase_addr, oob[index]);
+		target_write_u32(target, data_phase_addr, oob[index]);
 	}
 
 	oob_size = ONFI_AXI_DATA_WIDTH;
 	oob += (nand_size.spareBytesPerPage-ONFI_AXI_DATA_WIDTH);
 	data_phase_addr = NAND_BASE | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
-	LOG_INFO("write data to addr %x", data_phase_addr);
-	for (index = 0; index < oob_size; ++index)
+	LOG_INFO("write data to addr %llx", data_phase_addr);
+	for (index = 0; index < (oob_size >> 2); ++index)
 	{
 		LOG_INFO("page %d index %d write data %x", page, index, oob[index]);
-		target_write_u8(target, data_phase_addr, oob[index]);
+		target_write_u32(target, data_phase_addr, oob[index]);
 	}
 
 	return ERROR_OK;
 }
 
-/*int smc35x_read_id(struct nand_device* nand)
+static int smc35x_init(struct nand_device* nand)
 {
 	struct target* target = nand->target;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
+		return ERROR_NAND_OPERATION_FAILED;
 	}
 
-	target_write_u32(target, (NAND_BASE | (ONFI_CMD_READ_ID_CYCLES << 21) | (ONFI_CMD_READ_ID1 << 3)), ONFI_COLUMN_NOT_VALID);
+	target_write_u32(target, PS_MIO0, 0x02);
+	target_write_u32(target, PS_MIO2, 0x02);
+	target_write_u32(target, PS_MIO3, 0x02);
+	target_write_u32(target, PS_MIO4, 0x02);
+	target_write_u32(target, PS_MIO5, 0x02);
+	target_write_u32(target, PS_MIO6, 0x02);
+	target_write_u32(target, PS_MIO7, 0x02);
+	target_write_u32(target, PS_MIO8, 0x02);
+	target_write_u32(target, PS_MIO9, 0x02);
+	target_write_u32(target, PS_MIO10, 0x02);
+	target_write_u32(target, PS_MIO11, 0x02);
+	target_write_u32(target, PS_MIO12, 0x02);
+	target_write_u32(target, PS_MIO13, 0x02);
+	target_write_u32(target, PS_MIO14, 0x02);
 
 	return ERROR_OK;
-}*/
+}
+
 int smc35x_command_re(struct nand_device* nand, uint8_t startCmd, uint8_t endCmd, uint8_t addrCycles, uint8_t endCmdPhase, int Page, int Column)
 {
 	struct target* target = nand->target;
@@ -380,7 +394,6 @@ int smc35x_command_re(struct nand_device* nand, uint8_t startCmd, uint8_t endCmd
 		cmdPhaseData |= Page << (3*8);
 		if (addrCycles > 4)
 		{
-			LOG_INFO("smc send cmdPhase %llx dataPhase %x\n", cmdPhaseAddr, cmdPhaseData);
 			target_write_u32(target, cmdPhaseAddr, cmdPhaseData);
 			
 			cmdPhaseData = Page >> (32 - (3*8));
@@ -395,23 +408,45 @@ int smc35x_command_re(struct nand_device* nand, uint8_t startCmd, uint8_t endCmd
 		cmdPhaseData = Column;
 	}
 
-	LOG_INFO("smc send cmdPhase %llx dataPhase %x\n", cmdPhaseAddr, cmdPhaseData);
-
 	target_write_u32(target, cmdPhaseAddr, cmdPhaseData);
 
 	return ERROR_OK;
 }
-int smc35x_reset_re(struct nand_device* nand)
+void smc35x_read_data_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length)
 {
-	smc35x_command_re(nand, ONFI_CMD_RESET1, ONFI_CMD_RESET2, ONFI_CMD_RESET_CYCLES,
-			ONFI_CMD_RESET_END_TIMING, ONFI_PAGE_NOT_VALID, ONFI_COLUMN_NOT_VALID);
+	struct target *target = nand->target;
+	uint32_t endCmdReq = 0;
+	volatile uint64_t dataPhaseAddr = 0;
+	uint32_t eccLast = 0;
+	uint32_t clearCs = 0;
+	volatile uint32_t Index = 0;
 
-	return 0;
+	if(endCmdPhase == ONFI_ENDIN_DATA_PHASE)
+	{
+		endCmdReq = 1;
+	}
+
+	/* data phase address */
+	dataPhaseAddr  = NAND_BASE 		|
+			(clearCs 	<< 21)		|
+			(endCmdReq 	<< 20)		|
+			NAND_DATA_PHASE_FLAG	|
+			(endCmd 	<< 11)		|
+			(eccLast 	<< 10);
+
+	/* Read Data */
+	for(Index = 0;Index < Length;Index++)
+	{
+		//Buf[Index] = *((uint8_t *)dataPhaseAddr);
+		target_read_u8(target, dataPhaseAddr, &Buf[Index]);
+		LOG_INFO("read id byte %d data %x", Index, Buf[Index]);
+	}
 }
 int smc35x_read_id_re(struct nand_device* nand)
 {
 	struct target* target = nand->target;
 	LOG_INFO("target is %s", target->cmd_name);
+	
 	if (target == NULL) {
 		LOG_INFO("target error");
 		return ERROR_NAND_OPERATION_FAILED;
@@ -422,7 +457,6 @@ int smc35x_read_id_re(struct nand_device* nand)
 		return ERROR_NAND_OPERATION_FAILED;
 	}
 
-	LOG_INFO("smc35x_read_id function start");
 	target_write_u32(target, PS_MIO0, 0x02);
 	target_write_u32(target, PS_MIO2, 0x02);
 	target_write_u32(target, PS_MIO3, 0x02);
@@ -440,10 +474,12 @@ int smc35x_read_id_re(struct nand_device* nand)
 
     uint8_t device_id[5]={0};
 
-    smc35x_reset_re(nand);
+	smc35x_command_re(nand, ONFI_CMD_RESET1, ONFI_CMD_RESET2, ONFI_CMD_RESET_CYCLES,
+			ONFI_CMD_RESET_END_TIMING, ONFI_PAGE_NOT_VALID, ONFI_COLUMN_NOT_VALID);
     
 	smc35x_command_re(nand, ONFI_CMD_READ_ID1, ONFI_CMD_READ_ID2, ONFI_CMD_READ_ID_CYCLES,ONFI_CMD_READ_ID_END_TIMING, ONFI_PAGE_NOT_VALID, 0x00);
-	SmcReadData_re(nand, ONFI_CMD_READ_ID2, ONFI_CMD_READ_ID_END_TIMING, &device_id[0], 5);
+	
+	smc35x_read_data_re(nand, ONFI_CMD_READ_ID2, ONFI_CMD_READ_ID_END_TIMING, &device_id[0], 5);
 
     return ERROR_OK;
 }
@@ -456,6 +492,8 @@ COMMAND_HANDLER(handle_smc35x_id_command)
 		command_print(CMD, "nand device '#%s' is out of bounds", CMD_ARGV[0]);
 		return ERROR_OK;
 	}
+
+	smc35x_reset(nand);
 
 	smc35x_read_id_re(nand);
 
@@ -485,6 +523,7 @@ COMMAND_HANDLER(handle_smc35x_size_command)
 COMMAND_HANDLER(handle_smc35x_erase_command)
 {
     unsigned num, block;
+	nand_size_type nand_size;
 
 	if (CMD_ARGC < 1 || CMD_ARGC > 2){
 		return ERROR_COMMAND_SYNTAX_ERROR;
@@ -498,7 +537,9 @@ COMMAND_HANDLER(handle_smc35x_erase_command)
 		return ERROR_OK;
 	}
 
-	smc35x_erase(nand, block);
+	smc35x_read_parameter(nand, &nand_size);
+
+	smc35x_erase(nand, block*nand_size.pagesPerBlock);
 
 	return ERROR_OK;
 }
@@ -536,150 +577,6 @@ static const struct command_registration smc35x_command_handler[] = {
 	},
 	COMMAND_REGISTRATION_DONE
 };
-
-/*
-static int smc35x_write_data(struct nand_device* nand, uint16_t data)
-{
-    struct target* target = nand->target;
-
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
-		return ERROR_NAND_OPERATION_FAILED;
-	}
-
-    volatile uint32_t i=0,j=0;
-    Nand_Size_TypeDef nandSize;
-
-    *((volatile uint32_t* )(SMC_BASE+SMC_REG_SET_CYCLES)) =
-                    ((0 <<	SMC_SetCycles_Trr_FIELD		)|		//busy to data out
-                    (0 <<	SMC_SetCycles_Tar_FIELD   	)|		//ale to data out
-                    (0 << 	SMC_SetCycles_Tclr_FIELD 	)|		//cle to data out
-                    (1 << 	SMC_SetCycles_Twp_FIELD    	)|	 //we width
-                    (1 << 	SMC_SetCycles_Trea_FIELD    )|	//RE before output data
-                    (2 <<	SMC_SetCycles_Twc_FIELD     )|	//WE (cmd/addr) width
-                    (2 << 	SMC_SetCycles_Trc_FIELD		));	//RE width
-    *((volatile uint32_t* )(SMC_BASE+SMC_REG_DIRCT_CMD)) = SMC_DirectCmd_SelChip_Interface1Chip1 | SMC_DirectCmd_CmdType_UpdateRegsAndAXI;
-
-    Onfi_CmdReset();
-    Onfi_CmdReadParameter(&nandSize);
-    Onfi_CmdBlockErase(0);
-
-    Nand_ProgramPage(0, 0, &data, &nandSize);
-
-	return ERROR_OK;
-}
-
-static int smc35x_write_page(struct nand_device* nand,
-		uint8_t* data, int data_size)
-{
-    struct target* target = nand->target;
-
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
-		return ERROR_NAND_OPERATION_FAILED;
-	}
-
-	volatile uint32_t i=0,j=0;
-    Nand_Size_TypeDef nandSize;
-
-    *((volatile uint32_t* )(SMC_BASE+SMC_REG_SET_CYCLES)) =
-                    ((0 <<	SMC_SetCycles_Trr_FIELD		)|		//busy to data out
-                    (0 <<	SMC_SetCycles_Tar_FIELD   	)|		//ale to data out
-                    (0 << 	SMC_SetCycles_Tclr_FIELD 	)|		//cle to data out
-                    (1 << 	SMC_SetCycles_Twp_FIELD    	)|	 //we width
-                    (1 << 	SMC_SetCycles_Trea_FIELD    )|	//RE before output data
-                    (2 <<	SMC_SetCycles_Twc_FIELD     )|	//WE (cmd/addr) width
-                    (2 << 	SMC_SetCycles_Trc_FIELD		));	//RE width
-    *((volatile uint32_t* )(SMC_BASE+SMC_REG_DIRCT_CMD)) = SMC_DirectCmd_SelChip_Interface1Chip1 | SMC_DirectCmd_CmdType_UpdateRegsAndAXI;
-
-    Onfi_CmdReset();
-    Onfi_CmdReadParameter(&nandSize);
-    Onfi_CmdBlockErase(0);
-
-    Nand_ProgramPage(0, 0, &data, &nandSize);
-
-	return ERROR_OK;
-}
-
-static int smc35x_read_page(struct nand_device* nand,
-		uint8_t* data, int data_size)
-{
-	struct target* target = nand->target;
-
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
-		return ERROR_NAND_OPERATION_FAILED;
-	}
-
-    volatile uint32_t i=0,j=0;
-    Nand_Size_TypeDef nandSize;
-	Onfi_CmdReset();
-	Onfi_CmdReadParameter(&nandSize);
-    
-	for (j=0;j<2;j++)
-    {
-        Nand_ReadPage(j, 0, data, &nandSize);
-        printf("read data result:\r\n");
-        for (i=0; i<1024*4+224; i++)
-        {
-            printf("%d ",data[i]);
-        }
-        printf("\r\n\r\n");
-    }
-
-	return ERROR_OK;
-}
-
-static int smc35x_nand_ready(struct nand_device* nand, int timeout)
-{
-	struct target* target = nand->target;
-	uint8_t status;
-
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
-		return ERROR_NAND_OPERATION_FAILED;
-	}
-
-	do {
-		target_read_u8(target, SMC35X_NFSTAT, &status);
-
-		if (status & SMC35X_NFSTAT_BUSY)
-			return 1;
-
-		alive_sleep(1);
-	} while (timeout-- > 0);
-
-	return 0;
-}*/
-
-static int smc35x_init(struct nand_device* nand)
-{
-	struct target* target = nand->target;
-
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
-		return ERROR_NAND_OPERATION_FAILED;
-	}
-
-	LOG_INFO("smc init");
-
-	target_write_u32(target, PS_MIO0, 0x02);
-	target_write_u32(target, PS_MIO2, 0x02);
-	target_write_u32(target, PS_MIO3, 0x02);
-	target_write_u32(target, PS_MIO4, 0x02);
-	target_write_u32(target, PS_MIO5, 0x02);
-	target_write_u32(target, PS_MIO6, 0x02);
-	target_write_u32(target, PS_MIO7, 0x02);
-	target_write_u32(target, PS_MIO8, 0x02);
-	target_write_u32(target, PS_MIO9, 0x02);
-	target_write_u32(target, PS_MIO10, 0x02);
-	target_write_u32(target, PS_MIO11, 0x02);
-	target_write_u32(target, PS_MIO12, 0x02);
-	target_write_u32(target, PS_MIO13, 0x02);
-	target_write_u32(target, PS_MIO14, 0x02);
-
-	return ERROR_OK;
-}
 
 struct nand_flash_controller smc35x_nand_controller = {
 	.name = "smc35x",

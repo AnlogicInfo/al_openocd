@@ -5,14 +5,9 @@
 #include "config.h"
 #endif
 
-#include "imp.h"
-#include "onfi.h"
-#include <jtag/jtag.h>
-#include <target/target.h>
-
 #define SMC_BASE                  	(0xF841A000UL)
-#define PIN_MUX_BASE	            (0xF8803000UL)
 #define NAND_BASE                   (0x64000000UL)
+#define PIN_MUX_BASE	            (0xF8803000UL)
 
 #define PS_MIO0			(0x00+PIN_MUX_BASE)
 #define PS_MIO1			(0x04+PIN_MUX_BASE)

@@ -1,6 +1,9 @@
 #include "onfi.h"
+#include "smc35x.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-//extern Nand_Size_TypeDef nandSize;
+// extern Nand_Size_TypeDef nandSize;
 
 uint32_t NandOob64[12] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
 uint32_t NandOob32[6] = {26, 27, 28, 29, 30, 31};
@@ -86,49 +89,9 @@ void SmcReadData(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Len
 	/* Read Data */
 	for(Index = 0;Index < Length;Index++)
 	{
-		LOG_ERROR("index %d", Index);
 		Buf[Index] = *((uint8_t *)dataPhaseAddr);
 	}
 }
-
-void SmcReadData_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length)
-{
-	struct target *target = nand->target;
-	uint32_t endCmdReq = 0;
-	volatile uint64_t dataPhaseAddr = 0;
-	uint32_t eccLast = 0;
-	uint32_t clearCs = 0;
-	volatile uint32_t Index = 0;
-
-	if(endCmdPhase == ONFI_ENDIN_DATA_PHASE)
-	{
-		endCmdReq = 1;
-	}
-
-	/* data phase address */
-	dataPhaseAddr  = NAND_BASE 		|
-			(clearCs 	<< 21)		|
-			(endCmdReq 	<< 20)		|
-			NAND_DATA_PHASE_FLAG	|
-			(endCmd 	<< 11)		|
-			(eccLast 	<< 10);
-
-	LOG_INFO("smc read %llx", dataPhaseAddr);
-	
-	/* Read Data */
-	for(Index = 0;Index < Length;Index++)
-	{
-		//Buf[Index] = *((uint8_t *)dataPhaseAddr);
-		target_read_u8(target, dataPhaseAddr, &Buf[Index]);
-		LOG_INFO("read %d data %x", Index, Buf[Index]);
-	}
-
-}
-
-
-
-
-
 
 void SmcWriteBuf(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length, uint32_t clearCs, uint32_t eccLast)
 {
@@ -156,38 +119,6 @@ void SmcWriteBuf(uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Len
 	for(Index = 0;Index < tempLength;Index++)
 	{
 		SMC_WriteReg((void *)dataPhaseAddr, tempBuff[Index]);
-	}
-}
-void SmcWriteBuf_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCmdPhase, uint8_t *Buf, uint32_t Length, uint32_t clearCs, uint32_t eccLast)
-{
-	struct target *target = nand->target;
-	uint32_t *tempBuff = (uint32_t *)Buf;
-	uint32_t tempLength = Length >> 2;
-
-	uint32_t endCmdReq = 0;
-	volatile uint64_t dataPhaseAddr = 0;
-	volatile uint32_t Index = 0;
-
-	if(endCmdPhase == ONFI_ENDIN_DATA_PHASE)
-	{
-		endCmdReq = 1;
-	}
-
-	/* data phase address */
-	dataPhaseAddr  = NAND_BASE 		|
-			(clearCs 	<< 21)		|
-			(endCmdReq 	<< 20)		|
-			NAND_DATA_PHASE_FLAG	|
-			(endCmd 	<< 11)		|
-			(eccLast 	<< 10);
-
-	/* Read Data */
-	LOG_INFO("write data addr %x\n", dataPhaseAddr);
-	for(Index = 0;Index < tempLength;Index++)
-	{
-		// SMC_WriteReg((void *)dataPhaseAddr, tempBuff[Index]);
-		LOG_INFO("index %d dataPhasedata %x\n", Index, tempBuff[Index]);
-		target_write_u32(target, dataPhaseAddr, tempBuff[Index]);
 	}
 }
 
@@ -522,44 +453,6 @@ uint8_t Nand_ProgramPage(uint32_t Page, uint32_t Column, uint8_t *Buf, Nand_Size
 		printf("fff\r\n");
 	}
 	printf("4\r\n");
-	return SUCCESS_FLAG;
-}
-uint8_t Nand_ProgramPage_re(struct nand_device *nand, uint32_t Page, uint32_t Column, uint8_t *Buf, Nand_Size_TypeDef *nandSize)
-{
-	uint8_t Status;
-
-	// Nand_EccHwDisable();
-
-	Onfi_CmdProgramPage(Page,  Column);
-
-	printf("2\r\n");
-	SmcWriteBuf_re(nand, ONFI_CMD_PROGRAM_PAGE2, ONFI_CMD_PROGRAM_PAGE_END_TIMING, Buf,
-			nandSize->dataBytesPerPage, NO_CLEAR_CS, NO_ECC_LAST);
-
-	Buf += (nandSize->dataBytesPerPage);
-
-	SmcWriteBuf_re(nand, ONFI_CMD_PROGRAM_PAGE2, ONFI_CMD_PROGRAM_PAGE_END_TIMING, Buf,
-			nandSize->spareBytesPerPage-ONFI_AXI_DATA_WIDTH, NO_CLEAR_CS, NO_ECC_LAST);
-
-
-	Buf += (nandSize->spareBytesPerPage-ONFI_AXI_DATA_WIDTH);
-
-	SmcWriteBuf_re(nand, ONFI_CMD_PROGRAM_PAGE2, ONFI_CMD_PROGRAM_PAGE_END_TIMING, Buf,
-			ONFI_AXI_DATA_WIDTH, CLEAR_CS, NO_ECC_LAST);
-
-	// while(Nand_IsBusy() == FAILED_FLAG);
-	// printf("3\r\n");
-	// /*  Clear SMC Interrupt 1, as an alternative to an AXI read */
-	// *((uint32_t *)(SMC_BASE+SMC_REG_MEM_CFG_CLR)) |= SMC_MemCfgClr_ClrSmcInt1;
-
-	// /* Cheak Nand Status */
-	// Status = Onfi_CmdReadStatus();
-
-	// if(Status & ONFI_STATUS_FAIL) {
-	// 	return FAILED_FLAG;
-	// 	printf("fff\r\n");
-	// }
-	// printf("4\r\n");
 	return SUCCESS_FLAG;
 }
 
