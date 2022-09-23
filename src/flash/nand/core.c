@@ -337,11 +337,9 @@ int nand_probe(struct nand_device *nand)
 
 	nand->controller->command(nand, NAND_CMD_RESET);
 	nand->controller->reset(nand);
-	// nand->controller->commit(nand);
 	
 	nand->controller->command(nand, NAND_CMD_READID);
 	nand->controller->address(nand, 0x0);
-	// nand->controller->commit(nand);
 	
 	if (nand->bus_width == 8) {
 		nand->controller->read_data(nand, &manufacturer_id);
@@ -534,8 +532,6 @@ int nand_erase(struct nand_device *nand, int first_block, int last_block)
 		}
 	}
 
-	LOG_INFO("nand devices is %s, nand controller is %s", nand->name, nand->controller->name);
-	
 	for (i = first_block; i <= last_block; i++) {
 		/* Send erase setup command */
 		nand->controller->command(nand, NAND_CMD_ERASE1);
@@ -566,11 +562,7 @@ int nand_erase(struct nand_device *nand, int first_block, int last_block)
 		}
 
 		/* Send erase confirm command */
-		if (!strcmp(nand->controller->name, "smc35x")) {
-			nand->controller->erase(nand, page);
-		} else {
-			nand->controller->command(nand, NAND_CMD_ERASE2);
-		}
+		nand->controller->command(nand, NAND_CMD_ERASE2);
 
 		retval = nand->controller->nand_ready ?
 			nand->controller->nand_ready(nand, 1000) :

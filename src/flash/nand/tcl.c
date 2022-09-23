@@ -360,11 +360,9 @@ COMMAND_HANDLER(handle_nand_dump_command)
 		}
 
 		if (s.page)
-			LOG_INFO("page data write to file start");
 			fileio_write(s.fileio, s.page_size, s.page, &size_written);
 
 		if (s.oob)
-			LOG_INFO("oob data write to file start");
 			fileio_write(s.fileio, s.oob_size, s.oob, &size_written);
 
 		s.size -= nand->page_size;
