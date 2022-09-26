@@ -52,6 +52,9 @@ struct nand_flash_controller {
 	/** Issue a command to the NAND device. */
 	int (*command)(struct nand_device *nand, uint8_t command);
 
+	/** Commit command to the NAND device. */
+	int (*commit)(struct nand_device *nand);
+
 	/** Write an address to the NAND device. */
 	int (*address)(struct nand_device *nand, uint8_t address);
 

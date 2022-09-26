@@ -1310,10 +1310,12 @@ int target_run_read_async_algorithm(struct target *target,
 int target_read_memory(struct target *target,
 		target_addr_t address, uint32_t size, uint32_t count, uint8_t *buffer)
 {
+
 	if (!target_was_examined(target)) {
 		LOG_ERROR("Target not examined yet");
 		return ERROR_FAIL;
 	}
+	
 	if (!target->type->read_memory) {
 		LOG_ERROR("Target %s doesn't support read_memory", target_name(target));
 		return ERROR_FAIL;
@@ -2666,11 +2668,12 @@ int target_read_u16(struct target *target, target_addr_t address, uint16_t *valu
 
 int target_read_u8(struct target *target, target_addr_t address, uint8_t *value)
 {
+
 	if (!target_was_examined(target)) {
 		LOG_ERROR("Target not examined yet");
 		return ERROR_FAIL;
 	}
-
+	
 	int retval = target_read_memory(target, address, 1, 1, value);
 
 	if (retval == ERROR_OK) {
@@ -2715,7 +2718,7 @@ int target_write_u32(struct target *target, target_addr_t address, uint32_t valu
 		LOG_ERROR("Target not examined yet");
 		return ERROR_FAIL;
 	}
-
+	
 	LOG_DEBUG("address: " TARGET_ADDR_FMT ", value: 0x%8.8" PRIx32 "",
 			  address,
 			  value);
@@ -2724,6 +2727,7 @@ int target_write_u32(struct target *target, target_addr_t address, uint32_t valu
 	retval = target_write_memory(target, address, 4, 1, value_buf);
 	if (retval != ERROR_OK)
 		LOG_DEBUG("failed: %i", retval);
+
 
 	return retval;
 }

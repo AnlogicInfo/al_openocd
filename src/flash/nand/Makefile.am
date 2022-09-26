@@ -19,6 +19,7 @@ NAND_DRIVERS = \
 	%D%/mxc.c \
 	%D%/mx3.c \
 	%D%/orion.c \
+	%D%/onfi.c \
 	%D%/s3c24xx.c \
 	%D%/s3c2410.c \
 	%D%/s3c2412.c \
@@ -26,7 +27,8 @@ NAND_DRIVERS = \
 	%D%/s3c2443.c \
 	%D%/s3c6400.c \
 	%D%/at91sam9.c \
-	%D%/nuc910.c
+	%D%/nuc910.c \
+	%D%/smc35x.c
 
 NANDHEADERS = \
 	%D%/arm_io.h \
@@ -38,6 +40,8 @@ NANDHEADERS = \
 	%D%/lpc32xx.h \
 	%D%/mxc.h \
 	%D%/mx3.h \
+	%D%/onfi.h \
 	%D%/s3c24xx.h \
 	%D%/s3c24xx_regs.h \
-	%D%/nuc910.h
+	%D%/nuc910.h \
+	%D%/smc35x.h

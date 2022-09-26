@@ -319,6 +319,7 @@ int nand_probe(struct nand_device *nand)
 
 	/* initialize controller (device parameters are zero, use controller default) */
 	retval = nand->controller->init(nand);
+	
 	if (retval != ERROR_OK) {
 		switch (retval) {
 			case ERROR_NAND_OPERATION_FAILED:
@@ -336,10 +337,10 @@ int nand_probe(struct nand_device *nand)
 
 	nand->controller->command(nand, NAND_CMD_RESET);
 	nand->controller->reset(nand);
-
+	
 	nand->controller->command(nand, NAND_CMD_READID);
 	nand->controller->address(nand, 0x0);
-
+	
 	if (nand->bus_width == 8) {
 		nand->controller->read_data(nand, &manufacturer_id);
 		nand->controller->read_data(nand, &device_id);
