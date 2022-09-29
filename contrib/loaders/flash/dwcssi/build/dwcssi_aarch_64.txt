@@ -4,358 +4,359 @@ D:/work/2022/al9000/sw/debugger/al_openocd/contrib/loaders/flash/dwcssi/build/dw
 
 Disassembly of section .text:
 
-0000000012340000 <_start>:
-# define LREG lw
-# define SREG sw
-# define REGBYTES 4
+0000000061000040 <_start>:
+# define REGBYTES 16
 
+		.section .text.entry
+		.global _start
 _start:
 		ldr x28, =stack_end
-    12340000:	5800009c 	ldr	x28, 12340010 <_start+0x10>
+    61000040:	5800009c 	ldr	x28, 61000050 <_start+0x10>
         mov sp, x28
-    12340004:	9100039f 	mov	sp, x28
-		b    	flash_dwcssi
-    12340008:	14000046 	b	12340120 <flash_dwcssi>
-        hlt #0xF00
-    1234000c:	d441e000 	hlt	#0xf00
-    12340010:	123402ec 	.word	0x123402ec
-    12340014:	00000000 	.word	0x00000000
+    61000044:	9100039f 	mov	sp, x28
+		bl    	flash_dwcssi
+    61000048:	94000046 	bl	61000160 <flash_dwcssi>
 
-0000000012340018 <dwcssi_set_bits>:
+        hlt #0x0B
+    6100004c:	d4400160 	hlt	#0xb
+    61000050:	610004f0 	.word	0x610004f0
+    61000054:	00000000 	.word	0x00000000
+
+0000000061000058 <dwcssi_set_bits>:
 }
 
 static void dwcssi_read_reg(volatile uint32_t *ctrl_base, uint32_t *value, uint32_t address)
 {
 
     *value = ctrl_base[address / 4];
-    12340018:	927e7421 	and	x1, x1, #0xfffffffc
-    1234001c:	b8616804 	ldr	w4, [x0, x1]
+    61000058:	927e7421 	and	x1, x1, #0xfffffffc
+    6100005c:	b8616804 	ldr	w4, [x0, x1]
 
 static void dwcssi_set_bits(volatile uint32_t *ctrl_base, uint32_t address, uint32_t value, uint32_t bitmask)
 {
     uint32_t rd_value, wr_value;
     dwcssi_read_reg(ctrl_base, &rd_value,address);
     wr_value = (rd_value & ~bitmask) | (value & bitmask);
-    12340020:	4a040042 	eor	w2, w2, w4
-    12340024:	0a030042 	and	w2, w2, w3
-    12340028:	4a040042 	eor	w2, w2, w4
+    61000060:	4a040042 	eor	w2, w2, w4
+    61000064:	0a030042 	and	w2, w2, w3
+    61000068:	4a040042 	eor	w2, w2, w4
     ctrl_base[address/4] = value;
-    1234002c:	b8216802 	str	w2, [x0, x1]
+    6100006c:	b8216802 	str	w2, [x0, x1]
     dwcssi_write_reg(ctrl_base, address, wr_value);
 }
-    12340030:	d65f03c0 	ret
+    61000070:	d65f03c0 	ret
 
-0000000012340034 <dwcssi_txwm_wait>:
+0000000061000074 <dwcssi_txwm_wait>:
     dwcssi_enable(ctrl_base);
 }
 
 /*dwc base functions*/
 static int dwcssi_txwm_wait(volatile uint32_t *ctrl_base)
 {
-    12340034:	52807d21 	mov	w1, #0x3e9                 	// #1001
+    61000074:	52807d21 	mov	w1, #0x3e9                 	// #1001
     *value = ctrl_base[address / 4];
-    12340038:	b9402802 	ldr	w2, [x0, #40]
+    61000078:	b9402802 	ldr	w2, [x0, #40]
     uint32_t timeout = 0;
     // TX fifo empty
     while(1)
     {
         if(dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, DWCSSI_SR_TFE_MASK, 2))
-    1234003c:	371000a2 	tbnz	w2, #2, 12340050 <dwcssi_txwm_wait+0x1c>
+    6100007c:	371000a2 	tbnz	w2, #2, 61000090 <dwcssi_txwm_wait+0x1c>
             break;
         timeout = timeout + 1;
         if(timeout > TIMEOUT)
-    12340040:	71000421 	subs	w1, w1, #0x1
-    12340044:	54ffffa1 	b.ne	12340038 <dwcssi_txwm_wait+0x4>  // b.any
+    61000080:	71000421 	subs	w1, w1, #0x1
+    61000084:	54ffffa1 	b.ne	61000078 <dwcssi_txwm_wait+0x4>  // b.any
             return ERROR_DWCSSI_TXWM_WAIT;
-    12340048:	52a00400 	mov	w0, #0x200000              	// #2097152
+    61000088:	52a00400 	mov	w0, #0x200000              	// #2097152
         if(timeout > TIMEOUT)
             return ERROR_DWCSSI_TXWM_WAIT;
     }
 
     return ERROR_OK;
 }
-    1234004c:	d65f03c0 	ret
-    12340050:	52807d21 	mov	w1, #0x3e9                 	// #1001
+    6100008c:	d65f03c0 	ret
+    61000090:	52807d21 	mov	w1, #0x3e9                 	// #1001
     *value = ctrl_base[address / 4];
-    12340054:	b9402802 	ldr	w2, [x0, #40]
+    61000094:	b9402802 	ldr	w2, [x0, #40]
         if(!(dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, DWCSSI_SR_BUSY_MASK, 0)))
-    12340058:	36000082 	tbz	w2, #0, 12340068 <dwcssi_txwm_wait+0x34>
+    61000098:	36000082 	tbz	w2, #0, 610000a8 <dwcssi_txwm_wait+0x34>
         if(timeout > TIMEOUT)
-    1234005c:	71000421 	subs	w1, w1, #0x1
-    12340060:	54ffffa1 	b.ne	12340054 <dwcssi_txwm_wait+0x20>  // b.any
-    12340064:	17fffff9 	b	12340048 <dwcssi_txwm_wait+0x14>
+    6100009c:	71000421 	subs	w1, w1, #0x1
+    610000a0:	54ffffa1 	b.ne	61000094 <dwcssi_txwm_wait+0x20>  // b.any
+    610000a4:	17fffff9 	b	61000088 <dwcssi_txwm_wait+0x14>
     return ERROR_OK;
-    12340068:	52800000 	mov	w0, #0x0                   	// #0
-    1234006c:	17fffff8 	b	1234004c <dwcssi_txwm_wait+0x18>
+    610000a8:	52800000 	mov	w0, #0x0                   	// #0
+    610000ac:	17fffff8 	b	6100008c <dwcssi_txwm_wait+0x18>
 
-0000000012340070 <dwcssi_tx>:
+00000000610000b0 <dwcssi_tx>:
     *value = ctrl_base[address / 4];
-    12340070:	b9402802 	ldr	w2, [x0, #40]
+    610000b0:	b9402802 	ldr	w2, [x0, #40]
     uint32_t fifo_not_full=0;
 
     while(1) 
     {
         fifo_not_full = dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, DWCSSI_SR_TFTNF_MASK, 1);
         if(fifo_not_full)
-    12340074:	360fffe2 	tbz	w2, #1, 12340070 <dwcssi_tx>
+    610000b4:	360fffe2 	tbz	w2, #1, 610000b0 <dwcssi_tx>
     ctrl_base[address/4] = value;
-    12340078:	b9006001 	str	w1, [x0, #96]
+    610000b8:	b9006001 	str	w1, [x0, #96]
         }
     }
 
     // printf("tx timeout\n");
     return ERROR_DWCSSI_TX;
 }
-    1234007c:	52800000 	mov	w0, #0x0                   	// #0
-    12340080:	d65f03c0 	ret
+    610000bc:	52800000 	mov	w0, #0x0                   	// #0
+    610000c0:	d65f03c0 	ret
 
-0000000012340084 <dwcssi_wait_flash_idle>:
+00000000610000c4 <dwcssi_wait_flash_idle>:
     
     return ERROR_DWCSSI_RX;
 }
 
 static int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 {
-    12340084:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
+    610000c4:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    12340088:	528181e3 	mov	w3, #0xc0f                 	// #3087
-    1234008c:	72a01803 	movk	w3, #0xc0, lsl #16
+    610000c8:	528181e3 	mov	w3, #0xc0f                 	// #3087
+    610000cc:	72a01803 	movk	w3, #0xc0, lsl #16
 {
-    12340090:	910003fd 	mov	x29, sp
+    610000d0:	910003fd 	mov	x29, sp
     *value = ctrl_base[address / 4];
-    12340094:	b9400801 	ldr	w1, [x0, #8]
+    610000d4:	b9400801 	ldr	w1, [x0, #8]
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    12340098:	528180e2 	mov	w2, #0xc07                 	// #3079
+    610000d8:	528180e2 	mov	w2, #0xc07                 	// #3079
 {
-    1234009c:	aa0003e5 	mov	x5, x0
+    610000dc:	aa0003e5 	mov	x5, x0
     dwcssi_write_reg(ctrl_base, DWCSSI_REG_SSIENR, ssic_en & ~DWCSSI_SSIC_EN(1));
-    123400a0:	121f7821 	and	w1, w1, #0xfffffffe
+    610000e0:	121f7821 	and	w1, w1, #0xfffffffe
     ctrl_base[address/4] = value;
-    123400a4:	b9000801 	str	w1, [x0, #8]
+    610000e4:	b9000801 	str	w1, [x0, #8]
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    123400a8:	52800001 	mov	w1, #0x0                   	// #0
-    123400ac:	97ffffdb 	bl	12340018 <dwcssi_set_bits>
+    610000e8:	52800001 	mov	w1, #0x0                   	// #0
+    610000ec:	97ffffdb 	bl	61000058 <dwcssi_set_bits>
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(ndf), DWCSSI_CTRLR1_NDF_MASK);   
-    123400b0:	529fffe3 	mov	w3, #0xffff                	// #65535
-    123400b4:	52800002 	mov	w2, #0x0                   	// #0
-    123400b8:	52800081 	mov	w1, #0x4                   	// #4
-    123400bc:	97ffffd7 	bl	12340018 <dwcssi_set_bits>
+    610000f0:	529fffe3 	mov	w3, #0xffff                	// #65535
+    610000f4:	52800002 	mov	w2, #0x0                   	// #0
+    610000f8:	52800081 	mov	w1, #0x4                   	// #4
+    610000fc:	97ffffd7 	bl	61000058 <dwcssi_set_bits>
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_TXFTLR, val, mask);
-    123400c0:	32009fe3 	mov	w3, #0xff00ff              	// #16711935
-    123400c4:	52800002 	mov	w2, #0x0                   	// #0
-    123400c8:	52800301 	mov	w1, #0x18                  	// #24
-    123400cc:	97ffffd3 	bl	12340018 <dwcssi_set_bits>
+    61000100:	32009fe3 	mov	w3, #0xff00ff              	// #16711935
+    61000104:	52800002 	mov	w2, #0x0                   	// #0
+    61000108:	52800301 	mov	w1, #0x18                  	// #24
+    6100010c:	97ffffd3 	bl	61000058 <dwcssi_set_bits>
     *value = ctrl_base[address / 4];
-    123400d0:	b9400800 	ldr	w0, [x0, #8]
+    61000110:	b9400800 	ldr	w0, [x0, #8]
     dwcssi_write_reg(ctrl_base, DWCSSI_REG_SSIENR, ssic_en | DWCSSI_SSIC_EN(1));
-    123400d4:	32000000 	orr	w0, w0, #0x1
+    61000114:	32000000 	orr	w0, w0, #0x1
     ctrl_base[address/4] = value;
-    123400d8:	b90008a0 	str	w0, [x5, #8]
+    61000118:	b90008a0 	str	w0, [x5, #8]
 
     dwcssi_config_eeprom(ctrl_base, rx_len);
 
     while(1)
     {
         result = dwcssi_tx(ctrl_base, SPIFLASH_READ_STATUS);
-    123400dc:	aa0503e0 	mov	x0, x5
-    123400e0:	528000a1 	mov	w1, #0x5                   	// #5
-    123400e4:	97ffffe3 	bl	12340070 <dwcssi_tx>
+    6100011c:	aa0503e0 	mov	x0, x5
+    61000120:	528000a1 	mov	w1, #0x5                   	// #5
+    61000124:	97ffffe3 	bl	610000b0 <dwcssi_tx>
         if (result != ERROR_OK)
-    123400e8:	34000080 	cbz	w0, 123400f8 <dwcssi_wait_flash_idle+0x74>
+    61000128:	34000080 	cbz	w0, 61000138 <dwcssi_wait_flash_idle+0x74>
 	    	return result | ERROR_STACK(0x000200);
-    123400ec:	32170000 	orr	w0, w0, #0x200
+    6100012c:	32170000 	orr	w0, w0, #0x200
                 return (ERROR_OK);
             }
         }
     }
 
 }
-    123400f0:	a8c17bfd 	ldp	x29, x30, [sp], #16
-    123400f4:	d65f03c0 	ret
+    61000130:	a8c17bfd 	ldp	x29, x30, [sp], #16
+    61000134:	d65f03c0 	ret
         if (dwcssi_txwm_wait(ctrl_base) != ERROR_OK)
-    123400f8:	aa0503e0 	mov	x0, x5
-    123400fc:	97ffffce 	bl	12340034 <dwcssi_txwm_wait>
-    12340100:	350000c0 	cbnz	w0, 12340118 <dwcssi_wait_flash_idle+0x94>
+    61000138:	aa0503e0 	mov	x0, x5
+    6100013c:	97ffffce 	bl	61000074 <dwcssi_txwm_wait>
+    61000140:	350000c0 	cbnz	w0, 61000158 <dwcssi_wait_flash_idle+0x94>
     *value = ctrl_base[address / 4];
-    12340104:	b94028a1 	ldr	w1, [x5, #40]
+    61000144:	b94028a1 	ldr	w1, [x5, #40]
     if((dwcssi_sr >> 3) & 0x1) //rx fifo not empty
-    12340108:	361ffea1 	tbz	w1, #3, 123400dc <dwcssi_wait_flash_idle+0x58>
+    61000148:	361ffea1 	tbz	w1, #3, 6100011c <dwcssi_wait_flash_idle+0x58>
     *value = ctrl_base[address / 4];
-    1234010c:	b94060a1 	ldr	w1, [x5, #96]
+    6100014c:	b94060a1 	ldr	w1, [x5, #96]
             if((rx & SPIFLASH_BSY_BIT) == 0)
-    12340110:	3707fe61 	tbnz	w1, #0, 123400dc <dwcssi_wait_flash_idle+0x58>
-    12340114:	17fffff7 	b	123400f0 <dwcssi_wait_flash_idle+0x6c>
+    61000150:	3707fe61 	tbnz	w1, #0, 6100011c <dwcssi_wait_flash_idle+0x58>
+    61000154:	17fffff7 	b	61000130 <dwcssi_wait_flash_idle+0x6c>
 	    	return result | ERROR_STACK(0x000300);
-    12340118:	52806000 	mov	w0, #0x300                 	// #768
-    1234011c:	17fffff5 	b	123400f0 <dwcssi_wait_flash_idle+0x6c>
+    61000158:	52806000 	mov	w0, #0x300                 	// #768
+    6100015c:	17fffff5 	b	61000130 <dwcssi_wait_flash_idle+0x6c>
 
-0000000012340120 <flash_dwcssi>:
+0000000061000160 <flash_dwcssi>:
 {
-    12340120:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
-    12340124:	aa0003e6 	mov	x6, x0
-    12340128:	2a0103e9 	mov	w9, w1
-    1234012c:	910003fd 	mov	x29, sp
-    12340130:	aa0203ea 	mov	x10, x2
+    61000160:	a9bf7bfd 	stp	x29, x30, [sp, #-16]!
+    61000164:	aa0003e6 	mov	x6, x0
+    61000168:	2a0103e9 	mov	w9, w1
+    6100016c:	910003fd 	mov	x29, sp
+    61000170:	aa0203ea 	mov	x10, x2
     result = dwcssi_txwm_wait(ctrl_base);
-    12340134:	97ffffc0 	bl	12340034 <dwcssi_txwm_wait>
+    61000174:	97ffffc0 	bl	61000074 <dwcssi_txwm_wait>
     if(result != ERROR_OK)
-    12340138:	34000080 	cbz	w0, 12340148 <flash_dwcssi+0x28>
+    61000178:	34000080 	cbz	w0, 61000188 <flash_dwcssi+0x28>
         return result | ERROR_STACK(0x10000);
-    1234013c:	32100000 	orr	w0, w0, #0x10000
+    6100017c:	32100000 	orr	w0, w0, #0x10000
 }
-    12340140:	a8c17bfd 	ldp	x29, x30, [sp], #16
-    12340144:	d65f03c0 	ret
-    12340148:	2a0303e8 	mov	w8, w3
-    1234014c:	2a0403e7 	mov	w7, w4
-    12340150:	2a0503ec 	mov	w12, w5
+    61000180:	a8c17bfd 	ldp	x29, x30, [sp], #16
+    61000184:	d65f03c0 	ret
+    61000188:	2a0303e8 	mov	w8, w3
+    6100018c:	2a0403e7 	mov	w7, w4
+    61000190:	2a0503ec 	mov	w12, w5
     result = dwcssi_wait_flash_idle(ctrl_base);    
-    12340154:	aa0603e0 	mov	x0, x6
-    12340158:	97ffffcb 	bl	12340084 <dwcssi_wait_flash_idle>
+    61000194:	aa0603e0 	mov	x0, x6
+    61000198:	97ffffcb 	bl	610000c4 <dwcssi_wait_flash_idle>
     if(result != ERROR_OK)
-    1234015c:	34000080 	cbz	w0, 1234016c <flash_dwcssi+0x4c>
+    6100019c:	34000080 	cbz	w0, 610001ac <flash_dwcssi+0x4c>
         result |= ERROR_STACK(0x2000);
-    12340160:	32130007 	orr	w7, w0, #0x2000
+    610001a0:	32130007 	orr	w7, w0, #0x2000
     return result;
-    12340164:	2a0703e0 	mov	w0, w7
-    12340168:	17fffff6 	b	12340140 <flash_dwcssi+0x20>
+    610001a4:	2a0703e0 	mov	w0, w7
+    610001a8:	17fffff6 	b	61000180 <flash_dwcssi+0x20>
     uint32_t page_offset = offset & (page_size - 1);
-    1234016c:	51000520 	sub	w0, w9, #0x1
+    610001ac:	51000520 	sub	w0, w9, #0x1
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    12340170:	528181ed 	mov	w13, #0xc0f                 	// #3087
-    12340174:	528080ee 	mov	w14, #0x407                 	// #1031
+    610001b0:	528181ed 	mov	w13, #0xc0f                 	// #3087
+    610001b4:	528080ee 	mov	w14, #0x407                 	// #1031
         dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40000220, 0xFFFFFFFF);
-    12340178:	5280440f 	mov	w15, #0x220                 	// #544
+    610001b8:	5280440f 	mov	w15, #0x220                 	// #544
     uint32_t page_offset = offset & (page_size - 1);
-    1234017c:	0a080000 	and	w0, w0, w8
+    610001bc:	0a080000 	and	w0, w0, w8
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    12340180:	72a0180d 	movk	w13, #0xc0, lsl #16
-    12340184:	72a0100e 	movk	w14, #0x80, lsl #16
+    610001c0:	72a0180d 	movk	w13, #0xc0, lsl #16
+    610001c4:	72a0100e 	movk	w14, #0x80, lsl #16
         dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40000220, 0xFFFFFFFF);
-    12340188:	72a8000f 	movk	w15, #0x4000, lsl #16
+    610001c8:	72a8000f 	movk	w15, #0x4000, lsl #16
     while(count > 0) {
-    1234018c:	34fffec7 	cbz	w7, 12340164 <flash_dwcssi+0x44>
+    610001cc:	34fffec7 	cbz	w7, 610001a4 <flash_dwcssi+0x44>
         if(page_offset + count > page_size)
-    12340190:	0b0000e1 	add	w1, w7, w0
+    610001d0:	0b0000e1 	add	w1, w7, w0
             cur_count = page_size - page_offset;
-    12340194:	4b000120 	sub	w0, w9, w0
-    12340198:	6b09003f 	cmp	w1, w9
+    610001d4:	4b000120 	sub	w0, w9, w0
+    610001d8:	6b09003f 	cmp	w1, w9
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    1234019c:	2a0d03e3 	mov	w3, w13
+    610001dc:	2a0d03e3 	mov	w3, w13
             cur_count = page_size - page_offset;
-    123401a0:	1a87800b 	csel	w11, w0, w7, hi  // hi = pmore
+    610001e0:	1a87800b 	csel	w11, w0, w7, hi  // hi = pmore
     *value = ctrl_base[address / 4];
-    123401a4:	b94008c0 	ldr	w0, [x6, #8]
+    610001e4:	b94008c0 	ldr	w0, [x6, #8]
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    123401a8:	528080e2 	mov	w2, #0x407                 	// #1031
-    123401ac:	52800001 	mov	w1, #0x0                   	// #0
+    610001e8:	528080e2 	mov	w2, #0x407                 	// #1031
+    610001ec:	52800001 	mov	w1, #0x0                   	// #0
     dwcssi_write_reg(ctrl_base, DWCSSI_REG_SSIENR, ssic_en & ~DWCSSI_SSIC_EN(1));
-    123401b0:	121f7800 	and	w0, w0, #0xfffffffe
+    610001f0:	121f7800 	and	w0, w0, #0xfffffffe
     ctrl_base[address/4] = value;
-    123401b4:	b90008c0 	str	w0, [x6, #8]
+    610001f4:	b90008c0 	str	w0, [x6, #8]
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    123401b8:	aa0603e0 	mov	x0, x6
-    123401bc:	97ffff97 	bl	12340018 <dwcssi_set_bits>
+    610001f8:	aa0603e0 	mov	x0, x6
+    610001fc:	97ffff97 	bl	61000058 <dwcssi_set_bits>
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_TXFTLR, val, mask);
-    123401c0:	32009fe3 	mov	w3, #0xff00ff              	// #16711935
-    123401c4:	52800002 	mov	w2, #0x0                   	// #0
-    123401c8:	52800301 	mov	w1, #0x18                  	// #24
-    123401cc:	97ffff93 	bl	12340018 <dwcssi_set_bits>
+    61000200:	32009fe3 	mov	w3, #0xff00ff              	// #16711935
+    61000204:	52800002 	mov	w2, #0x0                   	// #0
+    61000208:	52800301 	mov	w1, #0x18                  	// #24
+    6100020c:	97ffff93 	bl	61000058 <dwcssi_set_bits>
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    123401d0:	2a0d03e3 	mov	w3, w13
+    61000210:	2a0d03e3 	mov	w3, w13
     *value = ctrl_base[address / 4];
-    123401d4:	b94008c1 	ldr	w1, [x6, #8]
+    61000214:	b94008c1 	ldr	w1, [x6, #8]
     dwcssi_write_reg(ctrl_base, DWCSSI_REG_SSIENR, ssic_en | DWCSSI_SSIC_EN(1));
-    123401d8:	32000021 	orr	w1, w1, #0x1
+    61000218:	32000021 	orr	w1, w1, #0x1
     ctrl_base[address/4] = value;
-    123401dc:	b90008c1 	str	w1, [x6, #8]
+    6100021c:	b90008c1 	str	w1, [x6, #8]
 static int dwcssi_flash_wr_en(volatile uint32_t *ctrl_base, uint8_t frf)
 {
     uint8_t tx_start_lv = 0;
 
     dwcssi_config_tx(ctrl_base, frf, 0, tx_start_lv);
     dwcssi_tx(ctrl_base, SPIFLASH_WRITE_ENABLE);
-    123401e0:	528000c1 	mov	w1, #0x6                   	// #6
-    123401e4:	97ffffa3 	bl	12340070 <dwcssi_tx>
+    61000220:	528000c1 	mov	w1, #0x6                   	// #6
+    61000224:	97ffffa3 	bl	610000b0 <dwcssi_tx>
     dwcssi_txwm_wait(ctrl_base);
-    123401e8:	aa0603e0 	mov	x0, x6
-    123401ec:	97ffff92 	bl	12340034 <dwcssi_txwm_wait>
+    61000228:	aa0603e0 	mov	x0, x6
+    6100022c:	97ffff92 	bl	61000074 <dwcssi_txwm_wait>
     *value = ctrl_base[address / 4];
-    123401f0:	b94008c0 	ldr	w0, [x6, #8]
+    61000230:	b94008c0 	ldr	w0, [x6, #8]
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    123401f4:	2a0e03e2 	mov	w2, w14
-    123401f8:	52800001 	mov	w1, #0x0                   	// #0
+    61000234:	2a0e03e2 	mov	w2, w14
+    61000238:	52800001 	mov	w1, #0x0                   	// #0
     dwcssi_write_reg(ctrl_base, DWCSSI_REG_SSIENR, ssic_en & ~DWCSSI_SSIC_EN(1));
-    123401fc:	121f7800 	and	w0, w0, #0xfffffffe
+    6100023c:	121f7800 	and	w0, w0, #0xfffffffe
     ctrl_base[address/4] = value;
-    12340200:	b90008c0 	str	w0, [x6, #8]
+    61000240:	b90008c0 	str	w0, [x6, #8]
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR0, val, mask);
-    12340204:	aa0603e0 	mov	x0, x6
-    12340208:	97ffff84 	bl	12340018 <dwcssi_set_bits>
+    61000244:	aa0603e0 	mov	x0, x6
+    61000248:	97ffff84 	bl	61000058 <dwcssi_set_bits>
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_TXFTLR, val, mask);
-    1234020c:	32009fe3 	mov	w3, #0xff00ff              	// #16711935
-    12340210:	52a00082 	mov	w2, #0x40000               	// #262144
-    12340214:	52800301 	mov	w1, #0x18                  	// #24
-    12340218:	97ffff80 	bl	12340018 <dwcssi_set_bits>
+    6100024c:	32009fe3 	mov	w3, #0xff00ff              	// #16711935
+    61000250:	52a00082 	mov	w2, #0x40000               	// #262144
+    61000254:	52800301 	mov	w1, #0x18                  	// #24
+    61000258:	97ffff80 	bl	61000058 <dwcssi_set_bits>
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(ndf), DWCSSI_CTRLR1_NDF_MASK);   
-    1234021c:	529fffe3 	mov	w3, #0xffff                	// #65535
+    6100025c:	529fffe3 	mov	w3, #0xffff                	// #65535
         dwcssi_config_CTRLR1(ctrl_base, tx_total_len - 1);
-    12340220:	51000562 	sub	w2, w11, #0x1
+    61000260:	51000562 	sub	w2, w11, #0x1
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(ndf), DWCSSI_CTRLR1_NDF_MASK);   
-    12340224:	52800081 	mov	w1, #0x4                   	// #4
-    12340228:	12003c42 	and	w2, w2, #0xffff
-    1234022c:	97ffff7b 	bl	12340018 <dwcssi_set_bits>
+    61000264:	52800081 	mov	w1, #0x4                   	// #4
+    61000268:	12003c42 	and	w2, w2, #0xffff
+    6100026c:	97ffff7b 	bl	61000058 <dwcssi_set_bits>
         dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40000220, 0xFFFFFFFF);
-    12340230:	2a0f03e2 	mov	w2, w15
-    12340234:	12800003 	mov	w3, #0xffffffff            	// #-1
-    12340238:	52801e81 	mov	w1, #0xf4                  	// #244
-    1234023c:	97ffff77 	bl	12340018 <dwcssi_set_bits>
+    61000270:	2a0f03e2 	mov	w2, w15
+    61000274:	12800003 	mov	w3, #0xffffffff            	// #-1
+    61000278:	52801e81 	mov	w1, #0xf4                  	// #244
+    6100027c:	97ffff77 	bl	61000058 <dwcssi_set_bits>
     *value = ctrl_base[address / 4];
-    12340240:	b94008c1 	ldr	w1, [x6, #8]
+    61000280:	b94008c1 	ldr	w1, [x6, #8]
 
     // printf("dwcssi slow write offset %x len %x\n", offset, len);
     dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
     dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x4);
     dwcssi_tx(ctrl_base, flash_info);
     dwcssi_tx(ctrl_base, offset);
-    12340244:	d2800003 	mov	x3, #0x0                   	// #0
+    61000284:	d2800003 	mov	x3, #0x0                   	// #0
     dwcssi_write_reg(ctrl_base, DWCSSI_REG_SSIENR, ssic_en | DWCSSI_SSIC_EN(1));
-    12340248:	32000021 	orr	w1, w1, #0x1
+    61000288:	32000021 	orr	w1, w1, #0x1
     ctrl_base[address/4] = value;
-    1234024c:	b90008c1 	str	w1, [x6, #8]
+    6100028c:	b90008c1 	str	w1, [x6, #8]
     dwcssi_tx(ctrl_base, flash_info);
-    12340250:	2a0c03e1 	mov	w1, w12
-    12340254:	97ffff87 	bl	12340070 <dwcssi_tx>
+    61000290:	2a0c03e1 	mov	w1, w12
+    61000294:	97ffff87 	bl	610000b0 <dwcssi_tx>
     dwcssi_tx(ctrl_base, offset);
-    12340258:	2a0803e1 	mov	w1, w8
-    1234025c:	aa0603e0 	mov	x0, x6
-    12340260:	97ffff84 	bl	12340070 <dwcssi_tx>
+    61000298:	2a0803e1 	mov	w1, w8
+    6100029c:	aa0603e0 	mov	x0, x6
+    610002a0:	97ffff84 	bl	610000b0 <dwcssi_tx>
     for(i = 0; i < in_cnt; i++)
-    12340264:	6b03017f 	cmp	w11, w3
-    12340268:	54000108 	b.hi	12340288 <flash_dwcssi+0x168>  // b.pmore
+    610002a4:	6b03017f 	cmp	w11, w3
+    610002a8:	54000108 	b.hi	610002c8 <flash_dwcssi+0x168>  // b.pmore
     return (dwcssi_txwm_wait(ctrl_base));
-    1234026c:	aa0603e0 	mov	x0, x6
-    12340270:	97ffff71 	bl	12340034 <dwcssi_txwm_wait>
+    610002ac:	aa0603e0 	mov	x0, x6
+    610002b0:	97ffff71 	bl	61000074 <dwcssi_txwm_wait>
     dwcssi_tx_buf(ctrl_base, buffer, len);
     return dwcssi_wait_flash_idle(ctrl_base);
-    12340274:	aa0603e0 	mov	x0, x6
-    12340278:	97ffff83 	bl	12340084 <dwcssi_wait_flash_idle>
+    610002b4:	aa0603e0 	mov	x0, x6
+    610002b8:	97ffff83 	bl	610000c4 <dwcssi_wait_flash_idle>
         if(result != ERROR_OK)
-    1234027c:	34000100 	cbz	w0, 1234029c <flash_dwcssi+0x17c>
+    610002bc:	34000100 	cbz	w0, 610002dc <flash_dwcssi+0x17c>
             result |= ERROR_STACK(0x20000);
-    12340280:	320f0007 	orr	w7, w0, #0x20000
+    610002c0:	320f0007 	orr	w7, w0, #0x20000
             goto err;
-    12340284:	17ffffb8 	b	12340164 <flash_dwcssi+0x44>
+    610002c4:	17ffffb8 	b	610001a4 <flash_dwcssi+0x44>
         dwcssi_tx(ctrl_base, *(in_buf+i));
-    12340288:	38636941 	ldrb	w1, [x10, x3]
-    1234028c:	aa0603e0 	mov	x0, x6
-    12340290:	91000463 	add	x3, x3, #0x1
-    12340294:	97ffff77 	bl	12340070 <dwcssi_tx>
+    610002c8:	38636941 	ldrb	w1, [x10, x3]
+    610002cc:	aa0603e0 	mov	x0, x6
+    610002d0:	91000463 	add	x3, x3, #0x1
+    610002d4:	97ffff77 	bl	610000b0 <dwcssi_tx>
     for(i = 0; i < in_cnt; i++)
-    12340298:	17fffff3 	b	12340264 <flash_dwcssi+0x144>
+    610002d8:	17fffff3 	b	610002a4 <flash_dwcssi+0x144>
         buffer += cur_count;
-    1234029c:	8b2b414a 	add	x10, x10, w11, uxtw
+    610002dc:	8b2b414a 	add	x10, x10, w11, uxtw
         offset += cur_count;
-    123402a0:	0b0b0108 	add	w8, w8, w11
+    610002e0:	0b0b0108 	add	w8, w8, w11
         count  -= cur_count;
-    123402a4:	4b0b00e7 	sub	w7, w7, w11
-    123402a8:	17ffffb9 	b	1234018c <flash_dwcssi+0x6c>
+    610002e4:	4b0b00e7 	sub	w7, w7, w11
+    610002e8:	17ffffb9 	b	610001cc <flash_dwcssi+0x6c>

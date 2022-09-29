@@ -1145,7 +1145,7 @@ static int armv8_aarch64_state(struct target *target)
 		return ERROR_FAIL;
 	}
 
-	LOG_USER("%s halted in %s state due to %s, current mode: %s\n"
+	LOG_DEBUG("%s halted in %s state due to %s, current mode: %s\n"
 		"cpsr: 0x%8.8" PRIx32 " pc: 0x%" PRIx64 "%s",
 		target_name(target),
 		armv8_state_strings[arm->core_state],
@@ -1177,7 +1177,7 @@ int armv8_arch_state(struct target *target)
 	else
 		arm_arch_state(target);
 
-	LOG_USER("MMU: %s, D-Cache: %s, I-Cache: %s",
+	LOG_DEBUG("MMU: %s, D-Cache: %s, I-Cache: %s",
 		state[armv8->armv8_mmu.mmu_enabled],
 		state[armv8->armv8_mmu.armv8_cache.d_u_cache_enabled],
 		state[armv8->armv8_mmu.armv8_cache.i_cache_enabled]);

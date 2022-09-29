@@ -789,13 +789,11 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 
             LOG_DEBUG("count %x loader init time %llx", count, used_time);
             LOG_DEBUG("write(ctrl_base=0x%" TARGET_PRIxADDR ", page_size=0x%x, "
-					"address=0x%" TARGET_PRIxADDR ", offset=0x%" PRIx32
+					"data_address=0x%" TARGET_PRIxADDR ", offset=0x%" PRIx32
 					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
 					dwcssi_info->ctrl_base, page_size, data_wa->address, offset, cur_count,
 					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-			// retval = target_run_algorithm(target, 0, NULL,
-			// 		ARRAY_SIZE(reg_params), reg_params,
-			// 		algorithm_wa->address, 0, cur_count * 2, NULL);
+
             start = timeval_ms();
 			retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
@@ -809,7 +807,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
             
 			if (algorithm_result != 0) {
-			    LOG_INFO("Algorithm returned error %llx", algorithm_result);
+			    LOG_DEBUG("Algorithm returned error %llx", algorithm_result);
 				retval = ERROR_FAIL;
 				goto err;
 			}

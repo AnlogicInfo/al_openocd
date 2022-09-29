@@ -1,19 +1,16 @@
-.section ".text.boot"
-.global	_start
 
-# define LREG lw
-# define SREG sw
-# define REGBYTES 4
+# define REGBYTES 16
 
+		.section .text.entry
+		.global _start
 _start:
 		ldr x28, =stack_end
         mov sp, x28
-		b    	flash_dwcssi
-        hlt #0xF00
+		bl    	flash_dwcssi
 
-
+        hlt #0x0B
 		.section .data
 		.balign REGBYTES
 stack:
-		.fill	16, REGBYTES, 0x8675309
+		.fill	64, REGBYTES, 0x8675309
 stack_end:

@@ -617,7 +617,6 @@ static int aarch64_restore_one(struct target *target, int current,
 			LOG_ERROR("How do I resume into Jazelle state??");
 			return ERROR_FAIL;
 	}
-	LOG_DEBUG("resume pc = 0x%016" PRIx64, resume_pc);
 	buf_set_u64(arm->pc->value, 0, 64, resume_pc);
 	arm->pc->dirty = true;
 	arm->pc->valid = true;
@@ -710,7 +709,6 @@ static int aarch64_do_restart_one(struct target *target, enum restart_mode mode)
 						PRSR_SDR, PRSR_SDR, &resumed, &prsr);
 			if (retval != ERROR_OK || resumed)
 			{
-				LOG_INFO("restart prsr %08x", prsr);
 				break;
 			}
 
@@ -2896,92 +2894,108 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 		struct reg_param *reg_params, target_addr_t entry_point,
 		target_addr_t exit_point, int timeout_ms, void *arch_info)
 {
-	// struct arm *arm = target_to_arm(target);
-	// int current = 1;
-	// target_addr_t addr;
-	// int i;
-	// int retval = ERROR_OK;
+	struct arm *arm = target_to_arm(target);
+	int i;
+	// check target
 
-	// // check target
-	// if (arm->common_magic != ARM_COMMON_MAGIC) {
-	// 	LOG_ERROR("BUG: called for a non-ARM target");
-	// 	return ERROR_FAIL;
-	// }
+	if (arm->common_magic != ARM_COMMON_MAGIC) {
+		LOG_ERROR("BUG: called for a non-ARM target");
+		return ERROR_FAIL;
+	}
 
-	// if(num_mem_params > 0)
-	// {
-	// 	LOG_ERROR("Memory parameters are not supported for AARCH64 algorithms.");
-	// 	return ERROR_FAIL;		
-	// }
+	if(num_mem_params > 0)
+	{
+		LOG_ERROR("Memory parameters are not supported for AARCH64 algorithms.");
+		return ERROR_FAIL;		
+	}
 
-	// if (target->state != TARGET_HALTED) {
-	// 	LOG_WARNING("target not halted");
-	// 	return ERROR_TARGET_NOT_HALTED;
-	// }
-	// // save registers
-	// struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
-	// if (!reg_pc || reg_pc->type->get(reg_pc) != ERROR_OK)
-	// 	return ERROR_FAIL;
-	// uint64_t saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
-	// LOG_DEBUG("saved_pc=0x%" PRIx64, saved_pc);
+	if (target->state != TARGET_HALTED) {
+		LOG_WARNING("target not halted");
+		return ERROR_TARGET_NOT_HALTED;
+	}
+	// save registers
+	struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
+	if (!reg_pc || reg_pc->type->get(reg_pc) != ERROR_OK)
+		return ERROR_FAIL;
+	uint64_t saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
+	LOG_DEBUG("saved_pc=0x%" PRIx64, saved_pc);
 
-	// uint64_t saved_regs[31];
-	// for (int i = 0; i < num_reg_params; i++) {
-	// 	LOG_DEBUG("save %s", reg_params[i].reg_name);
-	// 	struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-	// 	if (!r) {
-	// 		LOG_ERROR("Couldn't find register named '%s'", reg_params[i].reg_name);
-	// 		return ERROR_FAIL;
-	// 	}
+	uint64_t saved_regs[31];
+	for (i = 0; i < num_reg_params; i++) {
+		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
+		if (!r) {
+			LOG_ERROR("Couldn't find register named '%s'", reg_params[i].reg_name);
+			return ERROR_FAIL;
+		}
 
-	// 	if (r->size != reg_params[i].size) {
-	// 		LOG_ERROR("Register %s is %d bits instead of %d bits.",
-	// 				reg_params[i].reg_name, r->size, reg_params[i].size);
-	// 		return ERROR_FAIL;
-	// 	}
+		if (r->size != reg_params[i].size) {
+			LOG_ERROR("Register %s is %d bits instead of %d bits.",
+					reg_params[i].reg_name, r->size, reg_params[i].size);
+			return ERROR_FAIL;
+		}
 
-	// 	if (r->number > 30) {
-	// 		LOG_ERROR("Only GPRs can be use as argument registers.");
-	// 		return ERROR_FAIL;
-	// 	}
+		if (r->number > 30) {
+			LOG_ERROR("Only GPRs can be use as argument registers.");
+			return ERROR_FAIL;
+		}
 
-	// 	if (r->type->get(r) != ERROR_OK)
-	// 		return ERROR_FAIL;
-	// 	saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
+		saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
+		LOG_DEBUG("save %s val %llx", reg_params[i].reg_name, saved_regs[r->number]);
 
-	// 	if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
-	// 		if (r->type->set(r, reg_params[i].value) != ERROR_OK)
-	// 			return ERROR_FAIL;
-	// 	}
-	// }
+		if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
+			if (r->type->set(r, reg_params[i].value) != ERROR_OK)
+				return ERROR_FAIL;
+		}
+	}
 
-	// // run algorithm
-	// if(aarch64_resume(target, 0, entry_point, 0, 0) != ERROR_OK)
-	// 	return ERROR_FAIL;
 
-	// int64_t start = timeval_ms();
-	// while(target->state != TARGET_HALTED)
-	// {
-	// 	int64_t now = timeval_ms();
-	// 	if(now - start > timeout_ms)
-	// 	{
-	// 		aarch64_halt(target);
-	// 		return ERROR_TARGET_TIMEOUT;
-	// 	}
-	// }
+	// run algorithm
+	if(target_resume(target, 0, entry_point, 1, 1) != ERROR_OK)
+		return ERROR_FAIL;
 
-	// /* Restore registers */
-	// //restore pc
-	// uint8_t buf[8] = { 0 };
-	// buf_set_u64(buf, 0, info->xlen, saved_pc);
-	// if (reg_pc->type->set(reg_pc, buf) != ERROR_OK)
-	// 	return ERROR_FAIL;
+	int64_t start = timeval_ms();
 
-	// // restore
-	// aarch64_restore_one(target, current, &addr, 0, 0);
+	while(target->state != TARGET_HALTED)
+	{
+		int64_t now = timeval_ms();
+		if(now - start > timeout_ms)
+		{
+			LOG_ERROR("Run Algorithm Timeout");
+			aarch64_halt(target);
+			return ERROR_TARGET_TIMEOUT;
+		}
+		aarch64_poll(target);
+	}
+
+	/* Restore registers */
+	//restore pc
+	uint8_t buf[8] = { 0 };
+	buf_set_u64(buf, 0, 64, saved_pc);
+	if (reg_pc->type->set(reg_pc, buf) != ERROR_OK)
+		return ERROR_FAIL;
+
+	LOG_DEBUG("restore pc val %llx",saved_pc);
+
+	// restore
+	for (i = 0; i < num_reg_params; i++) {
+		if (reg_params[i].direction != PARAM_OUT) {
+			struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
+			LOG_DEBUG("update reg_parm %s val %llx", reg_params[i].reg_name, buf_get_u64(r->value, 0, r->size));
+			buf_set_u64(reg_params[i].value, 0, 64, buf_get_u64(r->value, 0, 64));
+		}
+		LOG_DEBUG("restore %s", reg_params[i].reg_name);
+		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
+		buf_set_u64(buf, 0, 64, saved_regs[r->number]);
+		LOG_DEBUG("restore %s val %llx", r->name, saved_regs[r->number]);
+		if (r->type->set(r, buf) != ERROR_OK) {
+			LOG_ERROR("set(%s) failed", r->name);
+			return ERROR_FAIL;
+		}
+	}
 
 	return ERROR_OK;
 }
+
 
 
 COMMAND_HANDLER(aarch64_handle_cache_info_command)
@@ -3080,10 +3094,12 @@ COMMAND_HANDLER(aarch64_ap_rw_command)
 
 		COMMAND_PARSE_NUMBER(uint, CMD_ARGV[2], data);
 		retval = mem_ap_write_atomic_u32(armv8->debug_ap, address, data);
+		LOG_INFO("mem ap wr addr %llx val %x", address, data);		
 	}
 	else if(strcmp(CMD_ARGV[0], "rd") == 0)
 	{
 		retval = mem_ap_read_atomic_u32(armv8->debug_ap, address, &rd_val);
+		LOG_INFO("mem ap rd addr %llx val %x", address, rd_val);
 		if((address & 0xFFF) == 0x314)
 		{
 			LOG_INFO("CPUV8_DBG_PRSR 0x314 rd val %x", rd_val);
@@ -3128,6 +3144,7 @@ COMMAND_HANDLER(aarch64_dpm_rw)
 	else if(strcmp(CMD_ARGV[0], "rd") == 0)
 	{
 		retval = armv8->read_reg_u64(armv8, regnum, &rd_val);
+		LOG_INFO("dpm rd arm reg %d val %llx", regnum, rd_val);
 	}
 	else
 	{

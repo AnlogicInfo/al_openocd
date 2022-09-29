@@ -11,22 +11,7 @@
 
 #include "../../../../../src/flash/nor/spi.h"
 
-#define __STR(s)                #s
-#define STRINGIFY(s)            __STR(s)
 
-#define __RV_CSR_CLEAR(csr, val)                                \
-    ({                                                          \
-        register uint64_t __v = (uint64_t)(val);                \
-        __asm volatile("csrc " STRINGIFY(csr) ", %0"            \
-                     :                                          \
-                     : "rK"(__v)                                \
-                     : "memory");                               \
-    })
-
-/* === Nuclei custom CSR Registers === */
-#define CSR_MMISC_CTL           0x7D0
-/* === Nuclei custom CSR bit mask === */
-#define MMISC_CTL_BPU               (1<<3)
 /*Register offsets*/
 #define     DWCSSI_REG_CTRLR0                         0x0
 #define     DWCSSI_REG_CTRLR1                         0x4
@@ -149,13 +134,10 @@ static void dwcssi_enable(volatile uint32_t *ctrl_base);
 static int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base);
 static int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offest, uint32_t len, uint32_t flash_info);
 
+
 int flash_dwcssi(volatile uint32_t *ctrl_base, uint32_t page_size, const uint8_t *buffer, uint32_t offset, uint32_t count, uint32_t flash_info)
 {
     uint32_t result = 0;
-
-
-    // __RV_CSR_CLEAR(CSR_MMISC_CTL,MMISC_CTL_BPU);
-
     result = dwcssi_txwm_wait(ctrl_base);
     if(result != ERROR_OK)
         return result | ERROR_STACK(0x10000);

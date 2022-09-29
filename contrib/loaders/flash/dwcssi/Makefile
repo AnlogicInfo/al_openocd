@@ -38,7 +38,7 @@ LD_SCRIPT		= $(WORK_DIR)/scripts/$(ISA).lds
 ## comilation config
 ifeq ($(ISA),aarch)
 	CROSS_COMPILE := aarch64-none-elf-
-	COMMON_FLAGS  :=
+	COMMON_FLAGS  := -mabi=lp64
 else
 	CROSS_COMPILE := riscv64-unknown-elf-
 	ifeq ($(PLATFORM),32)
@@ -60,7 +60,7 @@ READELF   = $(CROSS_COMPILE)readelf
 INC_PATH += $(WORK_DIR)/src/boot/$(ISA)
 INCFLAGS += $(addprefix -I, $(INC_PATH))
 
-CFLAGS   += -nostdlib -nostartfiles -Wall -Werror -Os -fPIC -Wunused-result -g
+CFLAGS   += -nostdlib -fno-builtin  -nostartfiles -Wall -Werror  -Os -fPIC -Wunused-result -g $(INCFLAGS)
 ASFLAGS  += -MMD $(INCFLAGS)
 
 $(info # Compiler $(CROSS_COMPILE))
