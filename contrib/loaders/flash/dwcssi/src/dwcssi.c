@@ -151,7 +151,8 @@ int flash_dwcssi(volatile uint32_t *ctrl_base, uint32_t page_size, const uint8_t
 
     uint32_t page_offset = offset & (page_size - 1);
 
-    while(count > 0) {
+    while(count > 0)
+    {
         uint32_t cur_count;
 
         if(page_offset + count > page_size)

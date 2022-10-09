@@ -233,7 +233,7 @@ static int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
     610001c4:	72a0100e 	movk	w14, #0x80, lsl #16
         dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40000220, 0xFFFFFFFF);
     610001c8:	72a8000f 	movk	w15, #0x4000, lsl #16
-    while(count > 0) {
+    while(count > 0)
     610001cc:	34fffec7 	cbz	w7, 610001a4 <flash_dwcssi+0x44>
         if(page_offset + count > page_size)
     610001d0:	0b0000e1 	add	w1, w7, w0

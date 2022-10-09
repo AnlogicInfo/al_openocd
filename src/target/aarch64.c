@@ -2948,7 +2948,6 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 		}
 	}
 
-
 	// run algorithm
 	if(target_resume(target, 0, entry_point, 1, 1) != ERROR_OK)
 		return ERROR_FAIL;
@@ -2983,14 +2982,15 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 			LOG_DEBUG("update reg_parm %s val %llx", reg_params[i].reg_name, buf_get_u64(r->value, 0, r->size));
 			buf_set_u64(reg_params[i].value, 0, 64, buf_get_u64(r->value, 0, 64));
 		}
-		LOG_DEBUG("restore %s", reg_params[i].reg_name);
 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
 		buf_set_u64(buf, 0, 64, saved_regs[r->number]);
 		LOG_DEBUG("restore %s val %llx", r->name, saved_regs[r->number]);
-		if (r->type->set(r, buf) != ERROR_OK) {
-			LOG_ERROR("set(%s) failed", r->name);
-			return ERROR_FAIL;
-		}
+		r->valid = true;
+		r->dirty = true;
+		// if (r->type->set(r, buf) != ERROR_OK) {
+		// 	LOG_ERROR("set(%s) failed", r->name);
+		// 	return ERROR_FAIL;
+		// }
 	}
 
 	return ERROR_OK;
