@@ -4,9 +4,11 @@
 #include <stdint.h>
 
 #define SMC_MAX_TARGETS			1		/* Max number of targets supported */
+#define SMC_MAX_PAGE_SIZE		4096	/* Max page size of NAND flash */
+#define SMC_MAX_SPARE_SIZE		256		/* Max spare bytes of a NAND flash page */
+#define SMC_MAX_PAGES_PER_BLOCK	512
 #define SMC_MAX_BLOCKS			32768	/* Max number of Blocks */
-#define SMC_MAX_PAGE_SIZE		16384	/* Max page size of NAND flash */
-#define SMC_MAX_SPARE_SIZE		512		/* Max spare bytes of a NAND flash page */
+#define SMC_MAX_LUNS			8	/**< Max number of LUNs */
 
 #define NAND_ECC_BLOCK_SIZE		512		/* ECC block size */
 #define NAND_ECC_BYTES			3		/* ECC bytes per ECC block */
