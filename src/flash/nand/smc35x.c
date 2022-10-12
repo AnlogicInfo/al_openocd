@@ -4,21 +4,6 @@
 #include <target/target.h>
 
 typedef struct{
-	uint8_t ecc_read:5;
-	uint8_t ecc_can_correct:5;
-	uint8_t ecc_fail:5;
-	uint8_t ecc_value_valid:5;
-	uint8_t ecc_rd_n_wr:1;
-	uint8_t ecc_last_status:2;
-	uint8_t ecc_status:1;
-	uint8_t ecc_int_status:6;
-}test;
-
-#define TEST ((test*)(SMC_BASE+SMC_REG_ECC1_STATUS))
-
-uint8_t buf[2048];
-
-typedef struct{
 	uint32_t dataBytesPerPage;		/* per page contains data byte numbers*/
 	uint16_t spareBytesPerPage;		/* per page contains spare byte numbers*/
 	uint32_t pagesPerBlock;			/* per block contains page  numbers*/
@@ -254,7 +239,7 @@ int smc35x_read_parameter(struct nand_device *nand, nand_size_type *nand_size)
 }
 
 
-int smc35x_ecc1_init(struct nand_device *nand, nand_size_type *nand_size)
+uint32_t smc35x_ecc1_init(struct nand_device *nand, nand_size_type *nand_size)
 {
 	uint32_t ecc1Config, status;
 	struct target *target = nand->target;
@@ -455,6 +440,7 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 	return SmcSuccess;
 }
 
+
 uint8_t *smc35x_oob_init(struct nand_device *nand, uint8_t *oob, uint32_t *size, uint32_t spare_size)
 {
 	if (!oob || *size == 0) {
@@ -493,20 +479,20 @@ int smc35x_ecc_calculate(struct nand_device *nand, uint8_t *ecc_data, uint8_t ec
 	for (ecc_reg = 0; ecc_reg < ecc_data_nums/3; ++ecc_reg)
 	{
 		target_read_u32(target, (SMC_BASE + SMC_REG_ECC1_BLOCK0 + ecc_reg * 4), &ecc_value);
-		LOG_INFO("ecc value: %x\r\n", ecc_value);
+		LOG_INFO("ecc value: %x", ecc_value);
 		if((ecc_value) & (1 << SMC_EccBlock_ISCheakValueValid_FIELD))
 		{
 			for(count=0; count < 3; ++count)
 			{
 				*ecc_data = ecc_value & 0xFF;
-				LOG_INFO("dst: %d\r\n", *ecc_data);
+				LOG_INFO("dst: %d", *ecc_data);
 				ecc_value = ecc_value >> 8;
 				++ecc_data;
 			}
 		}
 		else
 		{
-			LOG_INFO("EccInvalidErr\r\n");
+			LOG_INFO("EccInvalidErr");
 			return SmcEccDataInvalidErr;
 		}
 	}
@@ -514,6 +500,59 @@ int smc35x_ecc_calculate(struct nand_device *nand, uint8_t *ecc_data, uint8_t ec
 	return ERROR_OK;
 }
 
+uint8_t smc35x_ecc_correct(uint8_t *eccCode, uint8_t *eccCalc, uint8_t *buf)
+{
+	uint8_t bitPos;
+	uint32_t bytePos;
+	uint16_t eccOdd, eccEven;
+	uint16_t readEccLow, readEccHigh;
+	uint16_t calcEccLow, calcEccHigh;
+
+	/* Lower 12 bits of ECC Read */
+	readEccLow = (eccCode[0] | (eccCode[1] << 8)) & 0xfff;
+
+	/* Upper 12 bits of ECC Read */
+	readEccHigh = ((eccCode[1] >> 4) | (eccCode[2] << 4)) & 0xfff;
+
+	/* Lower 12 bits of ECC calculated */
+	calcEccLow = (eccCalc[0] | (eccCalc[1] << 8)) & 0xfff;
+
+	/* Upper 12 bits of ECC Calculated */
+	calcEccHigh = ((eccCalc[1] >> 4) | (eccCalc[2] << 4)) & 0xfff;
+
+	eccOdd = readEccLow ^ calcEccLow;
+	eccEven = readEccHigh ^ calcEccHigh;
+
+	/* No Error */
+	if ((eccOdd == 0) && (eccEven == 0))
+	{
+		LOG_INFO("0 bit error");
+		return SmcSuccess;
+	}
+
+	/* One bit Error */
+	if (eccOdd == (~eccEven & 0xfff))
+	{
+		bytePos = (eccOdd >> 3) & 0x1ff;
+		bitPos = eccOdd & 0x07;
+		/* Toggling error bit */
+		buf[bytePos] ^= (1 << bitPos);
+		LOG_INFO("1 bit error");
+		LOG_INFO("bytepos:%u bitpos:%u", bytePos, bitPos);
+		return SmcSuccess;
+	}
+
+	/* Two bits Error */
+	if (OneHot((eccOdd | eccEven)) == SmcSuccess)
+	{
+		LOG_INFO("2 bit error");
+		return SmcTwoBitsErr;
+	}
+
+	LOG_INFO("multiple bit error");
+	/* Multiple bits error */
+	return SmcMultipleBitsErr;
+}
 
 int smc35x_read_page_internalecc(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
@@ -533,7 +572,7 @@ int smc35x_read_page_internalecc(struct nand_device *nand, uint32_t page, uint8_
 	for (index = 0; index < data_size; ++index, ++data)
 	{
 		target_read_u8(target, data_phase_addr, data);
-		LOG_INFO("page %d index %d read data %x", page, index, *data);
+		// LOG_INFO("page %d index %d read data %x", page, index, *data);
 	}
 
 	oob = smc35x_oob_init(nand, oob, &oob_size, smc35x_info->nand_size.spareBytesPerPage);
@@ -541,13 +580,13 @@ int smc35x_read_page_internalecc(struct nand_device *nand, uint32_t page, uint8_
 	for (index = 0; index < oob_size-ONFI_AXI_DATA_WIDTH; ++index, ++oob)
 	{
 		target_read_u8(target, data_phase_addr, oob);
-		LOG_INFO("page %d index %d read oob %x", page, index, *oob);
+		// LOG_INFO("page %d index %d read oob %x", page, index, *oob);
 	}
 	data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
 	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++oob)
 	{
 		target_read_u8(target, data_phase_addr, oob);
-		LOG_INFO("page %d index %d read oob %x", page, index, *oob);
+		// LOG_INFO("page %d index %d read oob %x", page, index, *oob);
 	}
 
 	if (!oob_data) {
@@ -579,13 +618,13 @@ int smc35x_read_page_ecc1(struct nand_device *nand, uint32_t page, uint8_t *data
 			for (index = 0; index < oob_size - ONFI_AXI_DATA_WIDTH; ++index, ++oob)
 			{
 				target_read_u8(target, data_phase_addr, oob);
-				LOG_INFO("page %d index %d read oob %x", page, index, *oob);
+				// LOG_INFO("page %d index %d read oob %x", page, index, *oob);
 			}
 			data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
 			for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++oob)
 			{
 				target_read_u8(target, data_phase_addr, oob);
-				LOG_INFO("page %d index %d read oob %x", page, index, *oob);
+				// LOG_INFO("page %d index %d read oob %x", page, index, *oob);
 			}
 		}
 
@@ -596,13 +635,13 @@ int smc35x_read_page_ecc1(struct nand_device *nand, uint32_t page, uint8_t *data
 		for (index = 0; index < data_size - ONFI_AXI_DATA_WIDTH; ++index, ++data)
 		{
 			target_read_u8(target, data_phase_addr, data);
-			LOG_INFO("page %d index %d read data %x", page, index, *data);
+			// LOG_INFO("page %d index %d read data %x", page, index, *data);
 		}
 		data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11) | (ECC_LAST << 10);
 		for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++data)
 		{
 			target_read_u8(target, data_phase_addr, data);
-			LOG_INFO("page %d index %d read data %x", page, index, *data);
+			// LOG_INFO("page %d index %d read data %x", page, index, *data);
 		}
 	}
 
@@ -637,13 +676,13 @@ int smc35x_read_page_ecc1(struct nand_device *nand, uint32_t page, uint8_t *data
 		for (index = 0; index < oob_size - ONFI_AXI_DATA_WIDTH; ++index, ++oob)
 		{
 			target_read_u8(target, data_phase_addr, oob);
-			LOG_INFO("page %d index %d read oob %x", page, index, *oob);
+			// LOG_INFO("page %d index %d read oob %x", page, index, *oob);
 		}
 		data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
 		for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++oob)
 		{
 			target_read_u8(target, data_phase_addr, oob);
-			LOG_INFO("page %d index %d read oob %x", page, index, *oob);
+			// LOG_INFO("page %d index %d read oob %x", page, index, *oob);
 		}
 	}
 
@@ -657,7 +696,7 @@ int smc35x_read_page_ecc1(struct nand_device *nand, uint32_t page, uint8_t *data
 	i = smc35x_info->nand_size.dataBytesPerPage/NAND_ECC_BLOCK_SIZE;
 	for(; i; i--)
 	{
-		status = Nand_HwCorrectEcc(&ReadEccData[EccOffset], &eccData[EccOffset], TempBuf);
+		status = smc35x_ecc_correct(&ReadEccData[EccOffset], &eccData[EccOffset], TempBuf);
 		if(status != SUCCESS_FLAG){
 			return status;
 		}
@@ -724,7 +763,8 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
-	uint32_t index, status, eccDataNums, *dataOffsetPtr;
+	uint32_t index, status;
+	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
 	uint8_t eccData[12] = {0};
 	uint8_t *oob_data = oob, *oob_free;
 
@@ -751,14 +791,14 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 
 	for (index = 0; index < data_size-ONFI_AXI_DATA_WIDTH; ++index)
 	{
-		LOG_INFO("page %d index %d write data %x", page, index, data[index]);
+		// LOG_INFO("page %d index %d write data %x", page, index, data[index]);
 		target_write_u8(target, data_phase_addr, data[index]);
 	}
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10);
 	data += data_size - ONFI_AXI_DATA_WIDTH;
 	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
 	{
-		LOG_INFO("page %d index %d write data %x", page, index, data[index]);
+		// LOG_INFO("page %d index %d write data %x", page, index, data[index]);
 		target_write_u8(target, data_phase_addr, data[index]);
 	}
 
@@ -782,21 +822,23 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 			break;
 		default:
 			/* Page size 256 bytes & 4096 bytes not supported by ECC block */
-			return FAILED_FLAG;
+			break;
 	}
 	oob_data = smc35x_oob_init(nand, oob, &oob_size, nand_size->spareBytesPerPage);
 	oob_free = oob_data;
-	smc35x_ecc_calculate(nand, eccData, eccDataNums);
-	for(index = 0; index < eccDataNums; index++)
-	{
-		oob_data[dataOffsetPtr[index]] = (~eccData[index]);
+	if (nand_size->eccNum == 1 && dataOffsetPtr != NULL) {
+		smc35x_ecc_calculate(nand, eccData, eccDataNums);
+		for(index = 0; index < eccDataNums; index++)
+		{
+			oob_data[dataOffsetPtr[index]] = (~eccData[index]);
+		}
 	}
 
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
 	oob_size = nand_size->spareBytesPerPage-ONFI_AXI_DATA_WIDTH;
 	for (index = 0; index < oob_size; ++index)
 	{
-		LOG_INFO("page %d index %d write data %x", page, index, oob_data[index]);
+		// LOG_INFO("page %d index %d write data %x", page, index, oob_data[index]);
 		target_write_u8(target, data_phase_addr, oob_data[index]);
 	}
 	data_phase_addr = NAND_BASE | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
@@ -804,7 +846,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 	oob_data += (nand_size->spareBytesPerPage-ONFI_AXI_DATA_WIDTH);
 	for (index = 0; index < oob_size; ++index)
 	{
-		LOG_INFO("page %d index %d write data %x", page, index, oob_data[index]);
+		// LOG_INFO("page %d index %d write data %x", page, index, oob_data[index]);
 		target_write_u8(target, data_phase_addr, oob_data[index]);
 	}
 
