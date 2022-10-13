@@ -16,9 +16,6 @@ int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwc
     unsigned int sector;
     struct flash_sector *sectors;
 
-    dwcssi_info->flash_start_offset = 0;
-    // dwcssi_info->flash_start_offset = 0x20000;
-
     sectorsize = dwcssi_info->dev->sectorsize ? dwcssi_info->dev->sectorsize : dwcssi_info->dev->size_in_bytes;
     bank->num_sectors = 0x1FE;
     bank->size = sectorsize * bank->num_sectors;
@@ -31,7 +28,7 @@ int s25fl256s_sector_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwc
 
     for(sector = 0; sector < bank->num_sectors; sector++)
     {
-        sectors[sector].offset = sector * sectorsize + dwcssi_info->flash_start_offset;
+        sectors[sector].offset = sector * sectorsize;
         sectors[sector].size = sectorsize;
         sectors[sector].is_erased = -1;
         sectors[sector].is_protected = 0;
@@ -63,6 +60,7 @@ int default_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcss
         sectors[sector].size = sectorsize;
         sectors[sector].is_erased = -1;
         sectors[sector].is_protected = 0;
+        // LOG_INFO("sector %x offset %x", sector, sectors[sector].offset);
     }
 
     bank->sectors = sectors;
@@ -102,9 +100,9 @@ int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_i
     if(retval == ERROR_OK)
     {
         switch(id) {
-            case 0x00190201:
-                s25fl256s_sector_init(bank, dwcssi_info);
-                break;
+            // case 0x00190201:
+            //     s25fl256s_sector_init(bank, dwcssi_info);
+            //     break;
             default:
                 default_sector_init(bank, dwcssi_info);
                 break;
@@ -128,7 +126,7 @@ int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count)
 
     if(sector == bank->num_sectors)
     {
-        LOG_ERROR("Flash offset oversize");
+        LOG_ERROR("Flash offset %x oversize", offset);
         return ERROR_FAIL;
     }
     else

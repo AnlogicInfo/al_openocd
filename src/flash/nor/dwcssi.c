@@ -51,10 +51,10 @@ static void qspi_mio_init(struct flash_bank *bank)
     for (mio_num = 0; mio_num < 28; mio_num = mio_num + 4)
     {
         target_read_u32(target, MIO_BASE + mio_num, &value);
-        if(value != 0)
+        if(value != 1)
         {
             LOG_INFO("mio reg %x init ", (MIO_BASE + mio_num));
-            target_write_u32(target,  MIO_BASE + mio_num, 0);
+            target_write_u32(target,  MIO_BASE + mio_num, 1);
         }
     }
 }
@@ -153,15 +153,14 @@ static int dwcssi_config_BAUDR(struct flash_bank *bank, uint32_t sckdv)
     return ERROR_OK;
 }
 
-static int dwcssi_config_SER(struct flash_bank *bank, uint32_t slave_sel)
+static int dwcssi_config_SER(struct flash_bank *bank, uint32_t enable)
 {
     uint32_t val, mask;
-    val = DWCSSI_SER(slave_sel);
+    val = DWCSSI_SER(enable << bank->bank_number);
     mask = DWCSSI_SER_MASK;
+    LOG_DEBUG("config SER %x mask %x", val, mask);
     dwcssi_set_bits(bank, DWCSSI_REG_SER, val, mask);
-    
     return ERROR_OK;
-
 }
 
 static int dwcssi_config_CTRLR0(struct flash_bank *bank, uint32_t dfs, uint32_t spi_ref, uint32_t tmod)
@@ -245,6 +244,7 @@ static void dwcssi_config_init(struct flash_bank *bank)
 static void dwcssi_config_eeprom(struct flash_bank *bank, uint32_t len)
 {
     dwcssi_disable(bank);
+    dwcssi_config_SER(bank,1);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
     dwcssi_config_CTRLR1(bank, len-1);
     dwcssi_config_TXFTLR(bank, 0, 0);
@@ -254,6 +254,7 @@ static void dwcssi_config_eeprom(struct flash_bank *bank, uint32_t len)
 static void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv)
 {
     dwcssi_disable(bank);
+    dwcssi_config_SER(bank,1);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, frf, TX_ONLY);
     dwcssi_config_TXFTLR(bank, 0, tx_start_lv);
 
@@ -268,6 +269,7 @@ static void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_t
 static void dwcssi_config_rx(struct flash_bank *bank, uint8_t frf, uint8_t rx_ip_lv)
 {
     dwcssi_disable(bank);
+    dwcssi_config_SER(bank,1);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, frf, RX_ONLY);
     dwcssi_config_RXFTLR(bank, rx_ip_lv);
     if(frf == SPI_FRF_X4_MODE)
@@ -666,7 +668,8 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     LOG_INFO("dwcssi write");
 
     count = flash_write_boundary_check(bank, offset, count);
-    flash_sector_check(bank, offset, count);
+    if(flash_sector_check(bank, offset, count)!=ERROR_OK)
+        return ERROR_FAIL;
 
     if(target->state != TARGET_HALTED)
     {
@@ -916,6 +919,7 @@ static int dwcssi_probe(struct flash_bank *bank)
     // int retval
     // LOG_INFO("test dwcssi probe");
 
+    LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
     dwcssi_info_init(bank, dwcssi_info);
     
     qspi_mio_init(bank);

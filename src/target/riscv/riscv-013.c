@@ -393,7 +393,7 @@ static void dump_field(int idle, const struct scan_field *field)
 	unsigned int in_data = get_field(in, DTM_DMI_DATA);
 	unsigned int in_address = in >> DTM_DMI_ADDRESS_OFFSET;
 
-	log_printf_lf(LOG_LVL_DEBUG,
+	log_printf_lf(LOG_LVL_DEBUG_IO,
 			__FILE__, __LINE__, "scan",
 			"%db %s %08x @%02x -> %s %08x @%02x; %di",
 			field->num_bits, op_string[out_op], out_data, out_address,
@@ -404,7 +404,7 @@ static void dump_field(int idle, const struct scan_field *field)
 	decode_dmi(out_text, out_address, out_data);
 	decode_dmi(in_text, in_address, in_data);
 	if (in_text[0] || out_text[0]) {
-		log_printf_lf(LOG_LVL_DEBUG, __FILE__, __LINE__, "scan", "%s -> %s",
+		log_printf_lf(LOG_LVL_DEBUG_IO, __FILE__, __LINE__, "scan", "%s -> %s",
 				out_text, in_text);
 	}
 }

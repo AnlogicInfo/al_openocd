@@ -172,7 +172,6 @@ typedef union dwcssi_spi_ctrlr0_t
 struct dwcssi_flash_bank {
     bool probed;
     target_addr_t ctrl_base;
-    uint32_t flash_start_offset;
     const struct flash_device *dev;
 };
 
