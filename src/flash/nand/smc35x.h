@@ -546,4 +546,73 @@
  #define SINGLE_ERROR_FLAG    0x03
 
 
+enum SMC_ERROR_CODE{
+	SmcSuccess = 0,				/* 返回成功 */
+	SmcResetErr,				/* 复位失败错误 */ 
+	SmcParaBusyStatusErr,		/* Read parameter data happen status reg error */
+	SmcCrcErr,					/* Parameter page三次crc都失败出现的错误 */
+	SmcParameterOver,			/* 读Parameter Page发现读取出来的数据，表示的page datasize大小远远超出了正常大小 */
+	SmcSamsungParamOver,
+	SmcHwInitSizeErr,			/* Smc ecc最多能支持的page size的大小为2048.当使用Smc的ecc功能并且nandflash大小超过时出现此错误。*/
+	SmcHwInitEccBusyErr,
+	SmcHwDisEccBusyErr,
+	SmcFeatBusyErr,
+	SmcWriteEccFeatErr,			/* 使能On Die Ecc但是使能失败产生的错误 */
+	SmcSpareStatusErr,			/* Read spare data happen status reg error */
+	SmcBadBlock,				/* 检测到了坏块 */
+	SmcReadCmdTimeOutErr,
+	SmcHwReadSizeOver,
+	SmcCalEccBusyErr,
+	SmcEccDataInvalidErr,			/* 读取Smc ecc数据，但是ecc数据被标记为无效 */
+	SmcTwoBitsErr,
+	SmcMultipleBitsErr,
+
+
+#if 0
+	SmcEccBusyErr0,				/* Nand_EccHwDisable，SMC Ecc busy时间超过5ms产生的错误 */
+	SmcEccBusyErr1,				/* Nand_EccHwInit，SMC Ecc busy时间超过5ms产生的错误 */
+	SmcFeatBusyErr,				/* GetFeature/SetFeature 5ms超时，发生busy错误 */
+
+	SmcSizeOverErr,
+	SmcReadAlignErr1,			/* Nand_ReadPage_HwEcc传递的参数出现错误。未4byte对齐，或者Length=0. */
+	SmcBusyTimeOutErr,			/* 调用ReadPage Cmd中判断nandflash为busy并且持续5ms时间。*/
+	SmcOnfiStatusErr,			/* ReadPage Cmd之后发送读取状态寄存器的命令 */
+	SmcEccBusyErr2,				/* 在数据传输读取结束之后，读取Smc ecc数据，但是ecc busy持续了5ms */
+
+	SmcTwoBitsErr,				/* ecc出现了2bit错误 */
+	SmcMultipleBitsErr,			/* Ecc出现了多bit错误 */
+	SmcReadAlignErr2,			/* Nand_ReadPage传递的参数出现错误。未4byte对齐，或者Length=0. */
+	SmcDataEccErr,				/* On die ecc情况下出现了超出On die ecc纠错位数能力的错误 */
+	SmcLongEccSectorErr,		/* samsung flash出现了超出On die ecc纠错位数能力的错误 */
+	SmcBadBlock,
+	SmcOffsetErr
+#endif
+
+
+
+};
+
+
+/* */
+#define CRC16_INIT			0x4F4E		/* CRC16 initial constant */
+#define CRC16_POLYNOM		0x8005		/* CRC16 polynomial */
+#define CRC16_LEN			254			/* Onfi CRC16 length */
+
+#define ONFI_PARAM_LEN		256			/* Onfi Parameter Page Length */
+#define ONFI_SIGNATURE_LEN	4			/* Onfi Signature Length */
+
+/* */
+#define NAND_FEAT_POS		6
+#define DATA_PER_PAGE_POS	80
+#define SPARE_PER_PAGE_POS	84
+#define PAGE_PER_BLOCK_POS	92
+#define BLOCKS_PER_UINT_POS	96
+#define TOTAL_UINT_POS		100
+#define ECC_NUM_POS			112
+
+#define ZoneBitError	0
+#define OneBitError		1
+
+#define NAND_MFR_AMD		0x01
+
 #endif
