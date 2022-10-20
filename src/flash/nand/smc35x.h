@@ -615,4 +615,7 @@ enum SMC_ERROR_CODE{
 
 #define NAND_MFR_AMD		0x01
 
+#define RISCV     0
+#define ARM       1
+
 #endif

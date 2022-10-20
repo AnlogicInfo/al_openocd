@@ -2,6 +2,9 @@
 #include "imp.h"
 #include "smc35x.h"
 #include <target/target.h>
+#include <target/algorithm.h>
+#include <target/riscv/riscv.h>
+#include <helper/time_support.h>
 
 typedef struct{
 	uint32_t dataBytesPerPage;		/* per page contains data byte numbers*/
@@ -23,6 +26,8 @@ struct smc35x_nand_controller{
 	uint64_t data_phase_addr;
 	nand_size_type nand_size;
 };
+
+uint8_t buffer[4096];
 
 static uint32_t __attribute__((aligned(4))) NandOob64[12] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
 static uint32_t __attribute__((aligned(4))) NandOob32[6] = {26, 27, 28, 29, 30, 31};
@@ -726,8 +731,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
 		return ERROR_NAND_OPERATION_FAILED;
 	}
-
-	LOG_INFO("data ptr %p data size %d oob ptr %p oob size %d", data, data_size, oob, oob_size);
+	LOG_INFO("start to read page %d data", page);
 
 	/* Restore the ECC mem command1 and ECC mem command2 register if the previous command is read page cache */
 	/* Set SMC_REG_ECC1_MEMCMD0 Reg*/
@@ -760,7 +764,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 }
 
 
-int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
 	uint32_t index, status;
@@ -779,7 +783,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
 		return ERROR_NAND_OPERATION_FAILED;
 	}
-	LOG_INFO("data ptr %p data size %d oob ptr %p oob size %d", data, data_size, oob, oob_size);
+	LOG_INFO("make sure page %d is cleared before writing", page);
 
 	// nand_page_command(nand, page, NAND_CMD_SEQIN, !data);
 	cmd_phase_addr = NAND_BASE | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3);
@@ -850,7 +854,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 		target_write_u8(target, data_phase_addr, oob_data[index]);
 	}
 
-	status = target_read_u32(target, (SMC_BASE + SMC_REG_MEM_CFG_CLR), &status);
+	target_read_u32(target, (SMC_BASE + SMC_REG_MEM_CFG_CLR), &status);
 	target_write_u32(target, (SMC_BASE + SMC_REG_MEM_CFG_CLR), status | SMC_MemCfgClr_ClrSmcInt1);
 
 	if (!oob) {
@@ -860,8 +864,185 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 	return ERROR_OK;
 }
 
+static const uint8_t riscv32_bin[] = {
+#include "../../../contrib/loaders/flash/smc35x/riscv32_smc35x.inc"
+};
+
+static const uint8_t riscv64_bin[] = {
+#include "../../../contrib/loaders/flash/smc35x/riscv64_smc35x.inc"
+};
+
+// static const uint8_t aarch64_bin[] = {
+// #include "../../../contrib/loaders/flash/smc35x/aarch64_smc35x.inc"
+// };
+
+int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+			uint8_t *oob, uint32_t oob_size)
+{
+	// 设置工作区
+	int retval = ERROR_OK;
+	struct target *target = nand->target;
+	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
+	nand_size_type *nand_size = &smc35x_info->nand_size;
+	uint32_t count = nand_size->dataBytesPerPage + nand_size->spareBytesPerPage, cur_count;
+
+	if (target->state != TARGET_HALTED) {
+		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
+		return ERROR_NAND_OPERATION_FAILED;
+	}
+	LOG_INFO("make sure page %d is cleared before writing", page);
+	LOG_INFO("write data %d %d %d %d %d... from addr %p",
+			data[0], data[1], data[2], data[3], data[4], data);
+
+	uint32_t xlen = 0;
+	struct working_area *algorithm_wa = NULL;
+	struct working_area *data_wa = NULL;
+	const uint8_t *bin;
+	size_t bin_size;
+	int loader_target;
+
+	if (strncmp(target_name(target), "riscv", 4) == 0) {
+		LOG_INFO("loader on riscv");
+		loader_target = RISCV;
+		xlen = riscv_xlen(target);
+		if (xlen == 32) {
+			bin = riscv32_bin;
+			bin_size = sizeof(riscv32_bin);
+		} else {
+			bin = riscv64_bin;
+			bin_size = sizeof(riscv64_bin);
+		}
+	} else {
+		return ERROR_OK;
+		// loader_target = ARM;
+		// xlen = 64;
+		// bin = aarch64_bin;
+		// bin_size = sizeof(aarch64_bin);
+	}
+
+	uint32_t data_wa_size = 0;
+	if (target_alloc_working_area(target, bin_size, &algorithm_wa) == ERROR_OK) {
+		retval = target_write_buffer(target, algorithm_wa->address,
+				bin_size, bin);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("Failed to write code to " TARGET_ADDR_FMT ": %d",
+					algorithm_wa->address, retval);
+			target_free_working_area(target, algorithm_wa);
+			algorithm_wa = NULL;
+
+		} else {
+			data_wa_size = MIN(target_get_working_area_avail(target), count);
+			if (data_wa_size < 128) {
+				LOG_WARNING("Couldn't allocate data working area.");
+				target_free_working_area(target, algorithm_wa);
+				algorithm_wa = NULL;
+			} else if (target_alloc_working_area(target, data_wa_size, &data_wa) != ERROR_OK) {
+				target_free_working_area(target, algorithm_wa);
+				algorithm_wa = NULL;
+			}
+		}
+	} else {
+		LOG_WARNING("Couldn't allocate %zd-byte working area.", bin_size);
+		algorithm_wa = NULL;
+	}
+
+	if (algorithm_wa)
+    {
+        // LOG_INFO("wa allocate success");
+        struct reg_param reg_params[7];
+	
+        if(loader_target == RISCV)
+        {
+    	    init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
+		    init_reg_param(&reg_params[1], "a1", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[2], "a2", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[3], "a3", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[4], "a4", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[5], "a5", xlen, PARAM_OUT);
+			init_reg_param(&reg_params[6], "a6", xlen, PARAM_OUT);
+        }
+        else if(loader_target == ARM)
+        {
+    	    init_reg_param(&reg_params[0], "x0", xlen, PARAM_IN_OUT);
+		    init_reg_param(&reg_params[1], "x1", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[2], "x2", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[3], "x3", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[4], "x4", xlen, PARAM_OUT);
+		    init_reg_param(&reg_params[5], "x5", xlen, PARAM_OUT);
+			init_reg_param(&reg_params[6], "x6", xlen, PARAM_OUT);
+        }
+
+        while(count > 0)
+        {
+            cur_count = MIN(count, data_wa_size);
+			buf_set_u64(reg_params[0].value, 0, xlen, SMC_BASE);
+			buf_set_u64(reg_params[1].value, 0, xlen, nand_size->dataBytesPerPage);
+			buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
+			buf_set_u64(reg_params[3].value, 0, xlen, page);
+			buf_set_u64(reg_params[4].value, 0, xlen, cur_count);
+			buf_set_u64(reg_params[5].value, 0, xlen, NAND_BASE);
+			buf_set_u64(reg_params[6].value, 0, xlen, nand_size->eccNum);
+
+			memset(buffer, 0xFF, sizeof(buffer));
+            // 这里写入有些问题
+			retval = target_write_buffer(target, data_wa->address, nand_size->dataBytesPerPage, data);
+			if (retval != ERROR_OK) {
+				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
+						nand_size->dataBytesPerPage, data_wa->address, retval);
+				goto err;
+			}
+			retval = target_write_buffer(target, data_wa->address + nand_size->dataBytesPerPage, nand_size->spareBytesPerPage, buffer);
+			if (retval != ERROR_OK) {
+				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
+						nand_size->spareBytesPerPage, data_wa->address + nand_size->dataBytesPerPage, retval);
+				goto err;
+			}
+
+			LOG_INFO("data address=%lld, data count=%d, buffer=%02x %02x %02x %02x %02x %02x ...", 
+					data_wa->address, data_wa->size,
+					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
+			
+			retval = target_run_algorithm(target, 0, NULL,
+					ARRAY_SIZE(reg_params), reg_params,
+					algorithm_wa->address, 0, 10000, NULL);
+			if (retval != ERROR_OK) {
+				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
+						algorithm_wa->address, retval);
+				goto err;
+			}
+
+			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
+			// if (algorithm_result != 0) {
+			//     LOG_DEBUG("Algorithm returned error %llx", algorithm_result);
+			// 	retval = ERROR_FAIL;
+			// 	goto err;
+			// }
+
+            LOG_INFO("result %lld count %d ", algorithm_result, count);
+
+			count -= cur_count;
+        }
+
+    	target_free_working_area(target, data_wa);
+		target_free_working_area(target, algorithm_wa);
+    }
+    else
+    {
+		target_free_working_area(target, data_wa);
+		target_free_working_area(target, algorithm_wa);
+		slow_smc35x_write_page(nand, page, data, data_size, oob, oob_size);
+    }
+
+err:
+	target_free_working_area(target, data_wa);
+	target_free_working_area(target, algorithm_wa);
+
+    return ERROR_OK;
+}
+
 static int smc35x_init(struct nand_device *nand)
 {
+	// int retval;
 	struct target *target = nand->target;
 
 	if (target->state != TARGET_HALTED) {
@@ -885,6 +1066,10 @@ static int smc35x_init(struct nand_device *nand)
 	target_write_u32(target, PS_MIO14, 0x02);
 
 	smc35x_nand_init(nand);
+	// retval = smc35x_nand_init(nand);
+	// if (retval != ERROR_OK) {
+	// 	return retval;
+	// }
 
 	return ERROR_OK;
 }
