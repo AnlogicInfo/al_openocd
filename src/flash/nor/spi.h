@@ -25,6 +25,8 @@
 #ifndef OPENOCD_FLASH_NOR_SPI_H
 #define OPENOCD_FLASH_NOR_SPI_H
 
+#include "imp.h"
+
 #ifndef __ASSEMBLER__
 
 /* data structure to maintain flash ids from different vendors */
@@ -40,9 +42,21 @@ struct flash_device {
 	uint32_t pagesize;
 	uint32_t sectorsize;
 	uint32_t size_in_bytes;
+	// Pointer to model-specific operations for this flash 
+	// struct flash_device_op *flash_op;
+	int (*reset) (struct flash_bank *bank);
+	int (*quad_en) (struct flash_bank *bank);
+	int (*quad_dis) (struct flash_bank *bank);
 };
 
-#define FLASH_ID(n, re, qr, pp, qp, es, ces, id, psize, ssize, size) \
+// struct flash_device_op 
+// {
+// 	int (*reset) (struct flash_bank *bank);
+// 	int (*quad_en) (struct flash_bank* bank);
+// 	int (*quad_dis) (struct flash_bank* bank);
+// };
+
+#define FLASH_ID(n, re, qr, pp, qp, es, ces, id, psize, ssize, size, flash_reset, flash_quad_en, flash_quad_dis) \
 {	                                \
 	.name = n,                      \
 	.read_cmd = re,                 \
@@ -55,6 +69,9 @@ struct flash_device {
 	.pagesize = psize,              \
 	.sectorsize = ssize,            \
 	.size_in_bytes = size,          \
+	.reset = flash_reset,        \
+	.quad_en = flash_quad_en,    \
+	.quad_dis = flash_quad_dis,  \
 }
 
 #define FRAM_ID(n, re, qr, pp, id, size) \

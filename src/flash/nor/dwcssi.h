@@ -169,11 +169,6 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     DWCSSI_PROBE_TIMEOUT                      (100)
 #define     DWCSSI_MAX_TIMEOUT                        (3000)
 
-struct dwcssi_flash_bank {
-    bool probed;
-    target_addr_t ctrl_base;
-    const struct flash_device *dev;
-};
 
 struct dwcssi_target {
     char *name;
@@ -183,5 +178,12 @@ struct dwcssi_target {
 
 #define RISCV     0
 #define ARM       1
+
+int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr);
+void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv);
+int dwcssi_tx(struct flash_bank *bank, uint32_t in);
+int dwcssi_txwm_wait(struct flash_bank* bank);
+int dwcssi_read_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, uint32_t len);
+int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t cmd, uint8_t sr1, uint8_t cr1);
 
 #endif
