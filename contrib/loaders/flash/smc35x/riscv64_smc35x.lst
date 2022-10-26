@@ -12,9 +12,9 @@ Disassembly of section .text:
 _start:
 		lla		sp, stack_end
     12340000:	00000117          	auipc	sp,0x0
-    12340004:	36810113          	addi	sp,sp,872 # 12340368 <stack_end>
+    12340004:	42810113          	addi	sp,sp,1064 # 12340428 <stack_end>
 		jal 	flash_smc35x
-    12340008:	0a4000ef          	jal	ra,123400ac <flash_smc35x>
+    12340008:	0bc000ef          	jal	ra,123400c4 <flash_smc35x>
 		ebreak
     1234000c:	00100073          	ebreak
 
@@ -110,227 +110,284 @@ int smc35x_ecc_calculate(uint32_t ctrl_base, uint8_t *ecc_data, uint32_t ecc_dat
     123400a4:	01000513          	li	a0,16
     123400a8:	fa9ff06f          	j	12340050 <smc35x_ecc_calculate+0x40>
 
-00000000123400ac <flash_smc35x>:
+00000000123400ac <nand_busy>:
+
+uint8_t nand_busy(uint32_t ctrl_base)
+{
+	uint32_t status = *(volatile uint32_t *)(ctrl_base + SMC_REG_MEMC_STATUS);
+    123400ac:	02051513          	slli	a0,a0,0x20
+    123400b0:	02055513          	srli	a0,a0,0x20
+    123400b4:	00052503          	lw	a0,0(a0)
+	status &= (1 << SMC_MemcStatus_SmcInt1RawStatus_FIELD);
+
+	
+
+	if(status)
+    123400b8:	00655513          	srli	a0,a0,0x6
+		return NAND_READY;
+	else
+		return NAND_BUSY;
+}
+    123400bc:	00157513          	andi	a0,a0,1
+    123400c0:	00008067          	ret
+
+00000000123400c4 <flash_smc35x>:
 
 int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, void *pbuffer, uint32_t offset, uint32_t count, uint32_t nand_base, uint32_t ecc_num)
 {
-    123400ac:	fc010113          	addi	sp,sp,-64
-    123400b0:	02813823          	sd	s0,48(sp)
-	uint32_t retvel = 10;
-    uint32_t index, status;
+    123400c4:	f9010113          	addi	sp,sp,-112
+    123400c8:	05313423          	sd	s3,72(sp)
+    123400cc:	05413023          	sd	s4,64(sp)
+    123400d0:	03613823          	sd	s6,48(sp)
+    123400d4:	00078993          	mv	s3,a5
     uint32_t oob_size = count - page_size;
-    123400b4:	40b7043b          	subw	s0,a4,a1
 	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
 	uint8_t eccData[12] = {0}, *buffer = pbuffer;
 	void *status_addr = NULL;
 
-	void *cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
-    123400b8:	00a08737          	lui	a4,0xa08
-    123400bc:	40070713          	addi	a4,a4,1024 # a08400 <_start-0x11937c00>
-{
-    123400c0:	01413823          	sd	s4,16(sp)
-	void *cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
-    123400c4:	00e7e733          	or	a4,a5,a4
-	void *data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-    123400c8:	00188a37          	lui	s4,0x188
-    123400cc:	0147ea33          	or	s4,a5,s4
-	void *cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
-    123400d0:	02071713          	slli	a4,a4,0x20
-{
-    123400d4:	03213023          	sd	s2,32(sp)
-    123400d8:	01313c23          	sd	s3,24(sp)
-    123400dc:	02113c23          	sd	ra,56(sp)
-    123400e0:	02913423          	sd	s1,40(sp)
-	void *cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
-    123400e4:	02075713          	srli	a4,a4,0x20
-	void *data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-    123400e8:	020a1a13          	slli	s4,s4,0x20
-	uint32_t cmd_phase_data = 0 | (offset << (2*8));
+	void *cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_READ_STATUS1 << 3));
+    123400d8:	3807eb13          	ori	s6,a5,896
+	uint32_t cmd_phase_data = -1;
 	*(uint32_t *)cmd_phase_addr = cmd_phase_data;
-	cmd_phase_data = offset >> (32 - (2*8));
-    123400ec:	0106d69b          	srliw	a3,a3,0x10
+
+	void *data_phase_addr = (void *)(uintptr_t)(nand_base | NAND_DATA_PHASE_FLAG);
+    123400dc:	00080a37          	lui	s4,0x80
+	void *cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_READ_STATUS1 << 3));
+    123400e0:	020b1b13          	slli	s6,s6,0x20
+	void *data_phase_addr = (void *)(uintptr_t)(nand_base | NAND_DATA_PHASE_FLAG);
+    123400e4:	0149ea33          	or	s4,s3,s4
 {
-    123400f0:	00078993          	mv	s3,a5
-    123400f4:	00050913          	mv	s2,a0
+    123400e8:	06113423          	sd	ra,104(sp)
+    123400ec:	06813023          	sd	s0,96(sp)
+    123400f0:	04913c23          	sd	s1,88(sp)
+    123400f4:	05213823          	sd	s2,80(sp)
+    123400f8:	03513c23          	sd	s5,56(sp)
+    123400fc:	03713423          	sd	s7,40(sp)
+    12340100:	03813023          	sd	s8,32(sp)
+    12340104:	01913c23          	sd	s9,24(sp)
+    12340108:	01a13823          	sd	s10,16(sp)
+	*(uint32_t *)cmd_phase_addr = cmd_phase_data;
+    1234010c:	fff00793          	li	a5,-1
+	void *cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_READ_STATUS1 << 3));
+    12340110:	020b5b13          	srli	s6,s6,0x20
+	void *data_phase_addr = (void *)(uintptr_t)(nand_base | NAND_DATA_PHASE_FLAG);
+    12340114:	020a1a13          	slli	s4,s4,0x20
+	*(uint32_t *)cmd_phase_addr = cmd_phase_data;
+    12340118:	00fb2023          	sw	a5,0(s6)
+	void *data_phase_addr = (void *)(uintptr_t)(nand_base | NAND_DATA_PHASE_FLAG);
+    1234011c:	020a5a13          	srli	s4,s4,0x20
+	status = *(uint8_t *)data_phase_addr;
+	if (!(status & ONFI_STATUS_WP)) {
+    12340120:	000a0783          	lb	a5,0(s4) # 80000 <_start-0x122c0000>
 	uint8_t eccData[12] = {0}, *buffer = pbuffer;
-    123400f8:	00013023          	sd	zero,0(sp)
-    123400fc:	00012423          	sw	zero,8(sp)
-	void *data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-    12340100:	020a5a13          	srli	s4,s4,0x20
-    *(uint32_t *)cmd_phase_addr = cmd_phase_data;
-    12340104:	00d72023          	sw	a3,0(a4)
-
-	for (index = 0; index < page_size - ONFI_AXI_DATA_WIDTH; ++index)
-    12340108:	00000793          	li	a5,0
-    1234010c:	ffc5859b          	addiw	a1,a1,-4
-    12340110:	0007869b          	sext.w	a3,a5
-    12340114:	0eb6e263          	bltu	a3,a1,123401f8 <flash_smc35x+0x14c>
-	{
-		// target_write_u8(target, data_phase_addr, data[index]);
-        *(uint32_t *)cmd_phase_addr = buffer[index];
-		// retvel = *(uint32_t *)cmd_phase_addr;
+    12340124:	00013023          	sd	zero,0(sp)
+    12340128:	00012423          	sw	zero,8(sp)
+	if (!(status & ONFI_STATUS_WP)) {
+    1234012c:	0407c063          	bltz	a5,1234016c <flash_smc35x+0xa8>
+		return FAILED_FLAG;
+    12340130:	00100513          	li	a0,1
+	if (!(status & ONFI_STATUS_FAIL)) {
+		return FAILED_FLAG;
 	}
-	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
-    12340118:	00188737          	lui	a4,0x188
-    1234011c:	40070713          	addi	a4,a4,1024 # 188400 <_start-0x121b7c00>
-    12340120:	00e9e733          	or	a4,s3,a4
-	buffer += page_size - ONFI_AXI_DATA_WIDTH;
-    12340124:	02059593          	slli	a1,a1,0x20
-	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
-    12340128:	02071713          	slli	a4,a4,0x20
-	buffer += page_size - ONFI_AXI_DATA_WIDTH;
-    1234012c:	0205d593          	srli	a1,a1,0x20
-	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
-    12340130:	02075713          	srli	a4,a4,0x20
-	buffer += page_size - ONFI_AXI_DATA_WIDTH;
-    12340134:	00b604b3          	add	s1,a2,a1
-    12340138:	00000693          	li	a3,0
-	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
-    1234013c:	00400793          	li	a5,4
-	{
-		// target_write_u8(target, data_phase_addr, data[index]);
-        *(uint8_t *)data_phase_addr = buffer[index];
-    12340140:	00d48633          	add	a2,s1,a3
-    12340144:	00064603          	lbu	a2,0(a2) # 40000000 <stack_end+0x2dcbfc98>
-	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
-    12340148:	00168693          	addi	a3,a3,1
-        *(uint8_t *)data_phase_addr = buffer[index];
-    1234014c:	00c70023          	sb	a2,0(a4)
-	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
-    12340150:	fef698e3          	bne	a3,a5,12340140 <flash_smc35x+0x94>
-	}
-    buffer += ONFI_AXI_DATA_WIDTH;
-
-	switch(oob_size)
-    12340154:	04000793          	li	a5,64
-    12340158:	0af40e63          	beq	s0,a5,12340214 <flash_smc35x+0x168>
-    1234015c:	0a87e863          	bltu	a5,s0,1234020c <flash_smc35x+0x160>
-    12340160:	01000793          	li	a5,16
-    12340164:	0cf40a63          	beq	s0,a5,12340238 <flash_smc35x+0x18c>
-    12340168:	02000793          	li	a5,32
-    1234016c:	00000697          	auipc	a3,0x0
-    12340170:	12468693          	addi	a3,a3,292 # 12340290 <NandOob32>
-    12340174:	00600613          	li	a2,6
-    12340178:	0cf40663          	beq	s0,a5,12340244 <flash_smc35x+0x198>
-			break;
-		default:
-			/* Page size 256 bytes & 4096 bytes not supported by ECC block */
-			break;
-	}
-	if (ecc_num == 1 && dataOffsetPtr != NULL) {
-    1234017c:	00000713          	li	a4,0
-		}
-		smc35x_ecc_calculate(ctrl_base, eccData, eccDataNums);
-	}
-
-	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-	for (index = 0; index < oob_size - ONFI_AXI_DATA_WIDTH; ++index)
-    12340180:	ffc4041b          	addiw	s0,s0,-4
-    12340184:	0007079b          	sext.w	a5,a4
-    12340188:	0887ee63          	bltu	a5,s0,12340224 <flash_smc35x+0x178>
-	{
-		// target_write_u8(target, data_phase_addr, oob_data[index]);
-        *(uint8_t *)data_phase_addr = buffer[index];
-	}
-	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-    1234018c:	00388737          	lui	a4,0x388
-    12340190:	00e9e7b3          	or	a5,s3,a4
-	buffer += oob_size - ONFI_AXI_DATA_WIDTH;
-    12340194:	02041413          	slli	s0,s0,0x20
-	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-    12340198:	02079793          	slli	a5,a5,0x20
-	buffer += oob_size - ONFI_AXI_DATA_WIDTH;
-    1234019c:	02045413          	srli	s0,s0,0x20
-	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-    123401a0:	0207d793          	srli	a5,a5,0x20
-	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
-    123401a4:	008484b3          	add	s1,s1,s0
-	buffer += oob_size - ONFI_AXI_DATA_WIDTH;
-    123401a8:	00400713          	li	a4,4
-	{
-		// target_write_u8(target, data_phase_addr, oob_data[index]);
-        *(uint8_t *)data_phase_addr = buffer[index];
-    123401ac:	0044c683          	lbu	a3,4(s1)
-	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
-    123401b0:	fff7071b          	addiw	a4,a4,-1
-    123401b4:	00148493          	addi	s1,s1,1
-        *(uint8_t *)data_phase_addr = buffer[index];
-    123401b8:	00d78023          	sb	a3,0(a5)
-	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
-    123401bc:	fe0718e3          	bnez	a4,123401ac <flash_smc35x+0x100>
-	}
-
-	// target_read_u32(target, (SMC_BASE + SMC_REG_MEM_CFG_CLR), &status);
-    status_addr = (void *)(uintptr_t)(ctrl_base + SMC_REG_MEM_CFG_CLR);
-    123401c0:	02091913          	slli	s2,s2,0x20
-    123401c4:	02095913          	srli	s2,s2,0x20
-	status = *(uint32_t *)status_addr;
-	// target_write_u32(target, (SMC_BASE + SMC_REG_MEM_CFG_CLR), status | SMC_MemCfgClr_ClrSmcInt1);
-    *(uint32_t *)status_addr = status | SMC_MemCfgClr_ClrSmcInt1;
-    123401c8:	00c92783          	lw	a5,12(s2)
 
 	return retvel;
-    123401cc:	03813083          	ld	ra,56(sp)
-    123401d0:	03013403          	ld	s0,48(sp)
-    *(uint32_t *)status_addr = status | SMC_MemCfgClr_ClrSmcInt1;
-    123401d4:	0107e793          	ori	a5,a5,16
-    123401d8:	00f92623          	sw	a5,12(s2)
-    123401dc:	02813483          	ld	s1,40(sp)
-    123401e0:	02013903          	ld	s2,32(sp)
-    123401e4:	01813983          	ld	s3,24(sp)
-    123401e8:	01013a03          	ld	s4,16(sp)
-    123401ec:	00a00513          	li	a0,10
-    123401f0:	04010113          	addi	sp,sp,64
-    123401f4:	00008067          	ret
-        *(uint32_t *)cmd_phase_addr = buffer[index];
-    123401f8:	00f606b3          	add	a3,a2,a5
-    123401fc:	0006c683          	lbu	a3,0(a3)
-    12340200:	00178793          	addi	a5,a5,1
-    12340204:	00d72023          	sw	a3,0(a4) # 388000 <_start-0x11fb8000>
+    12340134:	06813083          	ld	ra,104(sp)
+    12340138:	06013403          	ld	s0,96(sp)
+    1234013c:	05813483          	ld	s1,88(sp)
+    12340140:	05013903          	ld	s2,80(sp)
+    12340144:	04813983          	ld	s3,72(sp)
+    12340148:	04013a03          	ld	s4,64(sp)
+    1234014c:	03813a83          	ld	s5,56(sp)
+    12340150:	03013b03          	ld	s6,48(sp)
+    12340154:	02813b83          	ld	s7,40(sp)
+    12340158:	02013c03          	ld	s8,32(sp)
+    1234015c:	01813c83          	ld	s9,24(sp)
+    12340160:	01013d03          	ld	s10,16(sp)
+    12340164:	07010113          	addi	sp,sp,112
+    12340168:	00008067          	ret
+	cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
+    1234016c:	00a087b7          	lui	a5,0xa08
+    12340170:	40078793          	addi	a5,a5,1024 # a08400 <_start-0x11937c00>
+    12340174:	00f9e7b3          	or	a5,s3,a5
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+    12340178:	00188cb7          	lui	s9,0x188
+	cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
+    1234017c:	02079793          	slli	a5,a5,0x20
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+    12340180:	0199ecb3          	or	s9,s3,s9
+	cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
+    12340184:	0207d793          	srli	a5,a5,0x20
+	cmd_phase_data = offset >> (32 - (2*8));
+    12340188:	0106d69b          	srliw	a3,a3,0x10
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+    1234018c:	020c9c93          	slli	s9,s9,0x20
+    *(uint32_t *)cmd_phase_addr = cmd_phase_data;
+    12340190:	00d7a023          	sw	a3,0(a5)
+    12340194:	00050913          	mv	s2,a0
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+    12340198:	020cdc93          	srli	s9,s9,0x20
 	for (index = 0; index < page_size - ONFI_AXI_DATA_WIDTH; ++index)
-    12340208:	f09ff06f          	j	12340110 <flash_smc35x+0x64>
-	switch(oob_size)
-    1234020c:	0e000793          	li	a5,224
-    12340210:	f6f416e3          	bne	s0,a5,1234017c <flash_smc35x+0xd0>
-			dataOffsetPtr = NandOob64;
-    12340214:	00000697          	auipc	a3,0x0
-    12340218:	0a068693          	addi	a3,a3,160 # 123402b4 <NandOob64>
-			eccDataNums = 12;
-    1234021c:	00c00613          	li	a2,12
-    12340220:	0240006f          	j	12340244 <flash_smc35x+0x198>
+    1234019c:	00000793          	li	a5,0
+	uint32_t flag = 0, retvel = 0;
+    123401a0:	00000a93          	li	s5,0
+    123401a4:	00000513          	li	a0,0
+	for (index = 0; index < page_size - ONFI_AXI_DATA_WIDTH; ++index)
+    123401a8:	ffc5869b          	addiw	a3,a1,-4
+		if (flag != 2) {
+    123401ac:	00200313          	li	t1,2
+	for (index = 0; index < page_size - ONFI_AXI_DATA_WIDTH; ++index)
+    123401b0:	0007889b          	sext.w	a7,a5
+    123401b4:	06d8ec63          	bltu	a7,a3,1234022c <flash_smc35x+0x168>
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
+    123401b8:	001887b7          	lui	a5,0x188
+    123401bc:	40078793          	addi	a5,a5,1024 # 188400 <_start-0x121b7c00>
+    123401c0:	00f9e7b3          	or	a5,s3,a5
+	buffer += page_size - ONFI_AXI_DATA_WIDTH;
+    123401c4:	02069693          	slli	a3,a3,0x20
+    123401c8:	0206d693          	srli	a3,a3,0x20
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
+    123401cc:	02079793          	slli	a5,a5,0x20
+	buffer += page_size - ONFI_AXI_DATA_WIDTH;
+    123401d0:	00d604b3          	add	s1,a2,a3
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
+    123401d4:	0207d793          	srli	a5,a5,0x20
+	buffer += page_size - ONFI_AXI_DATA_WIDTH;
+    123401d8:	00000693          	li	a3,0
+	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
+    123401dc:	00400613          	li	a2,4
         *(uint8_t *)data_phase_addr = buffer[index];
-    12340224:	00e487b3          	add	a5,s1,a4
-    12340228:	0047c783          	lbu	a5,4(a5)
-    1234022c:	00170713          	addi	a4,a4,1
-    12340230:	00fa0023          	sb	a5,0(s4) # 188000 <_start-0x121b8000>
-	for (index = 0; index < oob_size - ONFI_AXI_DATA_WIDTH; ++index)
-    12340234:	f51ff06f          	j	12340184 <flash_smc35x+0xd8>
-			dataOffsetPtr = NandOob16;
-    12340238:	00000697          	auipc	a3,0x0
-    1234023c:	07068693          	addi	a3,a3,112 # 123402a8 <NandOob16>
-			eccDataNums = 3;
-    12340240:	00300613          	li	a2,3
-	if (ecc_num == 1 && dataOffsetPtr != NULL) {
-    12340244:	00100793          	li	a5,1
-    12340248:	f2f81ae3          	bne	a6,a5,1234017c <flash_smc35x+0xd0>
-    1234024c:	00000713          	li	a4,0
-			buffer[dataOffsetPtr[index]] = (~eccData[index]);
-    12340250:	00010593          	mv	a1,sp
-    12340254:	00271793          	slli	a5,a4,0x2
-    12340258:	00e58533          	add	a0,a1,a4
-    1234025c:	00f687b3          	add	a5,a3,a5
-    12340260:	0007e783          	lwu	a5,0(a5)
-    12340264:	00054503          	lbu	a0,0(a0)
-		for(index = 0; index < eccDataNums; index++)
-    12340268:	00170713          	addi	a4,a4,1
-			buffer[dataOffsetPtr[index]] = (~eccData[index]);
-    1234026c:	00f487b3          	add	a5,s1,a5
-    12340270:	fff54513          	not	a0,a0
-    12340274:	00a78223          	sb	a0,4(a5)
-		for(index = 0; index < eccDataNums; index++)
-    12340278:	0007079b          	sext.w	a5,a4
-    1234027c:	fcc7ece3          	bltu	a5,a2,12340254 <flash_smc35x+0x1a8>
+    123401e0:	00d48533          	add	a0,s1,a3
+    123401e4:	00054503          	lbu	a0,0(a0)
+	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
+    123401e8:	00168693          	addi	a3,a3,1
+        *(uint8_t *)data_phase_addr = buffer[index];
+    123401ec:	00a78023          	sb	a0,0(a5)
+	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
+    123401f0:	fec698e3          	bne	a3,a2,123401e0 <flash_smc35x+0x11c>
+    uint32_t oob_size = count - page_size;
+    123401f4:	40b7043b          	subw	s0,a4,a1
+	switch(oob_size)
+    123401f8:	04000793          	li	a5,64
+    123401fc:	04f40c63          	beq	s0,a5,12340254 <flash_smc35x+0x190>
+    12340200:	0487e663          	bltu	a5,s0,1234024c <flash_smc35x+0x188>
+    12340204:	01000793          	li	a5,16
+    12340208:	0ef40463          	beq	s0,a5,123402f0 <flash_smc35x+0x22c>
+    1234020c:	02000793          	li	a5,32
+    12340210:	00000c17          	auipc	s8,0x0
+    12340214:	140c0c13          	addi	s8,s8,320 # 12340350 <NandOob32>
+    12340218:	00600b93          	li	s7,6
+    1234021c:	0ef40063          	beq	s0,a5,123402fc <flash_smc35x+0x238>
 		smc35x_ecc_calculate(ctrl_base, eccData, eccDataNums);
-    12340280:	00090513          	mv	a0,s2
-    12340284:	d8dff0ef          	jal	ra,12340010 <smc35x_ecc_calculate>
-    12340288:	ef5ff06f          	j	1234017c <flash_smc35x+0xd0>
+    12340220:	00000793          	li	a5,0
+	for (index = 0; index < oob_size - ONFI_AXI_DATA_WIDTH; ++index)
+    12340224:	ffc4041b          	addiw	s0,s0,-4
+    12340228:	04c0006f          	j	12340274 <flash_smc35x+0x1b0>
+        *(uint8_t *)data_phase_addr = buffer[index];
+    1234022c:	00f608b3          	add	a7,a2,a5
+    12340230:	0008c883          	lbu	a7,0(a7)
+    12340234:	011c8023          	sb	a7,0(s9) # 188000 <_start-0x121b8000>
+		if (flag != 2) {
+    12340238:	00650663          	beq	a0,t1,12340244 <flash_smc35x+0x180>
+			retvel = *(uint8_t *)data_phase_addr;
+    1234023c:	00088a9b          	sext.w	s5,a7
+			++flag;
+    12340240:	0015051b          	addiw	a0,a0,1
+	for (index = 0; index < page_size - ONFI_AXI_DATA_WIDTH; ++index)
+    12340244:	00178793          	addi	a5,a5,1
+    12340248:	f69ff06f          	j	123401b0 <flash_smc35x+0xec>
+	switch(oob_size)
+    1234024c:	0e000793          	li	a5,224
+    12340250:	fcf418e3          	bne	s0,a5,12340220 <flash_smc35x+0x15c>
+			dataOffsetPtr = NandOob64;
+    12340254:	00000c17          	auipc	s8,0x0
+    12340258:	120c0c13          	addi	s8,s8,288 # 12340374 <NandOob64>
+			eccDataNums = 12;
+    1234025c:	00c00b93          	li	s7,12
+    12340260:	09c0006f          	j	123402fc <flash_smc35x+0x238>
+        *(uint8_t *)data_phase_addr = buffer[index];
+    12340264:	00f48733          	add	a4,s1,a5
+    12340268:	00474703          	lbu	a4,4(a4)
+    1234026c:	00178793          	addi	a5,a5,1
+    12340270:	00ec8023          	sb	a4,0(s9)
+	for (index = 0; index < oob_size - ONFI_AXI_DATA_WIDTH; ++index)
+    12340274:	0007871b          	sext.w	a4,a5
+    12340278:	fe8766e3          	bltu	a4,s0,12340264 <flash_smc35x+0x1a0>
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+    1234027c:	003887b7          	lui	a5,0x388
+    12340280:	00f9e9b3          	or	s3,s3,a5
+	buffer += oob_size - ONFI_AXI_DATA_WIDTH;
+    12340284:	02041413          	slli	s0,s0,0x20
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+    12340288:	02099993          	slli	s3,s3,0x20
+	buffer += oob_size - ONFI_AXI_DATA_WIDTH;
+    1234028c:	02045413          	srli	s0,s0,0x20
+	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+    12340290:	0209d993          	srli	s3,s3,0x20
+	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
+    12340294:	00848433          	add	s0,s1,s0
+	buffer += oob_size - ONFI_AXI_DATA_WIDTH;
+    12340298:	00400793          	li	a5,4
+        *(uint8_t *)data_phase_addr = buffer[index];
+    1234029c:	00444703          	lbu	a4,4(s0)
+	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
+    123402a0:	fff7879b          	addiw	a5,a5,-1
+    123402a4:	00140413          	addi	s0,s0,1
+        *(uint8_t *)data_phase_addr = buffer[index];
+    123402a8:	00e98023          	sb	a4,0(s3)
+	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
+    123402ac:	fe0798e3          	bnez	a5,1234029c <flash_smc35x+0x1d8>
+	while (nand_busy(ctrl_base) == NAND_BUSY);
+    123402b0:	00090513          	mv	a0,s2
+    123402b4:	df9ff0ef          	jal	ra,123400ac <nand_busy>
+    123402b8:	fe050ce3          	beqz	a0,123402b0 <flash_smc35x+0x1ec>
+    status_addr = (void *)(uintptr_t)(ctrl_base + SMC_REG_MEM_CFG_CLR);
+    123402bc:	02091913          	slli	s2,s2,0x20
+    123402c0:	02095913          	srli	s2,s2,0x20
+	status = *(volatile uint32_t *)(ctrl_base + SMC_REG_MEM_CFG_CLR);
+    123402c4:	00c92783          	lw	a5,12(s2)
+	return retvel;
+    123402c8:	000a851b          	sext.w	a0,s5
+	status = *(volatile uint32_t *)(ctrl_base + SMC_REG_MEM_CFG_CLR);
+    123402cc:	0007879b          	sext.w	a5,a5
+    *(volatile uint32_t *)status_addr = status | SMC_MemCfgClr_ClrSmcInt1;
+    123402d0:	0107e793          	ori	a5,a5,16
+    123402d4:	00f92623          	sw	a5,12(s2)
+	*(uint32_t *)cmd_phase_addr = cmd_phase_data;
+    123402d8:	fff00793          	li	a5,-1
+    123402dc:	00fb2023          	sw	a5,0(s6)
+	if (!(status & ONFI_STATUS_FAIL)) {
+    123402e0:	000a4783          	lbu	a5,0(s4)
+    123402e4:	0017f793          	andi	a5,a5,1
+    123402e8:	e40796e3          	bnez	a5,12340134 <flash_smc35x+0x70>
+    123402ec:	e45ff06f          	j	12340130 <flash_smc35x+0x6c>
+			dataOffsetPtr = NandOob16;
+    123402f0:	00000c17          	auipc	s8,0x0
+    123402f4:	078c0c13          	addi	s8,s8,120 # 12340368 <NandOob16>
+			eccDataNums = 3;
+    123402f8:	00300b93          	li	s7,3
+	if (ecc_num == 1 && dataOffsetPtr != NULL && eccDataNums != 0) {
+    123402fc:	00100793          	li	a5,1
+    12340300:	f2f810e3          	bne	a6,a5,12340220 <flash_smc35x+0x15c>
+		smc35x_ecc_calculate(ctrl_base, eccData, eccDataNums);
+    12340304:	00010d13          	mv	s10,sp
+    12340308:	000b8613          	mv	a2,s7
+    1234030c:	000d0593          	mv	a1,s10
+    12340310:	00090513          	mv	a0,s2
+    12340314:	cfdff0ef          	jal	ra,12340010 <smc35x_ecc_calculate>
+    12340318:	00000793          	li	a5,0
+			buffer[dataOffsetPtr[index]] = (~eccData[index]);
+    1234031c:	00279713          	slli	a4,a5,0x2
+    12340320:	00fd06b3          	add	a3,s10,a5
+    12340324:	00ec0733          	add	a4,s8,a4
+    12340328:	00076703          	lwu	a4,0(a4)
+    1234032c:	0006c683          	lbu	a3,0(a3)
+		for(index = 0; index < eccDataNums; index++)
+    12340330:	00178793          	addi	a5,a5,1 # 388001 <_start-0x11fb7fff>
+			buffer[dataOffsetPtr[index]] = (~eccData[index]);
+    12340334:	00e48733          	add	a4,s1,a4
+    12340338:	fff6c693          	not	a3,a3
+    1234033c:	00d70223          	sb	a3,4(a4)
+		for(index = 0; index < eccDataNums; index++)
+    12340340:	0007871b          	sext.w	a4,a5
+    12340344:	fd776ce3          	bltu	a4,s7,1234031c <flash_smc35x+0x258>
+    12340348:	ed9ff06f          	j	12340220 <flash_smc35x+0x15c>
