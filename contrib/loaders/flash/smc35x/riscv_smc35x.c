@@ -194,8 +194,6 @@ uint8_t nand_busy(uint32_t ctrl_base)
 	uint32_t status = *(volatile uint32_t *)(ctrl_base + SMC_REG_MEMC_STATUS);
 	status &= (1 << SMC_MemcStatus_SmcInt1RawStatus_FIELD);
 
-	
-
 	if(status)
 		return NAND_READY;
 	else
@@ -204,7 +202,7 @@ uint8_t nand_busy(uint32_t ctrl_base)
 
 int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, void *pbuffer, uint32_t offset, uint32_t count, uint32_t nand_base, uint32_t ecc_num)
 {
-	uint32_t flag = 0, retvel = 0;
+	uint32_t retvel = 0;
     uint32_t index, status;
     uint32_t oob_size = count - page_size;
 	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
@@ -233,11 +231,12 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, void *pbuffer, uint32_t
 	{
 		// target_write_u8(target, data_phase_addr, data[index]);
         *(uint8_t *)data_phase_addr = buffer[index];
-		if (flag != 2) {
-			retvel = *(uint8_t *)data_phase_addr;
-			++flag;
-		}
+		// if (flag != 2) {
+		// 	retvel = *(uint8_t *)data_phase_addr;
+		// 	++flag;
+		// }
 	}
+
 	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
 	buffer += page_size - ONFI_AXI_DATA_WIDTH;
 	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
@@ -283,6 +282,7 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, void *pbuffer, uint32_t
 		// target_write_u8(target, data_phase_addr, oob_data[index]);
         *(uint8_t *)data_phase_addr = buffer[index];
 	}
+
 	data_phase_addr = (void *)(uintptr_t)(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
 	buffer += oob_size - ONFI_AXI_DATA_WIDTH;
 	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
@@ -292,7 +292,7 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, void *pbuffer, uint32_t
 	}
 
 
-	// while (nand_busy(ctrl_base) == NAND_BUSY);
+	while (nand_busy(ctrl_base) == NAND_BUSY);
 
 
 	/*  Clear SMC Interrupt 1, as an alternative to an AXI read */
@@ -301,6 +301,7 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, void *pbuffer, uint32_t
     *(volatile uint32_t *)status_addr = status | SMC_MemCfgClr_ClrSmcInt1;
 
 
+	/* Check Nand Status */
 	cmd_phase_addr = (void *)(uintptr_t)(nand_base | (ONFI_CMD_READ_STATUS1 << 3));
 	cmd_phase_data = -1;
 	*(uint32_t *)cmd_phase_addr = cmd_phase_data;

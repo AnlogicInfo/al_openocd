@@ -765,7 +765,7 @@ uint8_t nand_busy(struct nand_device *nand)
 		return NAND_BUSY;
 }
 
-int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
 	uint32_t index, status;
@@ -912,7 +912,7 @@ static const uint8_t riscv64_bin[] = {
 // #include "../../../contrib/loaders/flash/smc35x/aarch64_smc35x.inc"
 // };
 
-int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
 	// 设置工作区
@@ -1064,7 +1064,7 @@ int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data,
     }
     else
     {
-		smc35x_write_page(nand, page, data, data_size, oob, oob_size);
+		slow_smc35x_write_page(nand, page, data, data_size, oob, oob_size);
     }
 
 err:
