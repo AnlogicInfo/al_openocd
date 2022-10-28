@@ -751,20 +751,21 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 uint8_t nand_busy(struct nand_device *nand)
 {
 	uint32_t status = 0;
-
 	struct target *target = nand->target;
+
 	target_read_u32(target, (SMC_BASE + SMC_REG_MEMC_STATUS), &status);
-	LOG_INFO("smc status %d", status);
-	
+	LOG_INFO("status reg %x", status);
 	status &= (1 << SMC_MemcStatus_SmcInt1RawStatus_FIELD);
 
+	LOG_INFO("int1 status %d", status);
+	
 	if(status)
 		return NAND_READY;
 	else
 		return NAND_BUSY;
 }
 
-int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
 	uint32_t index, status;
@@ -801,24 +802,27 @@ int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *dat
 
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
 
-	LOG_INFO("Write address %llx", data_phase_addr);
-	uint8_t tmp = 0;
+	// LOG_INFO("Write address %llx", data_phase_addr);
+	// uint8_t tmp = 0;
 	for (index = 0; index < data_size-ONFI_AXI_DATA_WIDTH; ++index)
 	{
 		// LOG_INFO("page %d index %d write data %x", page, index, data[index]);
 		target_write_u8(target, data_phase_addr, data[index]);
-		target_read_u8(target, data_phase_addr, &tmp);
+		// target_read_u8(target, data_phase_addr, &tmp);
 
-		LOG_INFO("data phase write %llx value %x resule %x", data_phase_addr, data[index], tmp);
+		// LOG_INFO("data phase write data %llx value %x resule %x", data_phase_addr, data[index], tmp);
 	}
 
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10);
 	data += data_size - ONFI_AXI_DATA_WIDTH;
-	LOG_INFO("Write address %llx", data_phase_addr);
+	// LOG_INFO("Write address %llx", data_phase_addr);
 	for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
 	{
 		// LOG_INFO("page %d index %d write data %x", page, index, data[index]);
 		target_write_u8(target, data_phase_addr, data[index]);
+		// target_read_u8(target, data_phase_addr, &tmp);
+
+		// LOG_INFO("data phase write data %llx value %x resule %x", data_phase_addr, data[index], tmp);
 	}
 
 	switch(nand_size->spareBytesPerPage)
@@ -855,21 +859,27 @@ int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *dat
 
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
 	oob_size = nand_size->spareBytesPerPage - ONFI_AXI_DATA_WIDTH;
-	LOG_INFO("Write address %llx", data_phase_addr);
+	// LOG_INFO("Write address %llx", data_phase_addr);
 	for (index = 0; index < oob_size; ++index)
 	{
 		// LOG_INFO("page %d index %d write data %x", page, index, oob_data[index]);
 		target_write_u8(target, data_phase_addr, oob_data[index]);
+		// target_read_u8(target, data_phase_addr, &tmp);
+
+		// LOG_INFO("data phase write oob %llx value %x resule %x", data_phase_addr, oob_data[index], tmp);
 	}
 
 	data_phase_addr = NAND_BASE | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
 	oob_size = ONFI_AXI_DATA_WIDTH;
 	oob_data += (nand_size->spareBytesPerPage-ONFI_AXI_DATA_WIDTH);
-	LOG_INFO("Write address %llx", data_phase_addr);
+	// LOG_INFO("Write address %llx", data_phase_addr);
 	for (index = 0; index < oob_size; ++index)
 	{
 		// LOG_INFO("page %d index %d write data %x", page, index, oob_data[index]);
 		target_write_u8(target, data_phase_addr, oob_data[index]);
+		// target_read_u8(target, data_phase_addr, &tmp);
+
+		// LOG_INFO("data phase write oob %llx value %x resule %x", data_phase_addr, oob_data[index], tmp);
 	}
 
 	while (nand_busy(nand) == NAND_BUSY);
@@ -902,7 +912,7 @@ static const uint8_t riscv64_bin[] = {
 // #include "../../../contrib/loaders/flash/smc35x/aarch64_smc35x.inc"
 // };
 
-int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
 	// 设置工作区
@@ -1054,7 +1064,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
     }
     else
     {
-		slow_smc35x_write_page(nand, page, data, data_size, oob, oob_size);
+		smc35x_write_page(nand, page, data, data_size, oob, oob_size);
     }
 
 err:

@@ -292,7 +292,7 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, void *pbuffer, uint32_t
 	}
 
 
-	while (nand_busy(ctrl_base) == NAND_BUSY);
+	// while (nand_busy(ctrl_base) == NAND_BUSY);
 
 
 	/*  Clear SMC Interrupt 1, as an alternative to an AXI read */
