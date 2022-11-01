@@ -908,9 +908,9 @@ static const uint8_t riscv64_bin[] = {
 #include "../../../contrib/loaders/flash/smc35x/riscv64_smc35x.inc"
 };
 
-// static const uint8_t aarch64_bin[] = {
-// #include "../../../contrib/loaders/flash/smc35x/aarch64_smc35x.inc"
-// };
+static const uint8_t aarch64_bin[] = {
+#include "../../../contrib/loaders/flash/smc35x/aarch64_smc35x.inc"
+};
 
 int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
@@ -951,11 +951,10 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 			bin_size = sizeof(riscv64_bin);
 		}
 	} else {
-		return ERROR_OK;
-		// loader_target = ARM;
-		// xlen = 64;
-		// bin = aarch64_bin;
-		// bin_size = sizeof(aarch64_bin);
+		loader_target = ARM;
+		xlen = 64;
+		bin = aarch64_bin;
+		bin_size = sizeof(aarch64_bin);
 	}
 
 	uint32_t data_wa_size = 0;
@@ -1038,11 +1037,11 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
 			
 			/* 20 second timeout/megabyte */
-			int timeout = 20000 * (1 + (count / (1024 * 1024)));
+			// int timeout = 20000 * (1 + (count / (1024 * 1024)));
 
-			retval = target_run_algorithm(target, 0, NULL,
-					ARRAY_SIZE(reg_params), reg_params,
-					algorithm_wa->address, 0, timeout, NULL);
+			// retval = target_run_algorithm(target, 0, NULL,
+					// ARRAY_SIZE(reg_params), reg_params,
+					// algorithm_wa->address, 0, timeout, NULL);
 			if (retval != ERROR_OK) {
 				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 						algorithm_wa->address, retval);
