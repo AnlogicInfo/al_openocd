@@ -1037,11 +1037,11 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
 			
 			/* 20 second timeout/megabyte */
-			// int timeout = 20000 * (1 + (count / (1024 * 1024)));
+			int timeout = 20000 * (1 + (count / (1024 * 1024)));
 
-			// retval = target_run_algorithm(target, 0, NULL,
-					// ARRAY_SIZE(reg_params), reg_params,
-					// algorithm_wa->address, 0, timeout, NULL);
+			retval = target_run_algorithm(target, 0, NULL,
+					ARRAY_SIZE(reg_params), reg_params,
+					algorithm_wa->address, 0, timeout, NULL);
 			if (retval != ERROR_OK) {
 				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 						algorithm_wa->address, retval);
