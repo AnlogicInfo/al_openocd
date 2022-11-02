@@ -1,0 +1,164 @@
+/*
+ * File: core.c
+ * Author: Tianyi Wang (tianyi.wang@anlogic.com)
+ * Date:  2022-11-02
+ * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
+ * Last Modified: 2022-11-02
+ */
+
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "imp.h"
+
+struct emmc_device *emmc_devices;
+
+/* configured EMMC devices and EMMC Flash command handler */
+void emmc_device_add(struct emmc_device *c)
+{
+	if (emmc_devices) {
+		struct emmc_device *p = emmc_devices;
+		while (p && p->next)
+			p = p->next;
+		p->next = c;
+	} else
+		emmc_devices = c;
+}
+
+/*	Chip ID list
+* Manufacturer ID, product name, blocksize, chipsize in MegaByte, name
+ */
+
+static struct emmc_info emmc_flash_ids[] = 
+{
+
+    {EMMC_MFR_SAMSUNG, 0x38474E443352, , 0X2000, "KLM8G1GEND-B031 8GB EMMC "},
+    {0, 0, 0, 0, 0, NULL},
+
+}
+
+static struct emmc_manufactureer emmc_manuf_ids[] = {
+    {0x0, "unknown"},
+    {EMMC_MFR_SAMSUNG, "Samsung"},
+}
+
+/**
+ * Returns the flash bank specified by @a name, which matches the
+ * driver name and a suffix (option) specify the driver-specific
+ * bank number. The suffix consists of the '.' and the driver-specific
+ * bank number: when two davinci banks are defined, then 'davinci.1' refers
+ * to the second (e.g. DM355EVM).
+ */
+static struct emmc_device *get_emmc_device_by_name(const char* name)
+{
+	unsigned requested = get_flash_name_index(name);
+	unsigned found = 0;
+
+	struct emmc_device *emmc;
+	for (emmc = emmc_devices; emmc; emmc = emmc->next) {
+		if (strcmp(emmc->name, name) == 0)
+			return emmc;
+		if (!flash_driver_name_matches(emmc->controller->name, name))
+			continue;
+		if (++found < requested)
+			continue;
+		return emmc;
+	}
+	return NULL;
+}
+
+
+struct emmc_device *get_emmc_device_by_num(int num)
+{
+	struct emmc_device *p;
+	int i = 0;
+
+	for (p = emmc_devices; p; p = p->next) {
+		if (i++ == num)
+			return p;
+	}
+
+	return NULL;
+}
+
+COMMAND_HELPER(emmc_command_get_device, unsigned name_index,
+	struct emmc_device **emmc)
+{
+	const char *str = CMD_ARGV[name_index];
+	*emmc = get_emmc_device_by_name(str);
+	if (*emmc)
+		return ERROR_OK;
+
+	unsigned num;
+	COMMAND_PARSE_NUMBER(uint, str, num);
+	*emmc = get_emmc_device_by_num(num);
+	if (!*emmc) {
+		command_print(CMD, "emmc flash device '%s' not found", str);
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+	return ERROR_OK;
+}
+
+
+int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
+{
+	if (!emmc->device)
+		return ERROR_emmc_DEVICE_NOT_PROBED;
+
+	/* Send read status command */
+	/* FIXME: errors returned from emmc->controller are mostly ignored! */
+	// emmc->controller->command(emmc, emmc_CMD_STATUS);
+
+	// alive_sleep(1);
+
+	// /* read status */
+	// if (emmc->device->options & emmc_BUSWIDTH_16) {
+	// 	uint16_t data;
+	// 	emmc->controller->read_data(emmc, &data);
+	// 	*status = data & 0xff;
+	// } else
+	// 	emmc->controller->read_data(emmc, status);
+
+	return ERROR_OK;
+}
+
+
+static int emmc_poll_ready(struct emmc_device *emmc, int timeout)
+{
+	// uint8_t status;
+
+	// emmc->controller->command(emmc, emmc_CMD_STATUS);
+	// do {
+	// 	if (emmc->device->options & emmc_BUSWIDTH_16) {
+	// 		uint16_t data;
+	// 		emmc->controller->read_data(emmc, &data);
+	// 		status = data & 0xff;
+	// 	} else
+	// 		emmc->controller->read_data(emmc, &status);
+	// 	if (status & emmc_STATUS_READY)
+	// 		break;
+	// 	alive_sleep(1);
+	// } while (timeout--);
+
+	// return (status & emmc_STATUS_READY) != 0;
+    return ERROR_OK;
+}
+
+int emmc_probe(struct emmc_device *emmc)
+{
+
+    return ERROR_OK;
+}
+
+int emmc_read_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size)
+{
+    return ERROR_OK;
+
+}
+
+int emmc_write_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size)
+{
+    return ERROR_OK;
+}
+
