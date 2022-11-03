@@ -39,14 +39,39 @@ COMMAND_HANDLER(handle_emmc_list_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(handle_emmc_probe_command)
+{
+	if (CMD_ARGC != 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	struct emmc_device *p;
+	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &p);
+	if (retval != ERROR_OK)
+		return retval;
+
+	retval = emmc_probe(p);
+	if (retval == ERROR_OK) {
+		command_print(CMD, "EMMC flash device '%s' found", p->device->name);
+	}
+
+	return retval;
+}
+
 static const struct command_registration emmc_exec_command_handlers[] = {
 	{
 		.name = "list",
 		.handler = handle_emmc_list_command,
 		.mode = COMMAND_EXEC,
-		.help = "list configured emmc flash devices",
+		.help = "list configured EMMC flash devices",
 		.usage = "",
 	},
+	{
+		.name = "probe",
+		.handler = handle_emmc_probe_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id",
+		.help = "identify EMMC flash device",
+	},	
 	COMMAND_REGISTRATION_DONE
 };
 
@@ -96,6 +121,8 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 	struct target *target;
 	int retval;
 
+	LOG_INFO("CREATE EMMC DEVICE");
+	LOG_INFO("get target");
 	if (CMD_ARGC < 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	target = get_target(CMD_ARGV[1]);
@@ -103,6 +130,8 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 		LOG_ERROR("invalid target %s", CMD_ARGV[1]);
 		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
+
+	LOG_INFO("register cmd");
 
 	if (controller->commands) {
 		retval = register_commands(CMD_CTX, NULL, controller->commands);
@@ -121,6 +150,7 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 	c->controller_priv = NULL;
 	c->device = NULL;
 	c->next = NULL;
+
 
 	retval = CALL_COMMAND_HANDLER(controller->emmc_device_command, c);
 	if (retval != ERROR_OK) {
@@ -155,6 +185,7 @@ COMMAND_HANDLER(handle_emmc_device_command)
 		LOG_ERROR("No valid EMMC flash driver found (%s)", driver_name);
 		return CALL_COMMAND_HANDLER(handle_emmc_list_drivers);
 	}
+
 	return CALL_COMMAND_HANDLER(create_emmc_device, bank_name, controller);
 }
 
@@ -166,13 +197,6 @@ static const struct command_registration emmc_config_command_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "defines a new EMMC bank",
 		.usage = "bank_id driver target [driver_options ...]",
-	},
-	{
-		.name = "drivers",
-		.handler = &handle_emmc_list_drivers,
-		.mode = COMMAND_ANY,
-		.help = "lists available EMMC drivers",
-		.usage = ""
 	},
 	{
 		.name = "init",

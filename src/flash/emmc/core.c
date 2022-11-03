@@ -112,6 +112,8 @@ int emmc_probe(struct emmc_device *emmc)
     size_t device_id = 0x38474E443352;
     int i;
 
+	emmc->controller->init(emmc);
+	
     for (i = 0; emmc_flash_ids[i].name; i++)
     {
         if(emmc_flash_ids[i].id == device_id)

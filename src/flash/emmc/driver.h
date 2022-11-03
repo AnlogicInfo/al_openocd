@@ -34,6 +34,8 @@ struct emmc_flash_controller {
 	/** Reset the EMMC device. */
 	int (*reset)(struct emmc_device *emmc);
 
+	int (*command)(struct emmc_device *emmc, uint8_t command);
+
 	/** Write a block of data to the EMMC device. */
 	int (*write_block_data)(struct emmc_device *emmc, uint8_t *data, int size);
 

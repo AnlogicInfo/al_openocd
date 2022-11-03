@@ -18,7 +18,10 @@ struct emmc_flash_controller *emmc_driver_find_by_name(const char *name)
 	for (unsigned i = 0; emmc_flash_controllers[i]; i++) {
 		struct emmc_flash_controller *controller = emmc_flash_controllers[i];
 		if (strcmp(name, controller->name) == 0)
+		{
+			LOG_INFO("emmc driver found %s", name);
 			return controller;
+		}
 	}
 	return NULL;
 }

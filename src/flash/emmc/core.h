@@ -45,4 +45,13 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status);
 int emmc_register_commands(struct command_context *cmd_ctx);
 COMMAND_HELPER(emmc_command_get_device, unsigned name_index, struct emmc_device **emmc);
 
+#define         ERROR_EMMC_DEVICE_INVALID               (-1100)
+#define         ERROR_EMMC_OPERATION_FAILED             (-1101)
+#define         ERROR_EMMC_OPERATION_TIMEOUT    (-1102)
+#define         ERROR_EMMC_OPERATION_NOT_SUPPORTED      (-1103)
+#define         ERROR_EMMC_DEVICE_NOT_PROBED    (-1104)
+#define         ERROR_EMMC_ERROR_CORRECTION_FAILED      (-1105)
+#define         ERROR_EMMC_NO_BUFFER                    (-1106)
+
+
 #endif
