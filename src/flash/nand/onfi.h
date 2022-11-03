@@ -187,8 +187,8 @@ enum OnfiCmdArrayOffset{
 
 #define NANDP_BB_FLAG			0xFF	/* Bad block flag */
 
-#define FAILED_FLAG			0	/* return failed flag */
-#define SUCCESS_FLAG		1	/* return success flag */
+#define FAILED_FLAG			1	/* return failed flag */
+#define SUCCESS_FLAG		0	/* return success flag */
 #define NAND_WRITE_PROTECTED 2	/* return BlockErase fail because nand write protected */
 
 #define GOOD_BLOCK 1	/* return BlockErase fail because nand write protected */

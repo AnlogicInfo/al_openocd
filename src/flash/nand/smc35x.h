@@ -618,4 +618,7 @@ enum SMC_ERROR_CODE{
 #define RISCV     0
 #define ARM       1
 
+#define NAND_BUSY	0
+#define NAND_READY	1
+
 #endif
