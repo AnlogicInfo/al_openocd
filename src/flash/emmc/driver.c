@@ -3,14 +3,23 @@
 #endif
 #include "core.h"
 #include "driver.h"
+extern struct emmc_flash_controller dwcmshc_emmc_controller;
+
+
+static struct emmc_flash_controller *emmc_flash_controllers[] = {
+	&dwcmshc_emmc_controller,
+
+/*	&boundary_scan_nand_controller, */
+	NULL
+};
 
 struct emmc_flash_controller *emmc_driver_find_by_name(const char *name)
 {
-	// for (unsigned i = 0; emmc_flash_controllers[i]; i++) {
-	// 	struct emmc_flash_controller *controller = emmc_flash_controllers[i];
-	// 	if (strcmp(name, controller->name) == 0)
-	// 		return controller;
-	// }
+	for (unsigned i = 0; emmc_flash_controllers[i]; i++) {
+		struct emmc_flash_controller *controller = emmc_flash_controllers[i];
+		if (strcmp(name, controller->name) == 0)
+			return controller;
+	}
 	return NULL;
 }
 

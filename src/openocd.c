@@ -34,6 +34,7 @@
 #include <helper/configuration.h>
 #include <flash/nor/core.h>
 #include <flash/nand/core.h>
+#include <flash/emmc/core.h>
 #include <pld/pld.h>
 #include <target/arm_cti.h>
 #include <target/arm_adi_v5.h>
@@ -167,6 +168,9 @@ COMMAND_HANDLER(handle_init_command)
 		return ERROR_FAIL;
 
 	if (command_run_line(CMD_CTX, "nand init") != ERROR_OK)
+		return ERROR_FAIL;
+
+	if (command_run_line(CMD_CTX, "emmc init") != ERROR_OK)
 		return ERROR_FAIL;
 
 	if (command_run_line(CMD_CTX, "pld init") != ERROR_OK)
@@ -316,6 +320,7 @@ static struct command_context *setup_command_handler(Jim_Interp *interp)
 		&target_register_commands,
 		&flash_register_commands,
 		&nand_register_commands,
+		&emmc_register_commands,
 		&pld_register_commands,
 		&cti_register_commands,
 		&dap_register_commands,

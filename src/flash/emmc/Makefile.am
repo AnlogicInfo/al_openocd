@@ -7,10 +7,10 @@ noinst_LTLIBRARIES += %D%/libocdflashemmc.la
 	$(EMMCHEADERS)
 
 EMMC_DRIVERS = \
-	%D%/dwc_mshc.c
+	%D%/dwcmshc.c
 
 EMMCHEADERS = \
 	%D%/core.h \
 	%D%/driver.h \
 	%D%/imp.h \
-    %D%/dwc_mshc.h
+    %D%/dwcmshc.h

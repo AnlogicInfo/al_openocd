@@ -33,16 +33,10 @@ void emmc_device_add(struct emmc_device *c)
 static struct emmc_info emmc_flash_ids[] = 
 {
 
-    {EMMC_MFR_SAMSUNG, 0x38474E443352, , 0X2000, "KLM8G1GEND-B031 8GB EMMC "},
-    {0, 0, 0, 0, 0, NULL},
+    {EMMC_MFR_SAMSUNG, 0x38474E443352, 0x2000, "Samsung KLM8G1GEND-B031 8GB EMMC "},
+    {0, 0, 0, NULL},
 
-}
-
-static struct emmc_manufactureer emmc_manuf_ids[] = {
-    {0x0, "unknown"},
-    {EMMC_MFR_SAMSUNG, "Samsung"},
-}
-
+};
 /**
  * Returns the flash bank specified by @a name, which matches the
  * driver name and a suffix (option) specify the driver-specific
@@ -103,50 +97,29 @@ COMMAND_HELPER(emmc_command_get_device, unsigned name_index,
 
 int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 {
-	if (!emmc->device)
-		return ERROR_emmc_DEVICE_NOT_PROBED;
-
-	/* Send read status command */
-	/* FIXME: errors returned from emmc->controller are mostly ignored! */
-	// emmc->controller->command(emmc, emmc_CMD_STATUS);
-
-	// alive_sleep(1);
-
-	// /* read status */
-	// if (emmc->device->options & emmc_BUSWIDTH_16) {
-	// 	uint16_t data;
-	// 	emmc->controller->read_data(emmc, &data);
-	// 	*status = data & 0xff;
-	// } else
-	// 	emmc->controller->read_data(emmc, status);
 
 	return ERROR_OK;
 }
 
 
-static int emmc_poll_ready(struct emmc_device *emmc, int timeout)
-{
-	// uint8_t status;
-
-	// emmc->controller->command(emmc, emmc_CMD_STATUS);
-	// do {
-	// 	if (emmc->device->options & emmc_BUSWIDTH_16) {
-	// 		uint16_t data;
-	// 		emmc->controller->read_data(emmc, &data);
-	// 		status = data & 0xff;
-	// 	} else
-	// 		emmc->controller->read_data(emmc, &status);
-	// 	if (status & emmc_STATUS_READY)
-	// 		break;
-	// 	alive_sleep(1);
-	// } while (timeout--);
-
-	// return (status & emmc_STATUS_READY) != 0;
-    return ERROR_OK;
-}
+// static int emmc_poll_ready(struct emmc_device *emmc, int timeout)
+// {
+//     return ERROR_OK;
+// }
 
 int emmc_probe(struct emmc_device *emmc)
 {
+    size_t device_id = 0x38474E443352;
+    int i;
+
+    for (i = 0; emmc_flash_ids[i].name; i++)
+    {
+        if(emmc_flash_ids[i].id == device_id)
+            emmc->device = &emmc_flash_ids[i];
+        break;
+    }
+
+    LOG_INFO("found %s", emmc->device->name);
 
     return ERROR_OK;
 }
@@ -154,7 +127,6 @@ int emmc_probe(struct emmc_device *emmc)
 int emmc_read_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size)
 {
     return ERROR_OK;
-
 }
 
 int emmc_write_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size)

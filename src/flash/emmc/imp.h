@@ -13,10 +13,8 @@
 
 void emmc_device_add(struct emmc_device *c);
 
-int emmc_write_block(struct emmc_device *emmc,
-    uint32_t block, uint8_t *data, uint32_t data_size);
-int emmc_read_block(struct emmc_device *emmc,
-    uint32_t block, uint8_t *data, uint32_t data_size);
+int emmc_write_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size);
+int emmc_read_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size);
 
 int emmc_probe(struct emmc_device *emmc);
 

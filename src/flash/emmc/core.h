@@ -16,9 +16,7 @@ struct emmc_device
     struct target *target;
     struct emmc_flash_controller *controller;
     void *controller_priv;
-    struct emmc_manufacture *manufacturer;
     struct emmc_info *device;
-    int    block_size;
     struct emmc_device *next;
 };
 
@@ -34,7 +32,7 @@ struct emmc_manufacture {
 
 struct emmc_info {
     int mfr_id;
-    int id;
+    size_t id;
     int chip_size;
     const char *name;
 };
@@ -42,8 +40,6 @@ struct emmc_info {
 
 struct emmc_device *get_emmc_device_by_num(int num);
 
-int emmc_read_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t size);
-int emmc_write_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t size);
 int emmc_read_status(struct emmc_device *emmc, uint8_t *status);
 
 int emmc_register_commands(struct command_context *cmd_ctx);

@@ -7,10 +7,10 @@
  */
 
 
-#include "dwc_mshc.h"
+#include "dwcmshc.h"
 
-const struct emmc_flash_controller dwcmshc_emmc = {
-    .name = "dwcmshc"
+const struct emmc_flash_controller dwcmshc_emmc_controller = {
+    .name = "dwc_mshc"
     // .emmc_device_command = ,
     // .init = ,
     // .reset = ,
