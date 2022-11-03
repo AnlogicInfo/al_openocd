@@ -2193,7 +2193,7 @@ static int target_free_working_area_restore(struct target *target, struct workin
 
 int target_free_working_area(struct target *target, struct working_area *area)
 {
-	return target_free_working_area_restore(target, area, 0);
+	return target_free_working_area_restore(target, area, 1);
 }
 
 /* free resources and restore memory, if restoring memory fails,
