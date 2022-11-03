@@ -1049,11 +1049,11 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 			}
 
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
-			// if (algorithm_result != 0) {
-			//     LOG_DEBUG("Algorithm returned error %llx", algorithm_result);
-			// 	retval = ERROR_FAIL;
-			// 	goto err;
-			// }
+			if (algorithm_result != 0) {
+			    LOG_DEBUG("Algorithm returned error %llx", algorithm_result);
+				retval = ERROR_FAIL;
+				goto err;
+			}
 
             LOG_INFO("result %lld count %d ", algorithm_result, count);
         }
@@ -1098,18 +1098,10 @@ static int smc35x_init(struct nand_device *nand)
 	target_write_u32(target, PS_MIO13, 0x02);
 	target_write_u32(target, PS_MIO14, 0x02);
 
-	// if (!flag) {
 	smc35x_nand_init(nand);
-		// retval = smc35x_nand_init(nand);
-		// if (retval != ERROR_OK) {
-		// 	LOG_INFO(err code: retval);
-		// 	return retval;
-		// }
-		// flag = 1;
-	// }
-	// smc35x_nand_init(nand);
 	// retval = smc35x_nand_init(nand);
 	// if (retval != ERROR_OK) {
+	//  LOG_INFO(err code: retval);
 	// 	return retval;
 	// }
 

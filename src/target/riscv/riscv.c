@@ -1508,7 +1508,6 @@ int riscv_resume(
 		if (resume_finish(target) != ERROR_OK)
 			return ERROR_FAIL;
 	}
-	LOG_INFO("riscv_resume run success");
 
 	return result;
 }
@@ -1900,19 +1899,15 @@ static int riscv_run_algorithm(struct target *target, int num_mem_params,
 	reg_mstatus->type->set(reg_mstatus, mstatus_bytes);
 
 	/* Run algorithm */
-	LOG_INFO("resume at 0x%" TARGET_PRIxADDR, entry_point);
 	LOG_DEBUG("resume at 0x%" TARGET_PRIxADDR, entry_point);
 	if (riscv_resume(target, 0, entry_point, 0, 0, true) != ERROR_OK)
 		return ERROR_FAIL;
 
 	int64_t start = timeval_ms();
 	while (target->state != TARGET_HALTED) {
-		LOG_INFO("poll()");
 		LOG_DEBUG("poll()");
 		int64_t now = timeval_ms();
-		LOG_INFO("target state isn't TARGET_HALTED");
 		if (now - start > timeout_ms) {
-			LOG_INFO("Algorithm timed out after %" PRId64 " ms.", now - start);
 			LOG_ERROR("Algorithm timed out after %" PRId64 " ms.", now - start);
 			riscv_halt(target);
 			old_or_new_riscv_poll(target);
@@ -1985,7 +1980,6 @@ static int riscv_run_algorithm(struct target *target, int num_mem_params,
 			return ERROR_FAIL;
 		}
 	}
-	LOG_INFO("riscv_run_algorithm run success");
 
 	return ERROR_OK;
 }
