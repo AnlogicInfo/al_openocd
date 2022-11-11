@@ -461,7 +461,10 @@ static void buffer_write_byte(struct mpsse_ctx *ctx, uint8_t data)
 static unsigned buffer_write(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_offset,
 	unsigned bit_count)
 {
-	LOG_DEBUG_IO("%d bits", bit_count);
+	unsigned i;
+	LOG_DEBUG_IO("%d bits ", bit_count);
+	for (i=0; i < ((bit_count >> 3) + 1); i++)
+		LOG_DEBUG_IO("index %d val %x ", i, *(out+i));
 	assert(ctx->write_count + DIV_ROUND_UP(bit_count, 8) <= ctx->write_size);
 	bit_copy(ctx->write_buffer + ctx->write_count, 0, out, out_offset, bit_count);
 	ctx->write_count += DIV_ROUND_UP(bit_count, 8);

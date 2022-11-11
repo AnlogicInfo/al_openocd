@@ -10,24 +10,34 @@
 #endif
 
 #include "imp.h"
-#include "dwcmshc.h"
+#include "dwcmshc_subs.h"
 #include <target/target.h>
 
-struct dwcmshc_emmc_controller {
-    bool probed;
-};
 
 
 EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc;
-    dwcmshc_emmc = calloc(1, sizeof(struct dwcmshc_emmc_controller));
-    // if(!dwcmshc_emmc)
-    // {
-    //     return ERROR_EMMC_DEVICE_INVLAID;
-    // }
+
+    if(CMD_ARGC < 6)
+        return ERROR_COMMAND_SYNTAX_ERROR;
+
+    dwcmshc_emmc = malloc(sizeof(struct dwcmshc_emmc_controller));
+    if(!dwcmshc_emmc)
+    {
+        return ERROR_FAIL;
+    }
 
     emmc->controller_priv = dwcmshc_emmc;
+    dwcmshc_emmc->probed = false;
+    dwcmshc_emmc->ctrl_base = 0;
+
+    if(CMD_ARGC >= 7) {
+        COMMAND_PARSE_ADDRESS(CMD_ARGV[6], dwcmshc_emmc->ctrl_base);
+        LOG_DEBUG("ASSUMING DWCMSHC device at ctrl_base = " TARGET_ADDR_FMT, 
+            dwcmshc_emmc->ctrl_base);
+    }
+
     return ERROR_OK;    
 }
 
@@ -37,10 +47,11 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command)
     return ERROR_OK;
 }
 
+
 static int dwcmshc_emmc_init(struct emmc_device *emmc)
 {
-    LOG_INFO("dwcmshc emmc init");
     return ERROR_OK;
+
 }
 
 static int dwcmshc_emmc_reset(struct emmc_device *emmc)

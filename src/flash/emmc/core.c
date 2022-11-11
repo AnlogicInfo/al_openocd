@@ -109,7 +109,7 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 
 int emmc_probe(struct emmc_device *emmc)
 {
-    size_t device_id = 0x38474E443352;
+    size_t device_id = 0;
     int i;
 
 	emmc->controller->init(emmc);
