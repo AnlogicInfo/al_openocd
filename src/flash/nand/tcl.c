@@ -280,6 +280,43 @@ COMMAND_HANDLER(handle_nand_write_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(handle_nand_write_image_command)
+{
+	//ref: nor/tcl.c 
+
+	// 1. file io
+	// file_data -> host_buffer, size, addr
+
+	// 2. call nand_write_image(buffer, size, addr)
+	// dwcssi.c/write
+	// write nand image
+	// work area allocate (MAX WR Size = 0x10000)
+	// loop 0 start: 0, end: 0x10000 - code_size, code
+		// write_page 
+	// loop 1 start: 0x10000, end: 0x20000 - code, code
+	// workarea nand_addr, size, host_buffer start 
+
+	// nand write_image filename 0
+	// struct target *target = get_current_target(CMD_CTX);
+	// struct image image;
+	// uint32_t written;
+	// int retval;
+
+	struct nand_device *nand = NULL;
+	struct nand_fileio_state s;
+	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
+			&s, &nand, FILEIO_READ, false, true);
+	if (retval != ERROR_OK)
+		return retval;
+
+	// uint32_t total_bytes = s.size;
+	// while (s.size > 0) {
+		
+	// }
+
+	return ERROR_OK;
+}
+
 COMMAND_HANDLER(handle_nand_verify_command)
 {
 	struct nand_device *nand = NULL;
@@ -464,6 +501,13 @@ static const struct command_registration nand_exec_command_handlers[] = {
 		.usage = "bank_id filename offset "
 			"['oob_raw'|'oob_only'|'oob_softecc'|'oob_softecc_kw']",
 		.help = "write to NAND flash device",
+	},
+	{
+		.name = "write_image",
+		.handler = handle_nand_write_image_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id filename offset",
+		.help = "Write an image to NAND flash device",
 	},
 	{
 		.name = "raw_access",

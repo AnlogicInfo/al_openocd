@@ -222,7 +222,7 @@ do{		\
   * OneHot is used to check if one and only one bit is set.
   * This Macro returns 1 if the value passed is OneHot.
   */
- #define OneHot(Value)	(!((Value) & (Value - 1)))
+#define OneHot(Value)	(!((Value) & (Value - 1)))
 
 
 

@@ -592,11 +592,10 @@ int nand_erase(struct nand_device *nand, int first_block, int last_block)
 	return ERROR_OK;
 }
 
-#if 0
-static int nand_read_plain(struct nand_device *nand,
+int nand_read_plain(struct nand_device *nand,
 	uint32_t address,
 	uint8_t *data,
-	uint32_t data_size)
+	int32_t data_size)
 {
 	uint8_t *page;
 
@@ -631,10 +630,10 @@ static int nand_read_plain(struct nand_device *nand,
 	return ERROR_OK;
 }
 
-static int nand_write_plain(struct nand_device *nand,
+int nand_write_plain(struct nand_device *nand,
 	uint32_t address,
 	uint8_t *data,
-	uint32_t data_size)
+	int32_t data_size)
 {
 	uint8_t *page;
 
@@ -668,7 +667,6 @@ static int nand_write_plain(struct nand_device *nand,
 
 	return ERROR_OK;
 }
-#endif
 
 int nand_write_page(struct nand_device *nand, uint32_t page,
 	uint8_t *data, uint32_t data_size,
