@@ -44,20 +44,25 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 
 static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command)
 {
+
     return ERROR_OK;
 }
 
 
 static int dwcmshc_emmc_init(struct emmc_device *emmc)
 {
-    return ERROR_OK;
+    dwcmshc_emmc_ctl_init(emmc);
+    dwcmshc_emmc_card_init(emmc);
+    dwcmshc_emmc_rd_id(emmc);
 
+    return ERROR_OK;
 }
 
 static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 {
-    return ERROR_OK;
 
+
+    return ERROR_OK;
 }
 
 static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint8_t *data, int size)

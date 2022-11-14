@@ -84,6 +84,15 @@ struct emmc_device
 #define EMMC_CMD6_PARA_8_BIT_WIDTH_BUS          ((uint32_t)0x03B70200)
 #define EMMC_CMD16_PARA_BLOCK_LEN_512           ((uint32_t)0x200)
 
+// Response defines
+#define EMMC_NO_RESP                            0
+#define EMMC_RESP_R1                            1
+#define EMMC_RESP_R1b                           2
+#define EMMC_RESP_R2                            3
+#define EMMC_RESP_R3                            4
+#define EMMC_RESP_R4                            5
+#define EMMC_RESP_R5                            6
+
 //OCR register status
 #define EMMC_OCR_HIGH_VOLTAGE                   0x0
 #define EMMC_OCR_DUAL_VOLTAGE                   0x1

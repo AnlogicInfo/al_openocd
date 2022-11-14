@@ -111,15 +111,18 @@ int emmc_probe(struct emmc_device *emmc)
 {
     size_t device_id = 0;
     int i;
+	int retval;
+	emmc->controller->reset(emmc);
+	retval = emmc->controller->emmc_ready(emmc, );
 
-	emmc->controller->init(emmc);
+	// emmc->controller->init(emmc);
 	
-    for (i = 0; emmc_flash_ids[i].name; i++)
-    {
-        if(emmc_flash_ids[i].id == device_id)
-            emmc->device = &emmc_flash_ids[i];
-        break;
-    }
+    // for (i = 0; emmc_flash_ids[i].name; i++)
+    // {
+    //     if(emmc_flash_ids[i].id == device_id)
+    //         emmc->device = &emmc_flash_ids[i];
+    //     break;
+    // }
 
     LOG_INFO("found %s", emmc->device->name);
 
