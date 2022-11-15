@@ -146,7 +146,7 @@ typedef union
 
 typedef union
 {
-	uint8_t d32;
+	uint8_t d8;
 	struct {
         uint8_t sd_bus_pwr_vdd1:1;
 	    uint8_t sd_bus_vol_vdd1:3;
@@ -710,6 +710,10 @@ typedef struct
 #define MMC_TC_TOUT_CNT_2_25			0xC
 #define MMC_TC_TOUT_CNT_2_26			0xD
 #define MMC_TC_TOUT_CNT_2_27			0xE
+
+// normal_int_stat register param
+#define WAIT_CMD_COMPLETE               0
+#define WAIT_XFER_COMPLETE              1
 
 //normal_int_stat_en register param
 #define MMC_NORMAL_INT_STAT_MASKED		0x0

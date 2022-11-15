@@ -8,8 +8,15 @@
 
 #ifndef OPENOCD_FLASH_EMMC_DWCMSHC_SUBS_H
 #define OPENOCD_FLASH_EMMC_DWCMSHC_SUBS_H
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "imp.h"
+#include <helper/time_support.h>
+#include <helper/binarybuffer.h>
+#include <target/target.h>
 #include "dwcmshc_regs.h"
-#include "emmc.h"
 
 typedef struct dwcmshc_cmd_pkt_t 
 {

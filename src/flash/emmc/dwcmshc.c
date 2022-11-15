@@ -9,9 +9,7 @@
 #include "config.h"
 #endif
 
-#include "imp.h"
 #include "dwcmshc_subs.h"
-#include <target/target.h>
 
 
 
@@ -53,8 +51,6 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc)
 {
     dwcmshc_emmc_ctl_init(emmc);
     dwcmshc_emmc_card_init(emmc);
-    dwcmshc_emmc_rd_id(emmc);
-
     return ERROR_OK;
 }
 

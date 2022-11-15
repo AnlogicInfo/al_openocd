@@ -30,13 +30,13 @@ void emmc_device_add(struct emmc_device *c)
 * Manufacturer ID, product name, blocksize, chipsize in MegaByte, name
  */
 
-static struct emmc_info emmc_flash_ids[] = 
-{
+// static struct emmc_info emmc_flash_ids[] = 
+// {
 
-    {EMMC_MFR_SAMSUNG, 0x38474E443352, 0x2000, "Samsung KLM8G1GEND-B031 8GB EMMC "},
-    {0, 0, 0, NULL},
+//     {EMMC_MFR_SAMSUNG, 0x38474E443352, 0x2000, "Samsung KLM8G1GEND-B031 8GB EMMC "},
+//     {0, 0, 0, NULL},
 
-};
+// };
 /**
  * Returns the flash bank specified by @a name, which matches the
  * driver name and a suffix (option) specify the driver-specific
@@ -109,13 +109,7 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 
 int emmc_probe(struct emmc_device *emmc)
 {
-    size_t device_id = 0;
-    int i;
-	int retval;
-	emmc->controller->reset(emmc);
-	retval = emmc->controller->emmc_ready(emmc, );
-
-	// emmc->controller->init(emmc);
+	emmc->controller->init(emmc);
 	
     // for (i = 0; emmc_flash_ids[i].name; i++)
     // {
@@ -124,7 +118,7 @@ int emmc_probe(struct emmc_device *emmc)
     //     break;
     // }
 
-    LOG_INFO("found %s", emmc->device->name);
+    // LOG_INFO("found %s", emmc->device->name);
 
     return ERROR_OK;
 }
