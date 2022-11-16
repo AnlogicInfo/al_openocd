@@ -143,8 +143,7 @@ void smc35x_read_buf(struct nand_device *nand, uint8_t *buf, uint32_t length, ui
 	uint32_t *temp_buff = (uint32_t *)buf;
 	uint32_t temp_length = length >> 2;
 
-	for(index = 0; index < temp_length; index++)
-	{
+	for (index = 0; index < temp_length; index++) {
 		target_read_u32(target, addr, &temp_buff[index]);
 	}
 }
@@ -156,8 +155,7 @@ void smc35x_write_buf(struct nand_device *nand, uint8_t *buf, uint32_t length, u
 	uint32_t *temp_buff = (uint32_t *)buf;
 	uint32_t temp_length = length >> 2;
 
-	for(index = 0; index < temp_length; index++)
-	{
+	for (index = 0; index < temp_length; index++) {
 		target_write_u32(target, addr, temp_buff[index]);
 	}
 }
@@ -235,8 +233,7 @@ int smc35x_read_parameter(struct nand_device *nand, nand_size_type *nand_size)
 	smc35x_command(nand, ONFI_CMD_READ_PARAMETER1);
 	target_write_u32(target, NAND_BASE, 0x00);
 
-	for (index = 0; index < 256; index++)
-	{
+	for (index = 0; index < 256; index++) {
 		target_read_u8(target, smc35x_info->data_phase_addr, &temp[index]);
 	}
 	nand_size->dataBytesPerPage = 	*((uint32_t *)(&temp[DATA_PER_PAGE_POS]));
@@ -366,11 +363,11 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 	LOG_INFO("id: %x %x %x %x %x",
 		nand_size->device_id[0],nand_size->device_id[1],nand_size->device_id[2],nand_size->device_id[3],nand_size->device_id[4]);
 
-	if((nand_size->device_id[0] != NAND_MFR_SAMSUNG) && (nand_size->device_id[0] != NAND_MFR_ESMT))
+	if ((nand_size->device_id[0] != NAND_MFR_SAMSUNG) && (nand_size->device_id[0] != NAND_MFR_ESMT))
 	{
 		status = smc35x_read_parameter(nand, nand_size);
 
-		if(status != SmcSuccess)
+		if (status != SmcSuccess)
 		{
 			return status;
 		}
@@ -395,9 +392,9 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 
 		nand_size->totalUnit = 1;
 
-		if((nand_size->dataBytesPerPage > SMC_MAX_PAGE_SIZE) ||
-				(nand_size->spareBytesPerPage > SMC_MAX_SPARE_SIZE)||
-				(nand_size->pagesPerBlock > SMC_MAX_PAGES_PER_BLOCK))
+		if ((nand_size->dataBytesPerPage > SMC_MAX_PAGE_SIZE) ||
+			(nand_size->spareBytesPerPage > SMC_MAX_SPARE_SIZE)||
+			(nand_size->pagesPerBlock > SMC_MAX_PAGES_PER_BLOCK))
 		{
 			return SmcSamsungParamOver;
 		}
@@ -406,18 +403,18 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 		nand_size->eccNum = 1;
 	}
 
-	if((nand_size->device_id[0] == NAND_MFR_AMD) && (nand_size->eccNum == 0))
+	if ((nand_size->device_id[0] == NAND_MFR_AMD) && (nand_size->eccNum == 0))
 	{
 		/* Because SkyHigh ecc nums is zero */
 		nand_size->eccNum = 4;
 	}
 
-	if(nand_size->eccNum == 1)
+	if (nand_size->eccNum == 1)
 	{
 		/* Enable SMC IP Hardware */
 		status = smc35x_ecc1_init(nand, nand_size);
 
-		if(status != SmcSuccess)
+		if (status != SmcSuccess)
 		{
 			return status;
 		}
@@ -427,18 +424,18 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 		/* Close SMC IP ECC */
 		status = smx35x_ecc1_disable(nand);
 
-		if(status != SmcSuccess)
+		if (status != SmcSuccess)
 		{
 			return status;
 		}
 
-		if((nand_size->device_id[0] == NAND_MFR_AMD)||
+		if ((nand_size->device_id[0] == NAND_MFR_AMD)||
 			(nand_size->device_id[0] == NAND_MFR_MICRON))
 		{
 			/* Enable On Die ECC */
 			status = smc35x_internalecc_init(nand);
 
-			if(status != SmcSuccess)
+			if (status != SmcSuccess)
 			{
 				return status;
 			}
@@ -487,9 +484,9 @@ int smc35x_ecc_calculate(struct nand_device *nand, uint8_t *ecc_data, uint8_t ec
 	{
 		target_read_u32(target, (SMC_BASE + SMC_REG_ECC1_BLOCK0 + ecc_reg * 4), &ecc_value);
 		LOG_INFO("ecc value: %x", ecc_value);
-		if((ecc_value) & (1 << SMC_EccBlock_ISCheakValueValid_FIELD))
+		if ((ecc_value) & (1 << SMC_EccBlock_ISCheakValueValid_FIELD))
 		{
-			for(count=0; count < 3; ++count)
+			for (count=0; count < 3; ++count)
 			{
 				*ecc_data = ecc_value & 0xFF;
 				LOG_INFO("dst: %d", *ecc_data);
@@ -563,37 +560,24 @@ int smc35x_read_page_internalecc(struct nand_device *nand, uint32_t page, uint8_
 			uint8_t *oob, uint32_t oob_size)
 {
 	uint8_t *oob_data = oob, *oob_free;
-
 	struct target *target = nand->target;
 	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	uint64_t data_phase_addr = smc35x_info->data_phase_addr;
 
-	if(smc35x_info->nand_size.device_id[0] == NAND_MFR_MICRON)
-	{
+	if (smc35x_info->nand_size.device_id[0] == NAND_MFR_MICRON) {
 		target_write_u32(target, NAND_BASE, 0x00);
 	}
 
 	smc35x_read_buf(nand, data, data_size, data_phase_addr);
-	// for (index = 0; index < data_size; ++index, ++data)
-	// {
-	// 	target_read_u8(target, data_phase_addr, data);
-	// }
 
 	oob = smc35x_oob_init(nand, oob, &oob_size, smc35x_info->nand_size.spareBytesPerPage);
 	oob_free = oob;
 
 	smc35x_read_buf(nand, oob, oob_size - ONFI_AXI_DATA_WIDTH, data_phase_addr);
 	oob += (oob_size - ONFI_AXI_DATA_WIDTH);
-	// for (index = 0; index < oob_size-ONFI_AXI_DATA_WIDTH; ++index, ++oob)
-	// {
-	// 	target_read_u8(target, data_phase_addr, oob);
-	// }
+
 	data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
-	smc35x_read_buf(nand, oob, ONFI_AXI_DATA_WIDTH, data_phase_addr);
-	// for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++oob)
-	// {
-	// 	target_read_u8(target, data_phase_addr, oob);
-	// }
+	smc35x_read_buf(nand, oob, ONFI_AXI_DATA_WIDTH, data_phase_addr);\
 
 	if (!oob_data) {
 		free(oob_free);
@@ -616,48 +600,28 @@ int smc35x_read_page_ecc1(struct nand_device *nand, uint32_t page, uint8_t *data
 	uint8_t __attribute__((aligned(4))) ReadEccData[12] = {0};
 	uint32_t *dataOffsetPtr = NULL;
 	uint8_t *TempBuf = oob;
-	// uint8_t temp = 0;
 
 	if (data == NULL) {
 		LOG_INFO("read only oob data");
-		// if (oob_size >= ONFI_AXI_DATA_WIDTH) {
-			data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
-			
-			for (index = 0; index < oob_size; ++index, ++oob)
-			{
-				target_read_u8(target, data_phase_addr, oob);
-			}
-			// data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
-			// smc35x_read_buf(nand, oob, ONFI_AXI_DATA_WIDTH, data_phase_addr);
-			// for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++oob)
-			// {
-			// 	target_read_u8(target, data_phase_addr, oob);
-			// }
-		// }
+		data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
+		
+		for (index = 0; index < oob_size; ++index, ++oob) {
+			target_read_u8(target, data_phase_addr, oob);
+		}
 
 		return ERROR_OK;
 	}
 
-	// if (data_size >= ONFI_AXI_DATA_WIDTH) {
-		smc35x_read_buf(nand, data, data_size - ONFI_AXI_DATA_WIDTH, data_phase_addr);
-		data += (data_size - ONFI_AXI_DATA_WIDTH);
-		// for (index = 0; index < data_size - ONFI_AXI_DATA_WIDTH; ++index, ++data)
-		// {
-		// 	target_read_u8(target, data_phase_addr, data);
-		// }
+	smc35x_read_buf(nand, data, data_size - ONFI_AXI_DATA_WIDTH, data_phase_addr);
+	data += (data_size - ONFI_AXI_DATA_WIDTH);
 
-		data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11) | (ECC_LAST << 10);
-		smc35x_read_buf(nand, data, ONFI_AXI_DATA_WIDTH, data_phase_addr);
-		// for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++data)
-		// {
-		// 	target_read_u8(target, data_phase_addr, data);
-		// }
+	data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11) | (ECC_LAST << 10);
+	smc35x_read_buf(nand, data, ONFI_AXI_DATA_WIDTH, data_phase_addr);
 
-		target_read_u32(target, (SMC_BASE + SMC_REG_ECC1_STATUS), &status);
-		LOG_INFO("ecc status register: %x", status);
-	// }
+	target_read_u32(target, (SMC_BASE + SMC_REG_ECC1_STATUS), &status);
+	LOG_INFO("ecc status register: %x", status);
 
-	switch(smc35x_info->nand_size.spareBytesPerPage)
+	switch (smc35x_info->nand_size.spareBytesPerPage)
 	{
 		case(64):
 			eccDataNums = 12;
@@ -676,42 +640,33 @@ int smc35x_read_page_ecc1(struct nand_device *nand, uint32_t page, uint8_t *data
 			return SmcHwReadSizeOver;
 	}
 	smc35x_ecc_calculate(nand, eccData, eccDataNums);
-	for(index = 0; index < eccDataNums; ++index)
-	{
-		LOG_INFO("calculate ecc: %d ",eccData[index]);
+	for (index = 0; index < eccDataNums; ++index) {
+		LOG_INFO("calculate ecc: %d ", eccData[index]);
 	}
 
 	oob = smc35x_oob_init(nand, oob, &oob_size, smc35x_info->nand_size.spareBytesPerPage);
 	oob_free = oob;
-	// if (oob_size >= ONFI_AXI_DATA_WIDTH) {
-		data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
-		smc35x_read_buf(nand, oob, oob_size - ONFI_AXI_DATA_WIDTH, data_phase_addr);
-		oob += (oob_size - ONFI_AXI_DATA_WIDTH);
-		// for (index = 0; index < oob_size - ONFI_AXI_DATA_WIDTH; ++index, ++oob)
-		// {
-		// 	target_read_u8(target, data_phase_addr, oob);
-		// }
-		data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
-		smc35x_read_buf(nand, oob, ONFI_AXI_DATA_WIDTH, data_phase_addr);
-		// for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index, ++oob)
-		// {
-		// 	target_read_u8(target, data_phase_addr, oob);
-		// }
-	// }
-
+	
+	data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
+	smc35x_read_buf(nand, oob, oob_size - ONFI_AXI_DATA_WIDTH, data_phase_addr);
+	oob += (oob_size - ONFI_AXI_DATA_WIDTH);
+	
+	data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
+	smc35x_read_buf(nand, oob, ONFI_AXI_DATA_WIDTH, data_phase_addr);
+	
 	TempBuf = oob_free;
-	for(index = 0; index < eccDataNums; ++index)
+	for (index = 0; index < eccDataNums; ++index)
 	{
 		ReadEccData[index] = ~TempBuf[dataOffsetPtr[index]];
 		LOG_INFO("read ecc: %d", ReadEccData[index]);
 	}
 
 	index = smc35x_info->nand_size.dataBytesPerPage / NAND_ECC_BLOCK_SIZE;
-	for(; index; --index)
+	for (; index; --index)
 	{
 		LOG_INFO("ecc correct %d", index);
 		status = smc35x_ecc_correct(&ReadEccData[EccOffset], &eccData[EccOffset], page_data);
-		if(status != SUCCESS_FLAG) {
+		if (status != SUCCESS_FLAG) {
 			if (!oob_data) {
 				free(oob_free);
 			}
@@ -786,7 +741,7 @@ uint8_t nand_busy(struct nand_device *nand)
 
 	LOG_INFO("int1 status %d", status);
 	
-	if(status)
+	if (status)
 		return NAND_READY;
 	else
 		return NAND_BUSY;
@@ -826,19 +781,11 @@ int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *dat
 
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
 	smc35x_write_buf(nand, data, data_size - ONFI_AXI_DATA_WIDTH, data_phase_addr);
-	// for (index = 0; index < data_size-ONFI_AXI_DATA_WIDTH; ++index)
-	// {
-	// 	target_write_u8(target, data_phase_addr, data[index]);
-	// }
 
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10);
 	data += (data_size - ONFI_AXI_DATA_WIDTH);
 	smc35x_write_buf(nand, data, ONFI_AXI_DATA_WIDTH, data_phase_addr);
-	// for (index = 0; index < ONFI_AXI_DATA_WIDTH; ++index)
-	// {
-	// 	target_write_u8(target, data_phase_addr, data[index]);
-	// }
-
+	
 	switch(nand_size->spareBytesPerPage)
 	{
 		case(16):
@@ -865,7 +812,7 @@ int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *dat
 	oob_free = oob_data;
 	if (nand_size->eccNum == 1 && dataOffsetPtr != NULL) {
 		smc35x_ecc_calculate(nand, eccData, eccDataNums);
-		for(index = 0; index < eccDataNums; index++)
+		for (index = 0; index < eccDataNums; index++)
 		{
 			oob_data[dataOffsetPtr[index]] = (~eccData[index]);
 		}
@@ -873,21 +820,11 @@ int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *dat
 
 	data_phase_addr = NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
 	smc35x_write_buf(nand, oob_data, oob_size - ONFI_AXI_DATA_WIDTH, data_phase_addr);
-	// oob_size = nand_size->spareBytesPerPage - ONFI_AXI_DATA_WIDTH;
-	// for (index = 0; index < oob_size; ++index)
-	// {
-	// 	target_write_u8(target, data_phase_addr, oob_data[index]);
-	// }
 
 	data_phase_addr = NAND_BASE | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11);
 	oob_data += (oob_size - ONFI_AXI_DATA_WIDTH);
 	smc35x_write_buf(nand, oob_data, ONFI_AXI_DATA_WIDTH, data_phase_addr);
-	// oob_size = ONFI_AXI_DATA_WIDTH;
-	// for (index = 0; index < oob_size; ++index)
-	// {
-	// 	target_write_u8(target, data_phase_addr, oob_data[index]);
-	// }
-
+	
 	while (nand_busy(nand) == NAND_BUSY);
 
 	target_read_u32(target, (SMC_BASE + SMC_REG_MEM_CFG_CLR), &status);
@@ -921,13 +858,19 @@ static const uint8_t aarch64_bin[] = {
 int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
-	// 设置工作区
 	int retval = ERROR_OK;
-	uint8_t state = 0;
 	struct target *target = nand->target;
 	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	nand_size_type *nand_size = &smc35x_info->nand_size;
-	uint32_t count = nand_size->dataBytesPerPage + nand_size->spareBytesPerPage;
+	uint32_t count = nand_size->dataBytesPerPage;
+
+	// 设置工作区
+	uint32_t xlen = 0;
+	struct working_area *algorithm_wa = NULL;
+	struct working_area *data_wa = NULL;
+	const uint8_t *bin;
+	size_t bin_size;
+	int loader_target;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
@@ -937,12 +880,6 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 	LOG_INFO("write data %d %d %d %d %d... from addr %p",
 			data[0], data[1], data[2], data[3], data[4], data);
 
-	uint32_t xlen = 0;
-	struct working_area *algorithm_wa = NULL;
-	struct working_area *data_wa = NULL;
-	const uint8_t *bin;
-	size_t bin_size;
-	int loader_target;
 
 	if (strncmp(target_name(target), "riscv", 4) == 0) {
 		LOG_INFO("loader on riscv");
@@ -967,8 +904,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 
 	uint32_t data_wa_size = 0;
 	if (target_alloc_working_area(target, bin_size, &algorithm_wa) == ERROR_OK) {
-		retval = target_write_buffer(target, algorithm_wa->address,
-				bin_size, bin);
+		retval = target_write_buffer(target, algorithm_wa->address, bin_size, bin);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Failed to write code to " TARGET_ADDR_FMT ": %d",
 					algorithm_wa->address, retval);
@@ -1022,39 +958,22 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 			buf_set_u64(reg_params[1].value, 0, xlen, nand_size->dataBytesPerPage);
 			buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
 			buf_set_u64(reg_params[3].value, 0, xlen, page);
-			buf_set_u64(reg_params[4].value, 0, xlen, count);
+			buf_set_u64(reg_params[4].value, 0, xlen, nand_size->dataBytesPerPage + nand_size->spareBytesPerPage);
 			buf_set_u64(reg_params[5].value, 0, xlen, NAND_BASE);
 			buf_set_u64(reg_params[6].value, 0, xlen, nand_size->eccNum);
 
-			memset(buffer, 0xFF, sizeof(buffer));
 			retval = target_write_buffer(target, data_wa->address, nand_size->dataBytesPerPage, data);
 			if (retval != ERROR_OK) {
 				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
 						nand_size->dataBytesPerPage, data_wa->address, retval);
 				goto err;
 			}
-			retval = target_write_buffer(target, data_wa->address + nand_size->dataBytesPerPage, nand_size->spareBytesPerPage, buffer);
-			if (retval != ERROR_OK) {
-				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
-						nand_size->spareBytesPerPage, data_wa->address + nand_size->dataBytesPerPage, retval);
-				goto err;
-			}
 
-			LOG_INFO("data address=%lld, data count=%d, buffer=%02x %02x %02x %02x %02x %02x ...", 
-					data_wa->address, data_wa->size,
-					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
+			LOG_INFO("work area data address:%lld, data length=%d", data_wa->address, data_wa->size);
 			
-			smc35x_command(nand, NAND_CMD_STATUS);
-			LOG_INFO("write addr:%llx, send command:%x", smc35x_info->cmd_phase_addr, smc35x_info->cmd_phase_data);
-			target_read_u8(target, (smc35x_info->data_phase_addr), &state);
-			LOG_INFO("read addr:%llx, get nand status:%x", (smc35x_info->data_phase_addr), state);
-
-			/* 20 second timeout/megabyte */
-			int timeout = 20000 * (1 + (count / (1024 * 1024)));
-
 			retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
-					algorithm_wa->address, 0, timeout, NULL);
+					algorithm_wa->address, 0, 20000, NULL);
 			if (retval != ERROR_OK) {
 				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
 						algorithm_wa->address, retval);
@@ -1067,8 +986,6 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 				retval = ERROR_FAIL;
 				goto err;
 			}
-
-            LOG_INFO("result %lld count %d ", algorithm_result, count);
         }
 
     	target_free_working_area(target, data_wa);
@@ -1088,10 +1005,8 @@ err:
 
 static int smc35x_init(struct nand_device *nand)
 {
-	uint8_t state;
-	uint32_t status;
+	// uint32_t retval;
 	struct target *target = nand->target;
-	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
@@ -1119,17 +1034,7 @@ static int smc35x_init(struct nand_device *nand)
 	//  LOG_INFO(err code: retval);
 	// 	return retval;
 	// }
-	target_read_u32(target, (SMC_BASE + SMC_REG_MEMC_STATUS), &status);
-	LOG_INFO("smc35x status register:%x", status);
-
-	target_read_u32(target, (SMC_BASE + SMC_REG_ECC1_STATUS), &status);
-	LOG_INFO("ecc status register:%x", status);
-
-	smc35x_command(nand, NAND_CMD_STATUS);
-	LOG_INFO("write addr:%llx, send command:%x", smc35x_info->cmd_phase_addr, smc35x_info->cmd_phase_data);
-	target_read_u8(target, (smc35x_info->data_phase_addr), &state);
-	LOG_INFO("read addr:%llx, get nand status:%x", (smc35x_info->data_phase_addr), state);
-
+	
 	return ERROR_OK;
 }
 
@@ -1143,8 +1048,7 @@ int smc35x_command_re(struct nand_device *nand, uint8_t startCmd, uint8_t endCmd
 
 	uint32_t endCmdReq = 0, cmdPhaseData  = 0;
 	volatile uint64_t cmdPhaseAddr  = 0;
-	if (endCmdPhase == ONFI_ENDIN_CMD_PHASE)
-	{
+	if (endCmdPhase == ONFI_ENDIN_CMD_PHASE) {
 		endCmdReq = 1;
 	}
 
@@ -1189,8 +1093,7 @@ void smc35x_read_data_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCm
 	uint32_t clearCs = 0;
 	volatile uint32_t Index = 0;
 
-	if(endCmdPhase == ONFI_ENDIN_DATA_PHASE)
-	{
+	if (endCmdPhase == ONFI_ENDIN_DATA_PHASE) {
 		endCmdReq = 1;
 	}
 
@@ -1203,7 +1106,7 @@ void smc35x_read_data_re(struct nand_device *nand, uint8_t endCmd, uint8_t endCm
 			(eccLast 	<< 10);
 
 	/* Read Data */
-	for(Index = 0;Index < Length;Index++)
+	for (Index = 0;Index < Length;Index++)
 	{
 		//Buf[Index] = *((uint8_t *)dataPhaseAddr);
 		target_read_u8(target, dataPhaseAddr, &Buf[Index]);
@@ -1224,21 +1127,6 @@ int smc35x_read_id_re(struct nand_device *nand)
 		LOG_INFO("target must be halted to use NAND flash controller");
 		return ERROR_NAND_OPERATION_FAILED;
 	}
-
-	target_write_u32(target, PS_MIO0, 0x02);
-	target_write_u32(target, PS_MIO2, 0x02);
-	target_write_u32(target, PS_MIO3, 0x02);
-	target_write_u32(target, PS_MIO4, 0x02);
-	target_write_u32(target, PS_MIO5, 0x02);
-	target_write_u32(target, PS_MIO6, 0x02);
-	target_write_u32(target, PS_MIO7, 0x02);
-	target_write_u32(target, PS_MIO8, 0x02);
-	target_write_u32(target, PS_MIO9, 0x02);
-	target_write_u32(target, PS_MIO10, 0x02);
-	target_write_u32(target, PS_MIO11, 0x02);
-	target_write_u32(target, PS_MIO12, 0x02);
-	target_write_u32(target, PS_MIO13, 0x02);
-	target_write_u32(target, PS_MIO14, 0x02);
 
     uint8_t device_id[5]={0};
 
