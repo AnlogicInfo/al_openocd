@@ -74,22 +74,6 @@ static uint8_t ecc_data[12] = {0};
 
 int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t count, uint32_t nand_base, uint32_t ecc_num)
 {
-	SMC_WriteReg(0xf8803000u, 0x02);
-	//SMC_WriteReg(PS_MIO1, 0x02);
-	SMC_WriteReg(0xf8803008u, 0x02);
-	SMC_WriteReg(0xf880300cu, 0x02);
-	SMC_WriteReg(0xf8803010u, 0x02);
-	SMC_WriteReg(0xf8803014u, 0x02);
-	SMC_WriteReg(0xf8803018u, 0x02);
-	SMC_WriteReg(0xf880301cu, 0x02);
-	SMC_WriteReg(0xf8803020u, 0x02);
-	SMC_WriteReg(0xf8803024u, 0x02);
-	SMC_WriteReg(0xf8803028u, 0x02);
-	SMC_WriteReg(0xf880302cu, 0x02);
-	SMC_WriteReg(0xf8803030u, 0x02);
-	SMC_WriteReg(0xf8803034u, 0x02);
-	SMC_WriteReg(0xf8803038u, 0x02);
-
 	int retval = ERROR_OK;
 	uint8_t state, nums = 0;
     uint32_t index, status;
@@ -98,7 +82,7 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 	uint32_t *temp_buffer, temp_length = 0;
 
 	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
-	uint8_t *poob_data = oob_data;
+	uint8_t *pecc_data = ecc_data, *poob_data = oob_data;
 	volatile uint8_t ecc_reg = 0;
 	uint32_t ecc_value = 0;
 
@@ -185,8 +169,9 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 			{
 				for (index = 0; index < 3; ++index)
 				{
-					ecc_data[ecc_reg*3 + index] = ecc_value & 0xFF;
+					*pecc_data = ecc_value & 0xFF;
 					ecc_value = ecc_value >> 8;
+					++pecc_data;
 				}
 			}
 			else {
@@ -238,7 +223,7 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 
 	data_phase_addr = (nand_base | NAND_DATA_PHASE_FLAG);
 	state = SMC_Read8BitReg(data_phase_addr);
-	if (!(state & ONFI_STATUS_FAIL)) {
+	if (state & ONFI_STATUS_FAIL) {
 		return FAILED_FLAG;
 	}
 

@@ -282,37 +282,76 @@ COMMAND_HANDLER(handle_nand_write_command)
 
 COMMAND_HANDLER(handle_nand_write_image_command)
 {
-	//ref: nor/tcl.c 
-
-	// 1. file io
-	// file_data -> host_buffer, size, addr
-
-	// 2. call nand_write_image(buffer, size, addr)
-	// dwcssi.c/write
-	// write nand image
-	// work area allocate (MAX WR Size = 0x10000)
-	// loop 0 start: 0, end: 0x10000 - code_size, code
-		// write_page 
-	// loop 1 start: 0x10000, end: 0x20000 - code, code
-	// workarea nand_addr, size, host_buffer start 
-
-	// nand write_image filename 0
-	// struct target *target = get_current_target(CMD_CTX);
-	// struct image image;
-	// uint32_t written;
-	// int retval;
-
 	struct nand_device *nand = NULL;
 	struct nand_fileio_state s;
+	struct target *target = get_current_target(CMD_CTX);
 	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
 			&s, &nand, FILEIO_READ, false, true);
 	if (retval != ERROR_OK)
 		return retval;
 
-	// uint32_t total_bytes = s.size;
-	// while (s.size > 0) {
-		
-	// }
+	size_t one_read, bytes_read = 0;
+	uint32_t total_bytes = s.size;
+	
+	/* Set the largest number of bytes that can be allocated to data */
+	uint32_t max_work_area = target_get_working_area_avail(target) - 12288;
+	uint32_t max_page_nums = max_work_area / s.page_size;
+	uint32_t max_page_size = max_page_nums * s.page_size;
+
+	uint32_t page_nums = 0, page_size = 0;
+	uint8_t *write_data = malloc(max_page_size);
+
+	while (s.size > 0) {	//while (s.size > max_page_size)
+		if (s.size < max_page_size) {
+			page_nums = (s.size - 1) / s.page_size + 1;
+			page_size = page_nums * s.page_size;
+		}
+		else {
+			page_nums = max_page_nums;
+			page_size = max_page_size;
+		}
+		bytes_read = 0;
+		if (write_data) {
+			fileio_read(s.fileio, page_size, write_data, &one_read);
+			if (one_read < page_size)
+				memset(write_data + one_read, 0xff, page_size - one_read);
+			bytes_read += one_read;
+		}
+		if (bytes_read <= 0) {
+			command_print(CMD, "error while reading file");
+			nand_fileio_cleanup(&s);
+			if (write_data) {
+				free(write_data);
+			}
+			return ERROR_FAIL;
+		}
+		s.size -= bytes_read;
+
+		retval = nand_write_page(nand, s.address / nand->page_size,
+				write_data, page_size, s.oob, s.oob_size);
+		if (retval != ERROR_OK) {
+			command_print(CMD, "failed writing file %s "
+				"to NAND flash %s at offset 0x%8.8" PRIx32,
+				CMD_ARGV[1], CMD_ARGV[0], s.address);
+			nand_fileio_cleanup(&s);
+			if (write_data) {
+				free(write_data);
+			}
+			return retval;
+		}
+		s.address += page_size;
+	}
+
+	if (nand_fileio_finish(&s) == ERROR_OK) {
+		command_print(CMD, "wrote file %s to NAND flash %s up to "
+			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
+			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
+			duration_kbps(&s.bench, total_bytes));
+	}
+
+	if (write_data) {
+		free(write_data);
+	}
 
 	return ERROR_OK;
 }

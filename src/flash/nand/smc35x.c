@@ -23,8 +23,6 @@ struct smc35x_nand_controller{
 	nand_size_type nand_size;
 };
 
-uint8_t buffer[4096];
-
 static uint32_t __attribute__((aligned(4))) NandOob64[12] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
 static uint32_t __attribute__((aligned(4))) NandOob32[6] = {26, 27, 28, 29, 30, 31};
 static uint32_t __attribute__((aligned(4))) NandOob16[3] = {13, 14, 15};		/* data size 512bytes */
@@ -577,7 +575,7 @@ int smc35x_read_page_internalecc(struct nand_device *nand, uint32_t page, uint8_
 	oob += (oob_size - ONFI_AXI_DATA_WIDTH);
 
 	data_phase_addr = NAND_BASE | (1 << 21) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
-	smc35x_read_buf(nand, oob, ONFI_AXI_DATA_WIDTH, data_phase_addr);\
+	smc35x_read_buf(nand, oob, ONFI_AXI_DATA_WIDTH, data_phase_addr);
 
 	if (!oob_data) {
 		free(oob_free);
@@ -859,6 +857,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 			uint8_t *oob, uint32_t oob_size)
 {
 	int retval = ERROR_OK;
+	uint32_t block;
 	struct target *target = nand->target;
 	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	nand_size_type *nand_size = &smc35x_info->nand_size;
@@ -880,9 +879,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 	LOG_INFO("write data %d %d %d %d %d... from addr %p",
 			data[0], data[1], data[2], data[3], data[4], data);
 
-
 	if (strncmp(target_name(target), "riscv", 4) == 0) {
-		LOG_INFO("loader on riscv");
 		loader_target = RISCV;
 		xlen = riscv_xlen(target);
 		if (xlen == 32) {
@@ -911,7 +908,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 			target_free_working_area(target, algorithm_wa);
 			algorithm_wa = NULL;
 		} else {
-			data_wa_size = MIN(target_get_working_area_avail(target), count);
+			data_wa_size = MIN(target_get_working_area_avail(target), data_size);
 			if (data_wa_size < 128) {
 				LOG_WARNING("Couldn't allocate data working area.");
 				target_free_working_area(target, algorithm_wa);
@@ -926,11 +923,20 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 		algorithm_wa = NULL;
 	}
 
+	uint64_t data_wa_address = data_wa->address;
+	retval = target_write_buffer(target, data_wa->address, data_size, data);
+	if (retval != ERROR_OK) {
+		LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
+				nand_size->dataBytesPerPage, data_wa->address, retval);
+		goto err;
+	}
+
+	LOG_INFO("work area algorithm address: %llx, data length: %d", algorithm_wa->address, algorithm_wa->size);
+	LOG_INFO("work area data address: %llx, data length: %d", data_wa->address, data_wa->size);
 	if (algorithm_wa)
     {
         // LOG_INFO("wa allocate success");
         struct reg_param reg_params[7];
-	
         if (loader_target == RISCV)
         {
     	    init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
@@ -952,24 +958,20 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 			init_reg_param(&reg_params[6], "x6", xlen, PARAM_OUT);
         }
 
-        if (data_wa_size >= count)
+		while (data_wa_size > 0)
         {
+			LOG_INFO("page %d buffer adder %llx", page, data_wa_address);
+			block = page / nand_size->pagesPerBlock;
+			if (nand->blocks[block].is_erased == 1)
+				nand->blocks[block].is_erased = 0;
+
 			buf_set_u64(reg_params[0].value, 0, xlen, SMC_BASE);
 			buf_set_u64(reg_params[1].value, 0, xlen, nand_size->dataBytesPerPage);
-			buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
-			buf_set_u64(reg_params[3].value, 0, xlen, page);
+			buf_set_u64(reg_params[2].value, 0, xlen, data_wa_address);
+			buf_set_u64(reg_params[3].value, 0, xlen, page++);
 			buf_set_u64(reg_params[4].value, 0, xlen, nand_size->dataBytesPerPage + nand_size->spareBytesPerPage);
 			buf_set_u64(reg_params[5].value, 0, xlen, NAND_BASE);
 			buf_set_u64(reg_params[6].value, 0, xlen, nand_size->eccNum);
-
-			retval = target_write_buffer(target, data_wa->address, nand_size->dataBytesPerPage, data);
-			if (retval != ERROR_OK) {
-				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
-						nand_size->dataBytesPerPage, data_wa->address, retval);
-				goto err;
-			}
-
-			LOG_INFO("work area data address:%lld, data length=%d", data_wa->address, data_wa->size);
 			
 			retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
@@ -986,6 +988,9 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 				retval = ERROR_FAIL;
 				goto err;
 			}
+			
+			data_wa_address += count;
+			data_wa_size -= count;
         }
 
     	target_free_working_area(target, data_wa);
