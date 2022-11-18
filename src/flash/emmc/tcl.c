@@ -15,6 +15,8 @@
 #include <target/target.h>
 extern struct emmc_device *emmc_devices;
 
+
+// multi emmc support
 COMMAND_HANDLER(handle_emmc_list_command)
 {
 	struct emmc_device *p;
@@ -51,7 +53,8 @@ COMMAND_HANDLER(handle_emmc_probe_command)
 
 	retval = emmc_probe(p);
 	if (retval == ERROR_OK) {
-		command_print(CMD, "EMMC flash device '%s' found", p->device->name);
+		command_print(CMD, "emmc flash probed");
+		// command_print(CMD, "EMMC flash device '%s' found", p->device->name);
 	}
 
 	return retval;
@@ -83,6 +86,7 @@ static int emmc_init(struct command_context *cmd_ctx)
 	return register_commands(cmd_ctx, "emmc", emmc_exec_command_handlers);
 }
 
+// init emmc commands
 COMMAND_HANDLER(handle_emmc_init_command)
 {
 	if (CMD_ARGC != 0)
@@ -95,7 +99,7 @@ COMMAND_HANDLER(handle_emmc_init_command)
 	}
 	emmc_initialized = true;
 
-	LOG_DEBUG("Initializing emmc devices...");
+	LOG_INFO("Initializing emmc devices...");
 	return emmc_init(CMD_CTX);
 }
 
@@ -121,7 +125,6 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 	struct target *target;
 	int retval;
 
-	LOG_INFO("CREATE EMMC DEVICE");
 	LOG_INFO("get target");
 	if (CMD_ARGC < 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
@@ -154,7 +157,7 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 
 	retval = CALL_COMMAND_HANDLER(controller->emmc_device_command, c);
 	if (retval != ERROR_OK) {
-		LOG_ERROR("'%s' driver rejected emmc flash. Usage: %s",
+		LOG_ERROR("'%s' driver rejected emmc flash. Usage: %s", 
 			controller->name,
 			controller->usage);
 		free(c);
@@ -169,6 +172,7 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 	return ERROR_OK;
 }
 
+// set update driver for emmc device
 COMMAND_HANDLER(handle_emmc_device_command)
 {
 	if (CMD_ARGC < 2)
@@ -197,6 +201,13 @@ static const struct command_registration emmc_config_command_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "defines a new EMMC bank",
 		.usage = "bank_id driver target [driver_options ...]",
+	},
+	{
+		.name = "drivers",
+		.handler = &handle_emmc_list_drivers,
+		.mode = COMMAND_ANY,
+		.help = "lists available EMMC drivers",
+		.usage = ""
 	},
 	{
 		.name = "init",

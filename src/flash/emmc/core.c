@@ -110,6 +110,7 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 int emmc_probe(struct emmc_device *emmc)
 {
 	emmc->controller->init(emmc);
+	LOG_INFO("emmc init done");
 	
     // for (i = 0; emmc_flash_ids[i].name; i++)
     // {

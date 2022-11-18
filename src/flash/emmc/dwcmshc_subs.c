@@ -8,6 +8,32 @@
 
 #include "dwcmshc_subs.h"
 
+int dwcmshc_mio_init(struct emmc_device *emmc)
+{
+    struct target *target = emmc->target;
+    target_addr_t mio_addr;
+    uint32_t value=0, status = ERROR_OK;
+    uint8_t mio_num;
+    for (mio_num = 40; mio_num < 49; mio_num = mio_num + 1)
+    {
+        mio_addr =MIO_BASE + (mio_num << 2);
+        status = target_read_u32(target, mio_addr, &value);
+        if(status != ERROR_OK)
+            return status;
+        if(value != 0xb)
+        {
+            LOG_INFO("mio reg %x init ", mio_num);
+            status = target_write_u32(target,  mio_addr, 0xb);
+            if(status != ERROR_OK)
+                return status;
+        }
+    }
+
+    status = target_write_u32(target, EMIO_SEL11, 0x1);
+
+    return status;
+}
+
 
 static int dwcmshc_wait_clk(struct emmc_device *emmc)
 {
@@ -117,17 +143,14 @@ static int dwcmshc_emmc_wait_ctl(struct emmc_device *emmc)
 }
 
 
-static int dwcmshc_emmc_set_host_ctrl(struct emmc_device *emmc)
-{
-    struct target *target = emmc->target;
-    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
+// static int dwcmshc_emmc_set_host_ctrl(struct emmc_device *emmc, uint8_t val)
+// {
+//     struct target *target = emmc->target;
+//     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
 
-    HOST_CTRL1_R host_ctrl;
-    host_ctrl.d8 = 0;
-    host_ctrl.bit.dma_sel = MMC_HC1_DMA_SEL_ADMA2;
-    target_write_u8(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, host_ctrl.d8);
-    return ERROR_OK;
-}
+//     target_write_u8(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, val);
+//     return ERROR_OK;
+// }
 
 
 static int dwcmshc_emmc_set_pwr_ctrl(struct emmc_device *emmc)
@@ -137,6 +160,7 @@ static int dwcmshc_emmc_set_pwr_ctrl(struct emmc_device *emmc)
     PWR_CTRL_R pwr_ctrl;
     // vdd1 pwr on support
     target_read_u32(target, IO_BANK1_REF, &dwcmshc_emmc->io_bank_pwr);
+    pwr_ctrl.bit.sd_bus_pwr_vdd1 = MMC_PC_SBP_VDD1_ON;
     if(dwcmshc_emmc->io_bank_pwr == 1)
         pwr_ctrl.bit.sd_bus_vol_vdd1 = EMMC_PC_SBV_VDD1_1V8;
     else
@@ -154,15 +178,22 @@ static int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc)
     CLK_CTRL_R clk_ctrl;
     clk_ctrl.d16 = 0;
     clk_ctrl.bit.internal_clk_en = MMC_CC_INTER_CLK_ENABLE;
+    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_CLK_CTRL_R, clk_ctrl.d16);
+
     if(dwcmshc_wait_clk(emmc) != ERROR_OK)
         return ERROR_TIMEOUT_REACHED;
-    clk_ctrl.bit.sd_clk_en = MMC_CC_SD_CLK_ENABLE;
-    if(dwcmshc_wait_clk(emmc) != ERROR_OK)
-        return ERROR_TIMEOUT_REACHED;
+    
     clk_ctrl.bit.pll_enable = MMC_CC_PLL_ENABLE;
     target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_CLK_CTRL_R, clk_ctrl.d16);
     if(dwcmshc_wait_clk(emmc) != ERROR_OK )
         return ERROR_TIMEOUT_REACHED;
+
+
+    clk_ctrl.bit.sd_clk_en = MMC_CC_SD_CLK_ENABLE;
+    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_CLK_CTRL_R, clk_ctrl.d16);
+    if(dwcmshc_wait_clk(emmc) != ERROR_OK)
+        return ERROR_TIMEOUT_REACHED;
+
     return ERROR_OK;
 }
 
@@ -181,46 +212,45 @@ static int dwcmshc_emmc_set_tout(struct emmc_device *emmc)
 
 int dwcmshc_emmc_ctl_init(struct emmc_device *emmc)
 {
-    dwcmshc_emmc_set_host_ctrl(emmc);
     dwcmshc_emmc_set_pwr_ctrl(emmc);
-    dwcmshc_emmc_set_clk_ctrl(emmc);
     dwcmshc_emmc_set_tout(emmc);
+    dwcmshc_emmc_set_clk_ctrl(emmc);
 
     return ERROR_OK;
 }
 
 
 
-// static int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc)
-// {
-//     struct target *target = emmc->target;
-//     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
+int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc)
+{
+    struct target *target = emmc->target;
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
 
 
-//     ERROR_INT_STAT_EN_R error_int_stat_en;
-//     NORMAL_INT_STAT_EN_R normal_int_stat_en;
+    ERROR_INT_STAT_EN_R error_int_stat_en;
+    NORMAL_INT_STAT_EN_R normal_int_stat_en;
 
-//     error_int_stat_en.d16 = 0;
-//     normal_int_stat_en.d16 = 0;
+    error_int_stat_en.d16 = 0;
+    normal_int_stat_en.d16 = 0;
 
-//     normal_int_stat_en.bit.cmd_complete_stat_en = MMC_NORMAL_INT_STAT_EN;
-//     normal_int_stat_en.bit.xfer_complete_stat_en = MMC_NORMAL_INT_SIGN_EN;
-//     normal_int_stat_en.bit.bgap_event_stat_en = MMC_NORMAL_INT_SIGN_EN;
-//     normal_int_stat_en.bit.buf_wr_ready_stat_en = MMC_NORMAL_INT_SIGN_EN;
-//     normal_int_stat_en.bit.buf_rd_ready_stat_en = MMC_NORMAL_INT_SIGN_EN;
-//     normal_int_stat_en.bit.int_a_stat_en = MMC_NORMAL_INT_SIGN_EN;
+    normal_int_stat_en.bit.cmd_complete_stat_en = MMC_NORMAL_INT_STAT_EN;
+    normal_int_stat_en.bit.xfer_complete_stat_en = MMC_NORMAL_INT_SIGN_EN;
+    normal_int_stat_en.bit.bgap_event_stat_en = MMC_NORMAL_INT_SIGN_EN;
+    normal_int_stat_en.bit.buf_wr_ready_stat_en = MMC_NORMAL_INT_SIGN_EN;
+    normal_int_stat_en.bit.buf_rd_ready_stat_en = MMC_NORMAL_INT_SIGN_EN;
+    normal_int_stat_en.bit.int_a_stat_en = MMC_NORMAL_INT_SIGN_EN;
 
-//     error_int_stat_en.bit.cmd_tout_err_stat_en = MMC_ERR_INT_SIGN_EN;
-//     error_int_stat_en.bit.cmd_crc_err_stat_en = MMC_ERR_INT_SIGN_EN;
-//     error_int_stat_en.bit.cmd_end_bit_err_stat_en = MMC_ERR_INT_SIGN_EN;
-//     error_int_stat_en.bit.cmd_idx_err_stat_en = MMC_ERR_INT_SIGN_EN;
-//     error_int_stat_en.bit.data_tout_err_stat_en = MMC_ERR_INT_SIGN_EN;
-//     error_int_stat_en.bit.data_crc_err_stat_en = MMC_ERR_INT_SIGN_EN;
-//     error_int_stat_en.bit.data_end_bit_err_stat_en = MMC_ERR_INT_SIGN_EN;
+    error_int_stat_en.bit.cmd_tout_err_stat_en = MMC_ERR_INT_SIGN_EN;
+    error_int_stat_en.bit.cmd_crc_err_stat_en = MMC_ERR_INT_SIGN_EN;
+    error_int_stat_en.bit.cmd_end_bit_err_stat_en = MMC_ERR_INT_SIGN_EN;
+    error_int_stat_en.bit.cmd_idx_err_stat_en = MMC_ERR_INT_SIGN_EN;
+    error_int_stat_en.bit.data_tout_err_stat_en = MMC_ERR_INT_SIGN_EN;
+    error_int_stat_en.bit.data_crc_err_stat_en = MMC_ERR_INT_SIGN_EN;
+    error_int_stat_en.bit.data_end_bit_err_stat_en = MMC_ERR_INT_SIGN_EN;
 
-//     target_write_u32(target, (dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_EN_R), ((error_int_stat_en.d16 << 16) | normal_int_stat_en.d16));
-//     return ERROR_OK;
-// }
+    target_write_u32(target, (dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_EN_R), ((error_int_stat_en.d16 << 16) | normal_int_stat_en.d16));
+    return ERROR_OK;
+}
 
 static int dwcmshc_emmc_wait_command(struct emmc_device *emmc, bool wait_type)
 {
@@ -280,13 +310,13 @@ static int dwcmshc_emmc_get_resp(struct emmc_device *emmc)
             break;
         case MMC_C_RESP_LEN_48:
         case MMC_C_RESP_LEN_48B:
-            target_read_u32(target, OFFSET_RESP01_R, cmd_pkt->resp_buf);
+            target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_RESP01_R, cmd_pkt->resp_buf);
             break;
         case MMC_C_RESP_LEN_136:
-            target_read_u32(target, OFFSET_RESP01_R, cmd_pkt->resp_buf);
-            target_read_u32(target, OFFSET_RESP23_R, cmd_pkt->resp_buf + 1);
-            target_read_u32(target, OFFSET_RESP45_R, cmd_pkt->resp_buf + 2);
-            target_read_u32(target, OFFSET_RESP67_R, cmd_pkt->resp_buf + 3);
+            target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_RESP01_R, cmd_pkt->resp_buf);
+            target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_RESP23_R, cmd_pkt->resp_buf + 1);
+            target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_RESP45_R, cmd_pkt->resp_buf + 2);
+            target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_RESP67_R, cmd_pkt->resp_buf + 3);
             break;
         default:
             memset(cmd_pkt->resp_buf, 0, sizeof(uint32_t) * 4);
@@ -319,14 +349,19 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc)
 static void dwcmshc_emmc_cmd_reset(struct emmc_device *emmc, uint32_t argument)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-    dwcmshc_cmd_pkt_t cmd_pkt = dwcmshc_emmc->ctrl_cmd;
+    dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
 
-    memset(&cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
-    cmd_pkt.argu_en = ARGU_EN;
-    cmd_pkt.argument = argument;
-    cmd_pkt.cmd_reg.bit.cmd_index = SD_CMD_GO_IDLE_STATE;
-    cmd_pkt.cmd_reg.bit.resp_type_select = MMC_C_NO_RESP;
-    cmd_pkt.xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+    LOG_INFO("cmd_pkt arg_en %x value %x cmd reg %x xfer reg %x\n", cmd_pkt->argu_en, cmd_pkt->argument, cmd_pkt->cmd_reg.d16, cmd_pkt->xfer_reg.d16);
+
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = argument;
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_GO_IDLE_STATE;
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_NO_RESP;
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+
+    LOG_INFO("cmd_pkt arg_en %x value %x cmd reg %x xfer reg %x\n", cmd_pkt->argu_en, cmd_pkt->argument, cmd_pkt->cmd_reg.d16, cmd_pkt->xfer_reg.d16);
+
     dwcmshc_emmc_command(emmc);
 }
 
@@ -438,19 +473,19 @@ int dwcmshc_emmc_card_init(struct emmc_device *emmc)
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     uint32_t* resp_buf = dwcmshc_emmc->ctrl_cmd.resp_buf;
     int status = ERROR_OK;
-    //reset card
+    LOG_DEBUG("target_ emmc cmd reset");
     dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
-    // alive_sleep(10);
-    // set op cond
+
+    LOG_DEBUG("target_ emmc cmd setop");
     status = dwcmshc_emmc_cmd_setop(emmc);
     if(status!= ERROR_OK)
         return status;
-    // get cid
+    LOG_DEBUG("target_ emmc cmd cid");
     dwcmshc_emmc_cmd_cid(emmc);
 
     for(int i=0; i < 4; i++)
     {
-        printf("get id index %d val %x\n", i, resp_buf[i]);
+        LOG_INFO("get id index %d val %x\n", i, resp_buf[i]);
     }
 
     // // get csd

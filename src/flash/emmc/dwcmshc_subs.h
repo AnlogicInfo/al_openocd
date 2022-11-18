@@ -12,15 +12,12 @@
 #include "config.h"
 #endif
 
-#include "imp.h"
-#include <helper/time_support.h>
-#include <helper/binarybuffer.h>
-#include <target/target.h>
+
 #include "dwcmshc_regs.h"
 
 typedef struct dwcmshc_cmd_pkt_t 
 {
-	bool          argu_en;
+	uint8_t          argu_en;
 	uint32_t      argument;
 
 	CMD_R         cmd_reg;
@@ -50,7 +47,9 @@ struct dwcmshc_emmc_controller {
 
 #define MMC_DELAY_SCALE						(2)
 
-//io bank1 vcc ref
+//AL9000 config
+#define MIO_BASE                             0xF8803000
+#define EMIO_SEL11                           0xF880342C
 #define IO_BANK1_REF                         0xF8803C04ULL
 
 #define MMC_IO_BANK1_SUPPORT_1V8(reg)	     (reg & 0x1)
@@ -59,7 +58,9 @@ struct dwcmshc_emmc_controller {
 
 
 // dwcmshc apis
+int dwcmshc_mio_init(struct emmc_device *emmc);
 int dwcmshc_emmc_ctl_init(struct emmc_device *emmc);
+int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc);
 int dwcmshc_emmc_card_init(struct emmc_device *emmc);
 int dwcmshc_emmc_rd_id(struct emmc_device *emmc);
 

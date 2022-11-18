@@ -12,6 +12,11 @@
 #ifndef OPENOCD_FLASH_EMMC_DWCMSHC_REGS_H
 #define OPENOCD_FLASH_EMMC_DWCMSHC_REGS_H
 
+#include "imp.h"
+#include <helper/time_support.h>
+#include <helper/binarybuffer.h>
+#include <target/target.h>
+
 #define OFFSET_SDMASA_R                          0x0 // SDMA System Address register
 #define OFFSET_BLOCKSIZE_R                       0x4 // Block Size register
 #define OFFSET_BLOCKCOUNT_R                      0x6 // 16-bit Block Count register
@@ -71,17 +76,17 @@ typedef union
 
 typedef union
 {
-    uint32_t d16;
+    uint16_t d16;
     struct {
-	    uint32_t dma_en:1;
-	    uint32_t block_count_enable:1;
-	    uint32_t auto_cmd_enable:2;
-	    uint32_t data_xfer_dir:1;
-	    uint32_t multi_blk_sel:1;
-	    uint32_t resp_type:1;
-	    uint32_t resp_err_chk_enable:1;
-	    uint32_t resp_int_disable:1;
-	    uint32_t rsvd:7;
+	    uint16_t dma_en:1;
+	    uint16_t block_count_enable:1;
+	    uint16_t auto_cmd_enable:2;
+	    uint16_t data_xfer_dir:1;
+	    uint16_t multi_blk_sel:1;
+	    uint16_t resp_type:1;
+	    uint16_t resp_err_chk_enable:1;
+	    uint16_t resp_int_disable:1;
+	    uint16_t rsvd:7;
     }bit;
 }XFER_MODE_R;
 
@@ -374,7 +379,7 @@ typedef union
 
 typedef union
 {
-    uint16_t d32;
+    uint16_t d16;
     struct {
 		uint16_t	uhs_mode_sel:3;
 		uint16_t	signaling_en:1;

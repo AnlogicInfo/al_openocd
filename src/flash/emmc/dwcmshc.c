@@ -16,25 +16,21 @@
 EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc;
-
-    if(CMD_ARGC < 6)
+    uint32_t base;
+    if(CMD_ARGC != 3)
         return ERROR_COMMAND_SYNTAX_ERROR;
 
     dwcmshc_emmc = malloc(sizeof(struct dwcmshc_emmc_controller));
     if(!dwcmshc_emmc)
     {
+		LOG_ERROR("no memory for emmc controller");
         return ERROR_FAIL;
     }
 
+    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], base);
     emmc->controller_priv = dwcmshc_emmc;
     dwcmshc_emmc->probed = false;
-    dwcmshc_emmc->ctrl_base = 0;
-
-    if(CMD_ARGC >= 7) {
-        COMMAND_PARSE_ADDRESS(CMD_ARGV[6], dwcmshc_emmc->ctrl_base);
-        LOG_DEBUG("ASSUMING DWCMSHC device at ctrl_base = " TARGET_ADDR_FMT, 
-            dwcmshc_emmc->ctrl_base);
-    }
+    dwcmshc_emmc->ctrl_base = base;
 
     return ERROR_OK;    
 }
@@ -49,9 +45,13 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command)
 
 static int dwcmshc_emmc_init(struct emmc_device *emmc)
 {
+    int status = ERROR_OK;
+    LOG_INFO("dwcmshc init");
+    status = dwcmshc_mio_init(emmc);
     dwcmshc_emmc_ctl_init(emmc);
+    dwcmshc_emmc_interrupt_init(emmc);
     dwcmshc_emmc_card_init(emmc);
-    return ERROR_OK;
+    return status;
 }
 
 static int dwcmshc_emmc_reset(struct emmc_device *emmc)
