@@ -42,6 +42,33 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command)
     return ERROR_OK;
 }
 
+static int dwcmshc_emmc_read_resp(struct emmc_device *emmc, uint8_t resp_len, uint32_t* resp_buf)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+
+    if(resp_len == EMMC_RESP_LEN_48)
+    {
+        *resp_buf = dwcmshc_emmc->ctrl_cmd.resp_buf[0];
+        return ERROR_OK;
+    }
+    else if(resp_len == EMMC_RESP_LEN_136)
+    {
+        *resp_buf = dwcmshc_emmc->ctrl_cmd.resp_buf[0];
+        *(resp_buf + 1)= dwcmshc_emmc->ctrl_cmd.resp_buf[1];
+        *(resp_buf + 2)= dwcmshc_emmc->ctrl_cmd.resp_buf[2];
+        *(resp_buf + 3)= dwcmshc_emmc->ctrl_cmd.resp_buf[3];
+        return ERROR_OK;
+    }
+    else
+    {
+        
+        LOG_ERROR("invalid resp len");
+        return ERROR_FAIL;
+    }
+
+
+}
+
 
 static int dwcmshc_emmc_init(struct emmc_device *emmc)
 {
@@ -53,6 +80,7 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc)
     dwcmshc_emmc_card_init(emmc);
     return status;
 }
+
 
 static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 {
@@ -81,6 +109,7 @@ const struct emmc_flash_controller dwcmshc_emmc_controller = {
     .name = "dwcmshc",
     .emmc_device_command = dwcmshc_emmc_device_command,
     .command = dwcmshc_emmc_command,
+    .read_resp = dwcmshc_emmc_read_resp,
     .reset = dwcmshc_emmc_reset,
     .write_block_data = dwcmshc_emmc_write_block,
     .read_block_data = dwcmshc_emmc_read_block,

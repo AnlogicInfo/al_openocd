@@ -93,6 +93,10 @@ struct emmc_device
 #define EMMC_RESP_R4                            5
 #define EMMC_RESP_R5                            6
 
+#define EMMC_RESP_LEN_0                         0
+#define EMMC_RESP_LEN_48                        1
+#define EMMC_RESP_LEN_136                       2
+
 //OCR register status
 #define EMMC_OCR_HIGH_VOLTAGE                   0x0
 #define EMMC_OCR_DUAL_VOLTAGE                   0x1
@@ -126,7 +130,7 @@ struct emmc_manufacture {
 
 struct emmc_info {
     int mfr_id;
-    size_t id;
+    size_t prd_name;
     int chip_size;
     const char *name;
 };

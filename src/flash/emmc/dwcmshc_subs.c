@@ -351,16 +351,12 @@ static void dwcmshc_emmc_cmd_reset(struct emmc_device *emmc, uint32_t argument)
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
 
-    LOG_INFO("cmd_pkt arg_en %x value %x cmd reg %x xfer reg %x\n", cmd_pkt->argu_en, cmd_pkt->argument, cmd_pkt->cmd_reg.d16, cmd_pkt->xfer_reg.d16);
-
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
     cmd_pkt->argu_en = ARGU_EN;
     cmd_pkt->argument = argument;
     cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_GO_IDLE_STATE;
     cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_NO_RESP;
     cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
-
-    LOG_INFO("cmd_pkt arg_en %x value %x cmd reg %x xfer reg %x\n", cmd_pkt->argu_en, cmd_pkt->argument, cmd_pkt->cmd_reg.d16, cmd_pkt->xfer_reg.d16);
 
     dwcmshc_emmc_command(emmc);
 }
@@ -482,11 +478,6 @@ int dwcmshc_emmc_card_init(struct emmc_device *emmc)
         return status;
     LOG_DEBUG("target_ emmc cmd cid");
     dwcmshc_emmc_cmd_cid(emmc);
-
-    for(int i=0; i < 4; i++)
-    {
-        LOG_INFO("get id index %d val %x\n", i, resp_buf[i]);
-    }
 
     // // get csd
     // dwcmshc_emmc_command_csd(emmc);

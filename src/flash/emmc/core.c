@@ -30,13 +30,13 @@ void emmc_device_add(struct emmc_device *c)
 * Manufacturer ID, product name, blocksize, chipsize in MegaByte, name
  */
 
-// static struct emmc_info emmc_flash_ids[] = 
-// {
+static struct emmc_info emmc_flash_ids[] = 
+{
 
-//     {EMMC_MFR_SAMSUNG, 0x38474E443352, 0x2000, "Samsung KLM8G1GEND-B031 8GB EMMC "},
-//     {0, 0, 0, NULL},
+    {EMMC_MFR_SAMSUNG, 0x004d43473847, 0x2000, "Samsung KLMCG8GEAC-B031 8GB EMMC "},
+    {0, 0, 0, NULL},
 
-// };
+};
 /**
  * Returns the flash bank specified by @a name, which matches the
  * driver name and a suffix (option) specify the driver-specific
@@ -107,21 +107,44 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 //     return ERROR_OK;
 // }
 
+static void emmc_cid_parse(struct emmc_device *emmc)
+{
+    uint32_t cid_buf[4] = {0};
+	int mrf_id = 0;
+	size_t prd_name;
+
+	emmc->controller->read_resp(emmc, EMMC_RESP_LEN_136, cid_buf);
+	mrf_id = (cid_buf[3] >> 16) & 0xff;
+	prd_name = ((((size_t)cid_buf[3]) & 0xff) << 40)| (((size_t) cid_buf[2]) << 8) | (cid_buf[1] >> 24);
+	LOG_INFO("product name %llx", prd_name);
+    for (int i = 0; emmc_flash_ids[i].name; i++)
+    {
+        if(emmc_flash_ids[i].prd_name == prd_name && (emmc_flash_ids[i].mfr_id == mrf_id))
+		{
+            emmc->device = &emmc_flash_ids[i];
+		}
+        break;
+    }
+}
+
 int emmc_probe(struct emmc_device *emmc)
 {
-	emmc->controller->init(emmc);
-	LOG_INFO("emmc init done");
-	
-    // for (i = 0; emmc_flash_ids[i].name; i++)
-    // {
-    //     if(emmc_flash_ids[i].id == device_id)
-    //         emmc->device = &emmc_flash_ids[i];
-    //     break;
-    // }
+	int status = ERROR_OK;
+
+	status = emmc->controller->init(emmc);
+	if(status != ERROR_OK)
+		return ERROR_FAIL;
+
+	emmc_cid_parse(emmc);
+	if(!emmc->device)
+	{
+		LOG_ERROR("unknown EMMC flash device found");
+		return ERROR_EMMC_OPERATION_FAILED;
+	}
 
     // LOG_INFO("found %s", emmc->device->name);
 
-    return ERROR_OK;
+    return status;
 }
 
 int emmc_read_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size)
