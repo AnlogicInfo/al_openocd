@@ -29,14 +29,14 @@ struct emmc_flash_controller {
 	__EMMC_DEVICE_COMMAND((*emmc_device_command));
 
 	/** Initialize the EMMC device. */
-	int (*init)(struct emmc_device *emmc);
+	int (*init)(struct emmc_device *emmc, uint32_t* in_field);
 
 	/** Reset the EMMC device. */
 	int (*reset)(struct emmc_device *emmc);
 
-	int (*command)(struct emmc_device *emmc, uint8_t command);
+	int (*command)(struct emmc_device *emmc, uint8_t command, uint32_t argument);
 
-	int (*read_resp)(struct emmc_device *emmc, uint8_t resp_len, uint32_t* resp_buf);
+	// int (*read_resp)(struct emmc_device *emmc, uint8_t resp_len, uint32_t* resp_buf);
 
 	/** Write a block of data to the EMMC device. */
 	int (*write_block_data)(struct emmc_device *emmc, uint8_t *data, int size);

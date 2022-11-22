@@ -107,13 +107,10 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 //     return ERROR_OK;
 // }
 
-static void emmc_cid_parse(struct emmc_device *emmc)
+static void emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 {
-    uint32_t cid_buf[4] = {0};
 	int mrf_id = 0;
 	size_t prd_name;
-
-	emmc->controller->read_resp(emmc, EMMC_RESP_LEN_136, cid_buf);
 	mrf_id = (cid_buf[3] >> 16) & 0xff;
 	prd_name = ((((size_t)cid_buf[3]) & 0xff) << 40)| (((size_t) cid_buf[2]) << 8) | (cid_buf[1] >> 24);
 	LOG_INFO("product name %llx", prd_name);
@@ -127,21 +124,30 @@ static void emmc_cid_parse(struct emmc_device *emmc)
     }
 }
 
+static void emmc_csd_parse(uint32_t* csd_buf)
+{
+	for(int i = 0; i < 4; i++)
+	{
+		LOG_INFO("csd %d val %x", i, csd_buf[i]);
+	}
+}
+
 int emmc_probe(struct emmc_device *emmc)
 {
 	int status = ERROR_OK;
+	uint32_t in_field[32] = {0};
 
-	status = emmc->controller->init(emmc);
+	status = emmc->controller->init(emmc, in_field);
 	if(status != ERROR_OK)
 		return ERROR_FAIL;
 
-	emmc_cid_parse(emmc);
+	emmc_cid_parse(emmc, in_field);
+	emmc_csd_parse(in_field + 4);
 	if(!emmc->device)
 	{
 		LOG_ERROR("unknown EMMC flash device found");
 		return ERROR_EMMC_OPERATION_FAILED;
 	}
-
     // LOG_INFO("found %s", emmc->device->name);
 
     return status;

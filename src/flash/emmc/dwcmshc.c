@@ -36,57 +36,27 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 }
 
 
-static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command)
+static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command, uint32_t argument)
 {
 
     return ERROR_OK;
 }
 
-static int dwcmshc_emmc_read_resp(struct emmc_device *emmc, uint8_t resp_len, uint32_t* resp_buf)
-{
-    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-
-    if(resp_len == EMMC_RESP_LEN_48)
-    {
-        *resp_buf = dwcmshc_emmc->ctrl_cmd.resp_buf[0];
-        return ERROR_OK;
-    }
-    else if(resp_len == EMMC_RESP_LEN_136)
-    {
-        *resp_buf = dwcmshc_emmc->ctrl_cmd.resp_buf[0];
-        *(resp_buf + 1)= dwcmshc_emmc->ctrl_cmd.resp_buf[1];
-        *(resp_buf + 2)= dwcmshc_emmc->ctrl_cmd.resp_buf[2];
-        *(resp_buf + 3)= dwcmshc_emmc->ctrl_cmd.resp_buf[3];
-        return ERROR_OK;
-    }
-    else
-    {
-        
-        LOG_ERROR("invalid resp len");
-        return ERROR_FAIL;
-    }
-
-
-}
-
-
-static int dwcmshc_emmc_init(struct emmc_device *emmc)
+static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 {
     int status = ERROR_OK;
     LOG_INFO("dwcmshc init");
     status = dwcmshc_mio_init(emmc);
     dwcmshc_emmc_ctl_init(emmc);
     dwcmshc_emmc_interrupt_init(emmc);
-    dwcmshc_emmc_card_init(emmc);
+    dwcmshc_emmc_card_init(emmc, in_field);
     return status;
 }
 
 
 static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 {
-
-
-    return ERROR_OK;
+    return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
 
 static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint8_t *data, int size)
@@ -109,7 +79,6 @@ const struct emmc_flash_controller dwcmshc_emmc_controller = {
     .name = "dwcmshc",
     .emmc_device_command = dwcmshc_emmc_device_command,
     .command = dwcmshc_emmc_command,
-    .read_resp = dwcmshc_emmc_read_resp,
     .reset = dwcmshc_emmc_reset,
     .write_block_data = dwcmshc_emmc_write_block,
     .read_block_data = dwcmshc_emmc_read_block,

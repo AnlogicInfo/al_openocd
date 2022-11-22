@@ -17,7 +17,7 @@
 
 typedef struct dwcmshc_cmd_pkt_t 
 {
-	uint8_t          argu_en;
+	uint8_t       argu_en;
 	uint32_t      argument;
 
 	CMD_R         cmd_reg;
@@ -60,8 +60,9 @@ struct dwcmshc_emmc_controller {
 // dwcmshc apis
 int dwcmshc_mio_init(struct emmc_device *emmc);
 int dwcmshc_emmc_ctl_init(struct emmc_device *emmc);
+int dwcmshc_emmc_cmd_reset(struct emmc_device *emmc, uint32_t argument);
 int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc);
-int dwcmshc_emmc_card_init(struct emmc_device *emmc);
+int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* in_field);
 int dwcmshc_emmc_rd_id(struct emmc_device *emmc);
 
 #endif
