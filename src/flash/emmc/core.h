@@ -25,6 +25,9 @@ struct emmc_device
 * Emmc spec defines
 */
 
+// Emmc block defines
+// #define EMMC_BLOCK_SIZE                            512
+
 /** 
   * @brief SDIO Commands  Index 
   */

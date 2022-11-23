@@ -254,51 +254,91 @@ int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc)
     return ERROR_OK;
 }
 
-static int dwcmshc_emmc_wait_command(struct emmc_device *emmc, bool wait_type)
+static int dwcmshc_emmc_poll_int(struct emmc_device *emmc, uint8_t flag_offset, int64_t timeout)
 {
     struct target *target = emmc->target;
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
-    int64_t start = timeval_ms();
     NORMAL_INT_STAT_R normal_int_stat;
     ERROR_INT_STAT_R error_int_stat;
-    uint8_t wait_flag = 0;
     uint32_t status = ERROR_OK;
+    int64_t start = timeval_ms();
+    uint16_t clear_reg = 0;
+    uint8_t done_flag = 0;
+
 
     while(1)
     {
         target_read_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_R, &normal_int_stat.d16);
         target_read_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_ERROR_INT_STAT_R, &error_int_stat.d16);
+        done_flag = (normal_int_stat.d16 >> flag_offset) & 0x1;
 
-        if(wait_type == WAIT_CMD_COMPLETE)
-            wait_flag = normal_int_stat.bit.cmd_complete;
-        else 
-            wait_flag = normal_int_stat.bit.xfer_complete;
         if(error_int_stat.d16 != 0)
         {
-            LOG_ERROR("DWCMSHC CMD ERROR %x", error_int_stat.d16);
+            LOG_ERROR("DWCMSHC INT STAT ERROR %x", error_int_stat.d16);
             status = ERROR_FAIL;
             break;
         }
-        else if(wait_flag)
-            break;        
+        else if(done_flag)
+            break;
         int64_t now = timeval_ms();
-        if((now - start) > TIMEOUT_10S)
+        if((now - start) > timeout)
         {
             status = ERROR_TIMEOUT_REACHED;
             break;
-        }   
+        }
     }
 
-    //clear cmd_complete
-    if(wait_type == WAIT_CMD_COMPLETE)
-        normal_int_stat.bit.cmd_complete = 1;
-    else
-        normal_int_stat.bit.xfer_complete = 1;
-    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_R, normal_int_stat.d16);
-
+    clear_reg = normal_int_stat.d16 | (((uint16_t)1) << flag_offset);
+    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_R, clear_reg);
     return status;
 
 }
+
+// static int dwcmshc_emmc_wait_command(struct emmc_device *emmc, uint8_t wait_type)
+// {
+//     struct target *target = emmc->target;
+//     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
+//     int64_t start = timeval_ms();
+//     NORMAL_INT_STAT_R normal_int_stat;
+//     ERROR_INT_STAT_R error_int_stat;
+//     uint8_t wait_flag = 0;
+//     uint32_t status = ERROR_OK;
+
+//     while(1)
+//     {
+//         target_read_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_R, &normal_int_stat.d16);
+//         target_read_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_ERROR_INT_STAT_R, &error_int_stat.d16);
+
+//         if(wait_type == WAIT_CMD_COMPLETE)
+//             wait_flag = normal_int_stat.bit.cmd_complete;
+//         else 
+//             wait_flag = normal_int_stat.bit.xfer_complete;
+//         if(error_int_stat.d16 != 0)
+//         {
+//             LOG_ERROR("DWCMSHC INT STAT ERROR %x", error_int_stat.d16);
+//             status = ERROR_FAIL;
+//             break;
+//         }
+//         else if(wait_flag)
+//             break;        
+//         int64_t now = timeval_ms();
+//         if((now - start) > TIMEOUT_1S)
+//         {
+//             status = ERROR_TIMEOUT_REACHED;
+//             break;
+//         }   
+//     }
+
+//     //clear cmd_complete
+//     if(wait_type == WAIT_CMD_COMPLETE)
+//         normal_int_stat.bit.cmd_complete = 1;
+//     else
+//         normal_int_stat.bit.xfer_complete = 1;
+//     target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_R, normal_int_stat.d16);
+
+//     return status;
+
+// }
 
 static int dwcmshc_emmc_get_resp(struct emmc_device *emmc)
 {
@@ -332,18 +372,18 @@ static int dwcmshc_emmc_get_resp(struct emmc_device *emmc)
     return ERROR_OK;
 }
 
-static int dwcmshc_emmc_dump_resp(uint32_t* resp_buf, uint32_t* in_field, uint8_t resp_len)
+static int dwcmshc_emmc_dump_resp(uint32_t* resp_buf, uint32_t* buf, uint8_t resp_len)
 {
     if(resp_len == MMC_C_RESP_LEN_48)
     {
-        in_field[0] = resp_buf[0];
+        buf[0] = resp_buf[0];
     }
     else if(resp_len == MMC_C_RESP_LEN_136)
     {
-        in_field[0] = resp_buf[0];
-        in_field[1] = resp_buf[1];
-        in_field[2] = resp_buf[2];
-        in_field[3] = resp_buf[3];
+        buf[0] = resp_buf[0];
+        buf[1] = resp_buf[1];
+        buf[2] = resp_buf[2];
+        buf[3] = resp_buf[3];
     }
     else
     {
@@ -353,6 +393,50 @@ static int dwcmshc_emmc_dump_resp(uint32_t* resp_buf, uint32_t* in_field, uint8_
 
     return ERROR_OK;
 }
+
+static int dwcmshc_emmc_rd_buf(struct emmc_device *emmc, uint32_t* buf, uint32_t count)
+{
+    struct target *target = emmc->target;
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
+    uint32_t status = ERROR_OK;
+    uint32_t i;
+
+    status = dwcmshc_emmc_poll_int(emmc, WAIT_BUF_RD_READY, TIMEOUT_1S);
+    if(status != ERROR_OK)
+        return status;
+
+    for(i = 0; i < count; i++)
+    {
+        target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_BUF_DATA_R, buf+i);
+        LOG_INFO("rd buf %d val %x ", i, *(buf+i));
+    }
+
+    return ERROR_OK;
+
+}
+
+// static int dwcmshc_emmc_wr_buf(struct emmc_device *emmc, uint32_t* buf, uint32_t count)
+// {
+//     struct target *target = emmc->target;
+//     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
+//     int64_t start = timeval_ms();
+//     uint32_t status = ERROR_OK;
+//     uint32_t i;
+
+//     status = dwcmshc_emmc_poll_int(emmc, WAIT_BUF_WR_READY, TIMEOUT_1S);
+//     if(status != ERROR_OK)
+//         return status;
+
+//     for(i = 0; i < count; i++)
+//     {
+//         target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_BUF_DATA_R, buf+i);
+//         dwcmshc_emmc_poll_int(emmc, WAIT_XFER_COMPLETE, TIMEOUT_1S);
+//     }
+
+//     return ERROR_OK;
+
+// }
+
 
 static int dwcmshc_emmc_command(struct emmc_device *emmc)
 {
@@ -367,10 +451,9 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc)
         target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
     target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, ((cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16));
 
-    status = dwcmshc_emmc_wait_command(emmc, WAIT_CMD_COMPLETE);
-
+    // status = dwcmshc_emmc_wait_command(emmc, WAIT_CMD_COMPLETE);
+    status = dwcmshc_emmc_poll_int(emmc, WAIT_CMD_COMPLETE, TIMEOUT_1S);
     dwcmshc_emmc_get_resp(emmc);
-
     return status;
 
 }
@@ -446,28 +529,8 @@ static int dwcmshc_emmc_cmd_ra(struct emmc_device *emmc)
     return ERROR_OK;
 }
 
-static int dwcmshc_emmc_cmd_csd(struct emmc_device *emmc, uint32_t* in_field)
-{
-    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-    dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
-    
-    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
-    cmd_pkt->argu_en = ARGU_EN;
-    cmd_pkt->argument = EMMC_CMD3_PARA_DEFAULT_VAL;
 
-    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_SEND_CSD;
-    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_136;
-    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
-
-    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
-    cmd_pkt->resp_type = EMMC_RESP_R2;
-
-    dwcmshc_emmc_command(emmc);
-    dwcmshc_emmc_dump_resp(cmd_pkt->resp_buf, in_field, MMC_C_RESP_LEN_136);
-    return ERROR_OK;
-}
-
-static int dwcmshc_emmc_cmd_cid(struct emmc_device *emmc, uint32_t* in_field)
+static int dwcmshc_emmc_cmd_cid(struct emmc_device *emmc, uint32_t* buf)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
@@ -481,7 +544,7 @@ static int dwcmshc_emmc_cmd_cid(struct emmc_device *emmc, uint32_t* in_field)
     cmd_pkt->resp_type = EMMC_RESP_R2;
 
     dwcmshc_emmc_command(emmc);
-    dwcmshc_emmc_dump_resp(cmd_pkt->resp_buf, in_field, MMC_C_RESP_LEN_136);
+    dwcmshc_emmc_dump_resp(cmd_pkt->resp_buf, buf, MMC_C_RESP_LEN_136);
     return ERROR_OK;
 }
 
@@ -502,67 +565,111 @@ static int dwcmshc_emmc_cmd_desel(struct emmc_device *emmc)
     cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
 
     dwcmshc_emmc_command(emmc);
-    dwcmshc_emmc_wait_command(emmc, WAIT_XFER_COMPLETE);
     return ERROR_OK;
 }
 
-// static int dwcmshc_emmc_cmd_ext_csd(struct emmc_device *emmc, uint8_t *buffer)
-// {
-
-//     return ERROR_OK;
-
-// }
 
 
-// static int dwcmshc_emmc_cmd_set_block_length(struct emmc_device *emmc, uint32_t block_len)
-// {
-//     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-//     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
-//     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+static int dwcmshc_emmc_cmd_ext_csd(struct emmc_device *emmc, uint32_t* buf)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
 
-//     //set controller block length reg
-//     target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKSIZE_R, block_len);
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = 0;
 
-//     cmd_pkt->argu_en = ARGU_EN;
-//     cmd_pkt->argument = block_len;
-//     // cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
-//     cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_WRITE;
-//     cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
+    cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+    cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
 
-//     cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
-//     cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
-//     cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
-//     cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_SET_BLOCKLEN;
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
+    cmd_pkt->cmd_reg.bit.data_present_sel = MMC_C_DATA_PRESENT;
+    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_HS_SEND_EXT_CSD;
+    dwcmshc_emmc_command(emmc);
+    dwcmshc_emmc_rd_buf(emmc, buf, 128);
+    return ERROR_OK;
+}
 
-//     return dwcmshc_emmc_command(emmc);
+static int dwcmshc_emmc_cmd_csd(struct emmc_device *emmc, uint32_t* buf)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = EMMC_CMD3_PARA_DEFAULT_VAL;
 
-// }
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_SEND_CSD;
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_136;
+    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
 
-// static int dwcmshc_emmc_cmd_set_block_count(struct emmc_device *emmc, uint32_t block_cnt)
-// {
-//     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-//     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
-//     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+    cmd_pkt->resp_type = EMMC_RESP_R2;
 
-//     // set ctl block cnt reg
-//     target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKCOUNT_R, block_cnt);
+    dwcmshc_emmc_command(emmc);
+    dwcmshc_emmc_dump_resp(cmd_pkt->resp_buf, buf, MMC_C_RESP_LEN_136);
+    return ERROR_OK;
+}
 
-//     cmd_pkt->argu_en = ARGU_EN;
-//     cmd_pkt->argument = block_cnt;
-//     cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
-//     cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_WRITE;
-//     cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
 
-//     cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
-//     cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
-//     cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
-//     cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_SET_BLOCK_COUNT;
 
-//     return dwcmshc_emmc_command(emmc);
 
-// }
 
-int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* in_field)
+
+static int dwcmshc_emmc_cmd_set_block_length(struct emmc_device *emmc, uint32_t block_len)
+{
+    struct target *target = emmc->target;
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+
+    //set controller block length reg
+    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKSIZE_R, block_len);
+
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = block_len;
+    // cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_WRITE;
+    cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
+
+    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_SET_BLOCKLEN;
+
+    return dwcmshc_emmc_command(emmc);
+}
+
+static int dwcmshc_emmc_cmd_set_block_count(struct emmc_device *emmc, uint32_t block_cnt)
+{
+    struct target *target = emmc->target;
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+
+    // set ctl block cnt reg
+    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKCOUNT_R, block_cnt);
+
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = block_cnt;
+    cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_WRITE;
+    cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
+
+    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_SET_BLOCK_COUNT;
+
+    return dwcmshc_emmc_command(emmc);
+
+}
+
+
+int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* buf)
 {
     int status = ERROR_OK;
     LOG_INFO("target_ emmc cmd reset");
@@ -574,23 +681,29 @@ int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* in_field)
         return status;
 
     LOG_INFO("target_ emmc cmd cid");
-    dwcmshc_emmc_cmd_cid(emmc, in_field);
+    dwcmshc_emmc_cmd_cid(emmc, buf);
 
     //set relative device address
     LOG_INFO("target_ emmc cmd ra");
     dwcmshc_emmc_cmd_ra(emmc);
     // get csd
     LOG_INFO("target_ emmc cmd csd");
-    dwcmshc_emmc_cmd_csd(emmc, in_field + 4);
-    if(0)
-    {
+    dwcmshc_emmc_cmd_csd(emmc, buf + 4);
     LOG_INFO("target_ emmc cmd desel");
     // sel/desel card
     dwcmshc_emmc_cmd_desel(emmc);
 
-    }
-
     return ERROR_OK;
 }
 
+
+int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf)
+{
+
+    dwcmshc_emmc_cmd_set_block_length(emmc, 512);
+    dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+    dwcmshc_emmc_cmd_ext_csd(emmc, buf);
+
+    return ERROR_OK;
+}
 

@@ -22,13 +22,8 @@ typedef struct dwcmshc_cmd_pkt_t
 
 	CMD_R         cmd_reg;
 	XFER_MODE_R   xfer_reg;
-	
-	// uint8_t cmd_index;
-	// bool crc_chk_en;
-	// bool xfer_dir;
-	// uint8_t resp_len;
-	uint8_t resp_type;
-	uint32_t resp_buf[4];
+	uint8_t       resp_type;
+	uint32_t      resp_buf[4];
 } dwcmshc_cmd_pkt_t;
 
 struct dwcmshc_emmc_controller {
@@ -64,5 +59,7 @@ int dwcmshc_emmc_cmd_reset(struct emmc_device *emmc, uint32_t argument);
 int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc);
 int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* in_field);
 int dwcmshc_emmc_rd_id(struct emmc_device *emmc);
+
+int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf);
 
 #endif

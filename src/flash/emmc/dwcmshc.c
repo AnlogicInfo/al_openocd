@@ -50,6 +50,9 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
     dwcmshc_emmc_ctl_init(emmc);
     dwcmshc_emmc_interrupt_init(emmc);
     dwcmshc_emmc_card_init(emmc, in_field);
+
+    dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
+
     return status;
 }
 

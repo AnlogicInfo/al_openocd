@@ -719,6 +719,8 @@ typedef struct
 // normal_int_stat register param
 #define WAIT_CMD_COMPLETE               0
 #define WAIT_XFER_COMPLETE              1
+#define WAIT_BUF_WR_READY               4
+#define WAIT_BUF_RD_READY               5
 
 //normal_int_stat_en register param
 #define MMC_NORMAL_INT_STAT_MASKED		0x0

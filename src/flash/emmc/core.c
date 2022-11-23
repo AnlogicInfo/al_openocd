@@ -135,7 +135,11 @@ static void emmc_csd_parse(uint32_t* csd_buf)
 int emmc_probe(struct emmc_device *emmc)
 {
 	int status = ERROR_OK;
-	uint32_t in_field[32] = {0};
+	// uint32_t in_field[32] = {0};
+	uint32_t* in_field;
+
+	in_field = malloc(1024);
+	// emmc->device->block_size = EMMC_BLOCK_SIZE;
 
 	status = emmc->controller->init(emmc, in_field);
 	if(status != ERROR_OK)
@@ -149,7 +153,7 @@ int emmc_probe(struct emmc_device *emmc)
 		return ERROR_EMMC_OPERATION_FAILED;
 	}
     // LOG_INFO("found %s", emmc->device->name);
-
+	free(in_field);
     return status;
 }
 
