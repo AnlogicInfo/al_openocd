@@ -696,8 +696,10 @@ typedef struct
 #define MMC_CC_SD_CLK_ENABLE			0x1
 #define MMC_CC_PLL_LOW_PWR_MODE			0x0
 #define MMC_CC_PLL_ENABLE				0x1
-#define MMC_CC_CLK_GEN_SEL_DIVIDED		0x0
-#define MMC_CC_CLK_GEN_SEL_PROGRAM		0x1
+// #define MMC_CC_CLK_GEN_SEL_DIVIDED		0x0
+// #define MMC_CC_CLK_GEN_SEL_PROGRAM		0x1
+#define MMC_CC_CLK_CARD_INIT            0x0
+#define MMC_CC_CLK_CARD_OPER            0x1
 
 //tout_ctrl register param
 #define MMC_TC_TOUT_CNT_2_13			0x0

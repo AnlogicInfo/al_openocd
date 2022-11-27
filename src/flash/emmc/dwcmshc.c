@@ -52,7 +52,7 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
     dwcmshc_emmc_card_init(emmc, in_field);
 
     dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
-
+    dwcmshc_emmc_set_clk_ctrl(emmc, MMC_CC_CLK_CARD_OPER, 0);
     return status;
 }
 
@@ -62,13 +62,15 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
     return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
 
-static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint8_t *data, int size)
+static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
+    slow_dwcmshc_emmc_write_block(emmc, buffer, addr);
     return ERROR_OK;
 }
 
-static int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint8_t *data, int size)
+static int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
+    slow_dwcmshc_emmc_read_block(emmc, buffer, addr);
     return ERROR_OK;
 }
 

@@ -103,6 +103,8 @@ struct emmc_device
 #define EMMC_OCR_ACCESS_MODE_BYTE_MODE          0x0
 #define EMMC_OCR_ACCESS_MODE_SECTOR_MODE        0x2
 
+#define SECTOR_COUNT_OFFSET                     (212 >> 2)
+
 typedef union{
      uint32_t d32;
     struct {
@@ -130,13 +132,10 @@ struct emmc_manufacture {
 struct emmc_info {
     int mfr_id;
     size_t prd_name;
+    int block_size;
     int chip_size;
     const char *name;
 };
-
-
-
-
 
 struct emmc_device *get_emmc_device_by_num(int num);
 

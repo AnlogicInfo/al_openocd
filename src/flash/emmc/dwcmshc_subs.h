@@ -35,16 +35,17 @@ struct dwcmshc_emmc_controller {
 };
 
 
-#define TIMEOUT_1S                          (1000*1000)
-#define TIMEOUT_5S                          (5000*1000)
-#define TIMEOUT_10S                         (10000*1000)
-#define TIMEOUT_15S                         (15000*1000)
+#define TIMEOUT_1S                          (1000)
+#define TIMEOUT_5S                          (5000)
+#define TIMEOUT_10S                         (10000)
+#define TIMEOUT_15S                         (15000)
 
 #define MMC_DELAY_SCALE						(2)
 
 //AL9000 config
-#define MIO_BASE                             0xF8803000
-#define EMIO_SEL11                           0xF880342C
+#define MIO_BASE                             0xF8803000ULL
+#define EMIO_SEL11                           0xF880342CULL
+#define CFG_CTRL_SDIO1                       0xF8800150ULL
 #define IO_BANK1_REF                         0xF8803C04ULL
 
 #define MMC_IO_BANK1_SUPPORT_1V8(reg)	     (reg & 0x1)
@@ -61,5 +62,8 @@ int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* in_field);
 int dwcmshc_emmc_rd_id(struct emmc_device *emmc);
 
 int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf);
+int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc, bool mode, uint32_t div);
+int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
+int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
 
 #endif

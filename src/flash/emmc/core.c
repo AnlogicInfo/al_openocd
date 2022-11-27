@@ -32,10 +32,8 @@ void emmc_device_add(struct emmc_device *c)
 
 static struct emmc_info emmc_flash_ids[] = 
 {
-
-    {EMMC_MFR_SAMSUNG, 0x004d43473847, 0x2000, "Samsung KLMCG8GEAC-B031 8GB EMMC "},
-    {0, 0, 0, NULL},
-
+    {EMMC_MFR_SAMSUNG, 0x004d43473847, 0x200, 64, "Samsung KLMCG8GEAC-B031 8GB EMMC "},
+    {0, 0, 0, 0, NULL},
 };
 /**
  * Returns the flash bank specified by @a name, which matches the
@@ -124,12 +122,15 @@ static void emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
     }
 }
 
-static void emmc_csd_parse(uint32_t* csd_buf)
+static void emmc_csd_parse(struct emmc_device *emmc, uint32_t* csd_buf)
 {
-	for(int i = 0; i < 4; i++)
-	{
-		LOG_INFO("csd %d val %x", i, csd_buf[i]);
-	}
+	size_t sec_cnt = 0;
+	uint32_t actual_size;
+
+	sec_cnt = csd_buf[SECTOR_COUNT_OFFSET + 4];
+
+	actual_size = (sec_cnt * emmc->device->block_size) >> 30;
+	emmc->device->chip_size =  ((actual_size >> 3) + 1) << 3;
 }
 
 int emmc_probe(struct emmc_device *emmc)
@@ -146,7 +147,8 @@ int emmc_probe(struct emmc_device *emmc)
 		return ERROR_FAIL;
 
 	emmc_cid_parse(emmc, in_field);
-	emmc_csd_parse(in_field + 4);
+	if(emmc->device->chip_size == 0)
+		emmc_csd_parse(emmc, in_field + 4);
 	if(!emmc->device)
 	{
 		LOG_ERROR("unknown EMMC flash device found");
@@ -157,13 +159,15 @@ int emmc_probe(struct emmc_device *emmc)
     return status;
 }
 
-int emmc_read_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size)
+int emmc_read_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
+	emmc->controller->read_block_data(emmc, buffer, addr);
     return ERROR_OK;
 }
 
-int emmc_write_data_block(struct emmc_device *emmc, uint8_t *data, uint32_t block, uint32_t size)
+int emmc_write_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
+	emmc->controller->write_block_data(emmc, buffer, addr);
     return ERROR_OK;
 }
 

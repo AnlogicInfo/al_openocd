@@ -39,10 +39,10 @@ struct emmc_flash_controller {
 	// int (*read_resp)(struct emmc_device *emmc, uint8_t resp_len, uint32_t* resp_buf);
 
 	/** Write a block of data to the EMMC device. */
-	int (*write_block_data)(struct emmc_device *emmc, uint8_t *data, int size);
+	int (*write_block_data)(struct emmc_device *emmc, uint32_t *data, uint32_t addr);
 
 	/** Read a block of data from the EMMC device. */
-	int (*read_block_data)(struct emmc_device *emmc, uint8_t *data, int size);
+	int (*read_block_data)(struct emmc_device *emmc, uint32_t *data, uint32_t addr);
 
 	/** Check if the EMMC device is ready for more instructions with timeout. */
 	int (*emmc_ready)(struct emmc_device *emmc, int timeout);
