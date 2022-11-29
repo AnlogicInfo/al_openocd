@@ -154,23 +154,61 @@ COMMAND_HANDLER(handle_emmc_read_block_command)
 	return retval;
 }
 
-// COMMAND_HANDLER(handle_emmc_verify_image_command)
-// {
-// 	uint32_t addr=0;
-// 	uint8_t *buffer;
+COMMAND_HANDLER(handle_emmc_verify_command)
+{
+	struct emmc_device *emmc = NULL;
+	struct emmc_fileio_state file;
+	int retval = CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
+			&file, &emmc, FILEIO_READ, false);
+	if (retval != ERROR_OK)
+		return retval;
 
-// 	struct emmc_device *bank;
-// 	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &bank);
-// 	if (retval != ERROR_OK)
-// 		return retval;
+	struct emmc_fileio_state dev;
+	emmc_fileio_init(&dev);
+	dev.address = file.address;
+	dev.size = file.size;
+	retval = emmc_fileio_start(CMD, emmc, NULL, FILEIO_NONE, &dev);
+	if (retval != ERROR_OK)
+		return retval;
 
-// 	buffer = malloc(2048);
+	while (file.size > 0) {
+		retval = emmc_read_data_block(emmc, (uint32_t*)dev.block, dev.address);
+		if (retval != ERROR_OK) {
+			command_print(CMD, "reading emmc flash block failed");
+			emmc_fileio_cleanup(&dev);
+			emmc_fileio_cleanup(&file);
+			return retval;
+		}
 
-// 	retval = emmc_read_data_block(bank, (uint32_t*) buffer, addr);
+		int bytes_read = emmc_fileio_read(emmc, &file);
+		if (bytes_read <= 0) {
+			command_print(CMD, "error while reading file");
+			emmc_fileio_cleanup(&dev);
+			emmc_fileio_cleanup(&file);
+			return ERROR_FAIL;
+		}
 
-// 	free(buffer);
-// 	return retval;
-// }
+		if (dev.block && memcmp(dev.block, file.block, dev.block_size)) {
+			command_print(CMD, "emmc flash contents differ "
+				"at 0x%8.8" PRIx32, dev.address);
+			emmc_fileio_cleanup(&dev);
+			emmc_fileio_cleanup(&file);
+			return ERROR_FAIL;
+		}
+
+		file.size -= bytes_read;
+		dev.address += emmc->block_size;
+	}
+
+	if (emmc_fileio_finish(&file) == ERROR_OK) {
+		command_print(CMD, "verified file %s in emmc flash %s "
+			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
+			CMD_ARGV[1], CMD_ARGV[0], dev.address, duration_elapsed(&file.bench),
+			duration_kbps(&file.bench, dev.size));
+	}
+
+	return emmc_fileio_cleanup(&dev);
+}
 
 static const struct command_registration emmc_exec_command_handlers[] = {
 	{
@@ -211,14 +249,14 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.help = "Read binary data from emmc bank to file. Allow optional "
 			"offset from beginning of the bank (defaults to zero).",
 	},
-	// {
-	// 	.name = "verify_image",
-	// 	.handler = handle_emmc_verify_image_command,
-	// 	.mode = COMMAND_EXEC,
-	// 	.usage = "filename [offset [file_type]]",
-	// 	.help = "Verify an image against emmc. Allow optional "
-	// 		"offset from beginning of bank (defaults to zero)",
-	// },	
+	{
+		.name = "verify_image",
+		.handler = handle_emmc_verify_command,
+		.mode = COMMAND_EXEC,
+		.usage = "filename [offset [file_type]]",
+		.help = "Verify an image against emmc. Allow optional "
+			"offset from beginning of bank (defaults to zero)",
+	},	
 
 	COMMAND_REGISTRATION_DONE
 };
