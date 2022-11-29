@@ -12,7 +12,9 @@
 
 #include "core.h"
 #include "imp.h"
-#include <target/target.h>
+#include "fileio.h"
+#include <helper/time_support.h>
+
 extern struct emmc_device *emmc_devices;
 
 
@@ -46,12 +48,12 @@ COMMAND_HANDLER(handle_emmc_probe_command)
 	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	struct emmc_device *p;
-	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &p);
+	struct emmc_device *emmc;
+	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &emmc);
 	if (retval != ERROR_OK)
 		return retval;
 
-	retval = emmc_probe(p);
+	retval = emmc_probe(emmc);
 	if (retval == ERROR_OK) {
 		command_print(CMD, "emmc flash probed");
 		// command_print(CMD, "EMMC flash device '%s' found", p->device->name);
@@ -68,15 +70,15 @@ COMMAND_HANDLER(handle_emmc_write_block_command)
 	// struct duration bench;
 	// duration_start(&bench);
 
-	struct emmc_device *bank;
-	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &bank);
+	struct emmc_device *emmc;
+	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &emmc);
 	if (retval != ERROR_OK)
 		return retval;
 
 	buffer = malloc(2048);
 	for(int i=0; i<1024; i++)
 	{
-		*(buffer+i) = i;
+		*(buffer+i) = 0xaa;
 	}
 
 	if (!buffer) {
@@ -85,29 +87,90 @@ COMMAND_HANDLER(handle_emmc_write_block_command)
 		return ERROR_FAIL;
 	}
 
-	retval = emmc_write_data_block(bank, (uint32_t*) buffer, addr);
+	retval = emmc_write_data_block(emmc, (uint32_t*) buffer, addr);
 
 	free(buffer);
 	return retval;
 }
+
+COMMAND_HANDLER(handle_emmmc_write_image_command)
+{
+	struct emmc_device *emmc = NULL;
+	struct emmc_fileio_state s;
+	int retval = CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
+			&s, &emmc, FILEIO_READ, false);
+	if(retval != ERROR_OK)
+		return retval;
+
+	uint32_t total_bytes = s.size;
+
+	while(s.size > 0)
+	{
+		int bytes_read = emmc_fileio_read(emmc, &s);
+		if(bytes_read <= 0) 
+		{
+			command_print(CMD, "error while reading file");
+			emmc_fileio_cleanup(&s);
+			return ERROR_FAIL;
+		}
+		s.size -=bytes_read;
+
+		retval = emmc_write_data_block(emmc, (uint32_t*) s.block, s.address);
+		if(retval != ERROR_OK)
+		{
+			command_print(CMD, "failed writing file %s "
+				"to EMMC flash %s at offset 0x%8.8" PRIx32,
+				CMD_ARGV[1], CMD_ARGV[0], s.address);
+			emmc_fileio_cleanup(&s);
+			return retval;
+		}
+		s.address += s.block_size;
+	}
+	if (emmc_fileio_finish(&s) == ERROR_OK) {
+		command_print(CMD, "wrote file %s to EMMC flash %s up to "
+			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
+			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
+			duration_kbps(&s.bench, total_bytes));
+	}
+	return ERROR_OK;
+}
+
 
 COMMAND_HANDLER(handle_emmc_read_block_command)
 {
 	uint32_t addr=0;
 	uint8_t *buffer;
 
-	struct emmc_device *bank;
-	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &bank);
+	struct emmc_device *emmc;
+	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &emmc);
 	if (retval != ERROR_OK)
 		return retval;
 
 	buffer = malloc(2048);
 
-	retval = emmc_read_data_block(bank, (uint32_t*) buffer, addr);
+	retval = emmc_read_data_block(emmc, (uint32_t*) buffer, addr);
 
 	free(buffer);
 	return retval;
 }
+
+// COMMAND_HANDLER(handle_emmc_verify_image_command)
+// {
+// 	uint32_t addr=0;
+// 	uint8_t *buffer;
+
+// 	struct emmc_device *bank;
+// 	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &bank);
+// 	if (retval != ERROR_OK)
+// 		return retval;
+
+// 	buffer = malloc(2048);
+
+// 	retval = emmc_read_data_block(bank, (uint32_t*) buffer, addr);
+
+// 	free(buffer);
+// 	return retval;
+// }
 
 static const struct command_registration emmc_exec_command_handlers[] = {
 	{
@@ -133,6 +196,14 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 			"offset from beginning of the bank (defaults to zero).",
 	},
 	{
+		.name = "write_image",
+		.handler = handle_emmmc_write_image_command,
+		.mode = COMMAND_EXEC,
+		.usage = "filename [offset [file_type]]",
+		.help = "Write an image to flash. "
+			"Allow optional offset from beginning of bank (defaults to zero)",	
+	},	
+	{
 		.name = "read_block",
 		.handler = handle_emmc_read_block_command,
 		.mode = COMMAND_EXEC,
@@ -140,6 +211,14 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.help = "Read binary data from emmc bank to file. Allow optional "
 			"offset from beginning of the bank (defaults to zero).",
 	},
+	// {
+	// 	.name = "verify_image",
+	// 	.handler = handle_emmc_verify_image_command,
+	// 	.mode = COMMAND_EXEC,
+	// 	.usage = "filename [offset [file_type]]",
+	// 	.help = "Verify an image against emmc. Allow optional "
+	// 		"offset from beginning of bank (defaults to zero)",
+	// },	
 
 	COMMAND_REGISTRATION_DONE
 };

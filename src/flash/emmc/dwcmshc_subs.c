@@ -683,7 +683,7 @@ static int dwcmshc_emmc_cmd_set_block_count(struct emmc_device *emmc, uint32_t b
 static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-    struct target *target = emmc->target;
+    // struct target *target = emmc->target;
 
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
@@ -691,8 +691,8 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
     uint32_t wr_cnt = 128;
 
     LOG_INFO("write single block");
-    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKCOUNT_R, 1);
-    target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKSIZE_R, 512);
+    // target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKCOUNT_R, 1);
+    // target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKSIZE_R, 512);
 
     
     cmd_pkt->argu_en = ARGU_EN;

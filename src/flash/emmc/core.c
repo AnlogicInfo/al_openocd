@@ -9,7 +9,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-
 #include "imp.h"
 
 struct emmc_device *emmc_devices;
@@ -117,9 +116,11 @@ static void emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
         if(emmc_flash_ids[i].prd_name == prd_name && (emmc_flash_ids[i].mfr_id == mrf_id))
 		{
             emmc->device = &emmc_flash_ids[i];
+			emmc->block_size = emmc_flash_ids[i].block_size;
 		}
         break;
     }
+
 }
 
 static void emmc_csd_parse(struct emmc_device *emmc, uint32_t* csd_buf)
@@ -170,4 +171,3 @@ int emmc_write_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t a
 	emmc->controller->write_block_data(emmc, buffer, addr);
     return ERROR_OK;
 }
-
