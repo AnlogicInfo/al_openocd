@@ -28,6 +28,8 @@ struct nand_fileio_state {
 	uint8_t *page;
 	uint32_t page_size;
 
+	uint8_t erase;
+
 	enum oob_formats oob_format;
 	uint8_t *oob;
 	uint32_t oob_size;

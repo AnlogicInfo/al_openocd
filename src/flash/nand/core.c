@@ -24,7 +24,6 @@
 #endif
 
 #include "imp.h"
-#include <target/target.h>
 
 /* configured NAND devices and NAND Flash command handler */
 struct nand_device *nand_devices;
@@ -518,7 +517,6 @@ int nand_erase(struct nand_device *nand, int first_block, int last_block)
 	uint32_t page;
 	uint8_t status;
 	int retval;
-	struct target *target = nand->target;
 
 	if (!nand->device)
 		return ERROR_NAND_DEVICE_NOT_PROBED;
@@ -543,9 +541,8 @@ int nand_erase(struct nand_device *nand, int first_block, int last_block)
 		/* Send page address */
 		if (strcmp(nand->controller->name, "smc35x") == 0)
 		{
-			target_write_u32(target, (0x64000000UL | (3 << 21) | (1 << 20) | (0xD0 << 11) | (0x60 << 3)), page);
-		}
-		else if (nand->page_size <= 512) {
+			nand->controller->address_u32(nand, page);
+		} else if (nand->page_size <= 512) {
 			/* row */
 			nand->controller->address(nand, page & 0xff);
 			nand->controller->address(nand, (page >> 8) & 0xff);

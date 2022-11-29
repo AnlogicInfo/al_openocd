@@ -2889,6 +2889,24 @@ static int aarch64_jim_configure(struct target *target, struct jim_getopt_info *
 	return JIM_OK;
 }
 
+static int aarch64_start_algorithm(struct target *target,
+	int num_mem_params, struct mem_param *mem_params,
+	int num_reg_params, struct reg_param *reg_params,
+	target_addr_t entry_point, target_addr_t exit_point,
+	void *arch_info)
+{
+	return ERROR_OK;
+}
+
+static int aarch64_wait_algorithm(struct target *target,
+	int num_mem_params, struct mem_param *mem_params,
+	int num_reg_params, struct reg_param *reg_params,
+	target_addr_t exit_point, int timeout_ms,
+	void *arch_info)
+{
+	return ERROR_OK;
+}
+
 static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 		struct mem_param *mem_params, int num_reg_params,
 		struct reg_param *reg_params, target_addr_t entry_point,
@@ -3405,8 +3423,10 @@ struct target_type aarch64_target = {
 	.read_memory = aarch64_read_memory,
 	.write_memory = aarch64_write_memory,
 
-
+	.start_algorithm = aarch64_start_algorithm,
+	.wait_algorithm = aarch64_wait_algorithm,
 	.run_algorithm = aarch64_run_algorithm,
+
 	.add_breakpoint = aarch64_add_breakpoint,
 	.add_context_breakpoint = aarch64_add_context_breakpoint,
 	.add_hybrid_breakpoint = aarch64_add_hybrid_breakpoint,

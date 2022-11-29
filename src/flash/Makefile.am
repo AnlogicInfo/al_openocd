@@ -8,6 +8,7 @@ noinst_LTLIBRARIES += %D%/libflash.la
 	%D%/emmc/libocdflashemmc.la
 
 STARTUP_TCL_SRCS += %D%/startup.tcl
+STARTUP_TCL_SRCS += %D%/startup-nand.tcl
 
 include %D%/nor/Makefile.am
 include %D%/nand/Makefile.am
