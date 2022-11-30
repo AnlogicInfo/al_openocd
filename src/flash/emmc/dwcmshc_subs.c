@@ -410,7 +410,7 @@ static int dwcmshc_emmc_rd_buf(struct emmc_device *emmc, uint32_t* buf, uint32_t
     for(i = 0; i < count; i++)
     {
         target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_BUF_DATA_R, buf+i);
-        LOG_INFO("rd buf %d val %x ", i, *(buf+i));
+        // LOG_INFO("rd buf %d val %x ", i, *(buf+i));
     }
 
     return dwcmshc_emmc_poll_int(emmc, WAIT_XFER_COMPLETE, TIMEOUT_1S);
@@ -425,7 +425,7 @@ static int dwcmshc_emmc_wr_buf(struct emmc_device *emmc, uint32_t* buf, uint32_t
 
     for(i = 0; i < count; i++)
     {
-        LOG_INFO("wr cnt %x val %x", i, *(buf+i));
+        // LOG_INFO("wr cnt %x val %x", i, *(buf+i));
         target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_BUF_DATA_R, *(buf+i));
     }
     return dwcmshc_emmc_poll_int(emmc, WAIT_XFER_COMPLETE, TIMEOUT_1S);
@@ -690,7 +690,6 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
     // uint32_t wr_cnt = emmc->device->block_size >> 2;
     uint32_t wr_cnt = 128;
 
-    LOG_INFO("write single block");
     // target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKCOUNT_R, 1);
     // target_write_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_BLOCKSIZE_R, 512);
 

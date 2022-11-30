@@ -122,7 +122,6 @@ int emmc_fileio_read(struct emmc_device *emmc, struct emmc_fileio_state *s)
 			memset(s->block + one_read, 0xff, s->block_size - one_read);
 		total_read += one_read;
 	}
-
 	return total_read;
 }
 

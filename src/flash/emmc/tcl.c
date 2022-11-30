@@ -237,7 +237,7 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.name = "write_image",
 		.handler = handle_emmmc_write_image_command,
 		.mode = COMMAND_EXEC,
-		.usage = "filename [offset [file_type]]",
+		.usage = "bank_id filename offset",
 		.help = "Write an image to flash. "
 			"Allow optional offset from beginning of bank (defaults to zero)",	
 	},	
@@ -253,7 +253,7 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.name = "verify_image",
 		.handler = handle_emmc_verify_command,
 		.mode = COMMAND_EXEC,
-		.usage = "filename [offset [file_type]]",
+		.usage = "bank_id filename offset ",
 		.help = "Verify an image against emmc. Allow optional "
 			"offset from beginning of bank (defaults to zero)",
 	},	
