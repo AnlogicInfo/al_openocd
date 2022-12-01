@@ -31,6 +31,7 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
     dwcmshc_emmc->ctrl_base = base;
     dwcmshc_emmc->loader.target = emmc->target;
     dwcmshc_emmc->loader.copy_area = NULL;
+    dwcmshc_emmc->loader.ctrl_base = base;
 
     return ERROR_OK;    
 }

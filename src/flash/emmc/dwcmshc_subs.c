@@ -323,7 +323,7 @@ static int dwcmshc_emmc_rd_buf(struct emmc_device *emmc, uint32_t* buf, uint32_t
     for(i = 0; i < count; i++)
     {
         target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_BUF_DATA_R, buf+i);
-        // LOG_INFO("rd buf %d val %x ", i, *(buf+i));
+        LOG_DEBUG("rd buf %d val %x ", i, *(buf+i));
     }
 
     return dwcmshc_emmc_poll_int(emmc, WAIT_XFER_COMPLETE, TIMEOUT_1S);
@@ -672,7 +672,8 @@ int fast_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ta
     int retval = ERROR_OK;
     int size = emmc->device->block_size;
     dwcmshc_emmc->loader.chunk_size = emmc->device->block_size;
-    LOG_INFO("fast dwcmshc write");
+    // dwcmshc_emmc_cmd_set_block_length(emmc, 512);
+    // dwcmshc_emmc_cmd_set_block_count(emmc, 1);
     
     retval = target_emmc_write(&dwcmshc_emmc->loader, (uint8_t*)buffer, addr, size);
 

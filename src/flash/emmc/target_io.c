@@ -26,7 +26,6 @@ static int target_code_to_working_area(struct target *target,
 	/* make sure we have a working area */
 	if (!*area) {
 		retval = target_alloc_working_area(target, size, area);
-    	LOG_INFO("write code to " TARGET_ADDR_FMT  "size %d", (*area)->address, size);
 		if (retval != ERROR_OK) {
 			LOG_INFO("%s: no %d byte buffer", __func__, (int) size);
 			return ERROR_EMMC_NO_BUFFER;
@@ -45,15 +44,15 @@ static int target_code_to_working_area(struct target *target,
 }
 
 static const uint8_t riscv32_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/build/emmc_riscv_32.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_riscv_32.inc"
 };
 
 static const uint8_t riscv64_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/build/emmc_riscv_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_riscv_64.inc"
 };
 
 static const uint8_t aarch64_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/build/emmc_aarch_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_aarch_64.inc"
 };
 
 
@@ -98,7 +97,7 @@ static int target_set_algorithm(struct target_emmc_loader *loader, uint8_t *data
     // copy code to work area
     if(loader->op != TARGET_EMMC_WRITE || !loader->copy_area)
     {
-        LOG_INFO("target wr code size %x to workarea", target_code_size);
+        // LOG_INFO("target wr code size %x to workarea", target_code_size);
         retval = target_code_to_working_area(target, target_code_src, target_code_size, 
         loader->chunk_size, &loader->copy_area);
 
@@ -109,17 +108,20 @@ static int target_set_algorithm(struct target_emmc_loader *loader, uint8_t *data
     loader->op = TARGET_EMMC_WRITE;
     // copy data to work area
 
-    LOG_INFO("target wr buf");
     retval = target_write_buffer(target, target_buf, size, data);
 
     if(retval != ERROR_OK)
         return retval;
 
-    LOG_INFO("target set reg parm");
-    buf_set_u32(reg_params[0].value, 0, xlen, loader->ctrl_base);
-    buf_set_u32(reg_params[1].value, 0, xlen, offset);
-    buf_set_u32(reg_params[2].value, 0, xlen, target_buf);
-    buf_set_u32(reg_params[3].value, 0, xlen, size);
+    // LOG_INFO("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
+    // LOG_INFO("target set reg parm offset %llx", offset);
+    // LOG_INFO("target set reg parm buf base " TARGET_ADDR_FMT , target_buf);
+    // LOG_INFO("target set reg parm size %x", size);
+    
+    buf_set_u64(reg_params[0].value, 0, xlen, loader->ctrl_base);
+    buf_set_u64(reg_params[1].value, 0, xlen, offset);
+    buf_set_u64(reg_params[2].value, 0, xlen, target_buf);
+    buf_set_u64(reg_params[3].value, 0, xlen, size);
 
     return ERROR_OK;
 }
@@ -129,28 +131,18 @@ int target_emmc_write(struct target_emmc_loader *loader, uint8_t *data, target_a
 {
     struct target *target = loader->target;
     struct reg_param reg_params[4];
-    // struct working_area *algorithm_wa = NULL;
     int retval = ERROR_OK;
     // set up algorithm
-    // target_alloc_working_area(target, 0x100, &algorithm_wa);
-	// LOG_ERROR("write code to " TARGET_ADDR_FMT  "size %d",algorithm_wa->address, size);
-    // target_free_working_area(target, algorithm_wa);
-    // run algorithm
     retval = target_set_algorithm(loader, data, offset, size, reg_params);
-    if(0)
-    {
 
+    // run algorithm
     retval = target_run_algorithm(target, 0, NULL, 
                         ARRAY_SIZE(reg_params), reg_params, 
                         loader->copy_area->address, 0, 10000, NULL);
-
 	destroy_reg_param(&reg_params[0]);
 	destroy_reg_param(&reg_params[1]);
 	destroy_reg_param(&reg_params[2]);
     destroy_reg_param(&reg_params[3]);
-
-    }
-
 
     if(retval != ERROR_OK){
         LOG_ERROR("error executing hosted EMMC write");

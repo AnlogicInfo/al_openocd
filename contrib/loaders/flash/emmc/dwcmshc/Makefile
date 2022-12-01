@@ -21,7 +21,7 @@ DST_DIR   = $(WORK_DIR)/build/$(ARCH)
 $(info # dst dir $(DST_DIR))
 $(shell mkdir -p $(DST_DIR))
 
-IMAGE_REL = ../build/emmc_$(ARCH)
+IMAGE_REL = build/emmc_$(ARCH)
 IMAGE     = $(abspath $(IMAGE_REL))
 
 
@@ -40,7 +40,7 @@ ifeq ($(ISA),aarch)
 	CROSS_COMPILE := aarch64-none-elf-
 	COMMON_FLAGS  := -mabi=lp64
 else
-	CROSS_COMPILE := riscv64-unknown-elf-
+	CROSS_COMPILE := riscv-none-embed-
 	ifeq ($(PLATFORM),32)
 		COMMON_FLAGS  := -march=rv32e -mabi=ilp32e
 	else

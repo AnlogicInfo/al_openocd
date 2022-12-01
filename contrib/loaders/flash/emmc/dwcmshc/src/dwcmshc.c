@@ -1,8 +1,8 @@
 #include <stdint.h>
-#define ARGUMENT_R            0x8
-#define XFER_CMD_R            0xC
-#define BUF_DATA_R            0x20
-#define NORMAL_ERROR_INT_R    0x30
+#define ARGUMENT_R            (0x8 >> 2)
+#define XFER_CMD_R            (0xC >> 2)
+#define BUF_DATA_R            (0x20>> 2)
+#define NORMAL_ERROR_INT_R    (0x30>> 2)
 
 #define XFER_DIR_WRITE            (0<<4)
 #define XFER_BLOCK_COUNT_ENABLE   (1<<1)
@@ -34,6 +34,7 @@ void emmc_dwcmshc(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t 
 {
     uint32_t i, int_val;
     uint8_t done_flag;
+
     reg_write((ctrl_base + ARGUMENT_R), offset);
     reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
     // poll int val

@@ -106,7 +106,7 @@ COMMAND_HANDLER(handle_emmmc_write_image_command)
 
 	uint32_t total_bytes = s.size;
 
-	// while(s.size > 0)
+	while(s.size > 0)
 	{
 		int bytes_read = emmc_fileio_read(emmc, &s);
 		if(bytes_read <= 0) 

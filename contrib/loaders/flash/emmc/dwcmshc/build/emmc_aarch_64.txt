@@ -1,0 +1,85 @@
+
+D:/work/2022/al9000/sw/debugger/al_openocd/contrib/loaders/flash/emmc/dwcmshc/build/emmc_aarch_64.elf:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+0000000061000000 <_start>:
+# define REGBYTES 16
+
+		.section .text.entry
+		.global _start
+_start:
+		ldr x28, =stack_end
+    61000000:	5800009c 	ldr	x28, 61000010 <_start+0x10>
+        mov sp, x28
+    61000004:	9100039f 	mov	sp, x28
+		bl    	emmc_dwcmshc
+    61000008:	94000004 	bl	61000018 <emmc_dwcmshc>
+
+        hlt #0x0B
+    6100000c:	d4400160 	hlt	#0xb
+    61000010:	61000080 	.word	0x61000080
+    61000014:	00000000 	.word	0x00000000
+
+0000000061000018 <emmc_dwcmshc>:
+void emmc_dwcmshc(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer, uint32_t size_in_bytes)
+{
+    uint32_t i, int_val;
+    uint8_t done_flag;
+
+    reg_write((ctrl_base + ARGUMENT_R), offset);
+    61000018:	b9000801 	str	w1, [x0, #8]
+    reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
+    6100001c:	52801041 	mov	w1, #0x82                  	// #130
+    61000020:	72a30741 	movk	w1, #0x183a, lsl #16
+    61000024:	b9000c01 	str	w1, [x0, #12]
+    // poll int val
+    while(1)
+    {
+        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+    61000028:	b9403001 	ldr	w1, [x0, #48]
+        done_flag = (int_val >> INT_BUF_WR_READY) & 0x1;
+        if(done_flag && ((int_val >> 16) ==0))
+    6100002c:	3627ffe1 	tbz	w1, #4, 61000028 <emmc_dwcmshc+0x10>
+    61000030:	6b4143ff 	cmp	wzr, w1, lsr #16
+    61000034:	54ffffa1 	b.ne	61000028 <emmc_dwcmshc+0x10>  // b.any
+            break;
+    }
+
+    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_BUF_WR_READY));
+    61000038:	321c0021 	orr	w1, w1, #0x10
+
+    for(i=0; i < (size_in_bytes >> 2); i++)
+    6100003c:	53027c63 	lsr	w3, w3, #2
+    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_BUF_WR_READY));
+    61000040:	b9003001 	str	w1, [x0, #48]
+    for(i=0; i < (size_in_bytes >> 2); i++)
+    61000044:	d2800001 	mov	x1, #0x0                   	// #0
+    61000048:	6b01007f 	cmp	w3, w1
+    6100004c:	54000108 	b.hi	6100006c <emmc_dwcmshc+0x54>  // b.pmore
+        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+    
+    while(1)
+    {
+        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+    61000050:	b9403001 	ldr	w1, [x0, #48]
+        done_flag = (int_val >> INT_XFER_COMPLETE_OFFSET) & 0x1;
+        if(done_flag && ((int_val >> 16) ==0))
+    61000054:	360fffe1 	tbz	w1, #1, 61000050 <emmc_dwcmshc+0x38>
+    61000058:	6b4143ff 	cmp	wzr, w1, lsr #16
+    6100005c:	54ffffa1 	b.ne	61000050 <emmc_dwcmshc+0x38>  // b.any
+            break;
+    }
+    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
+    61000060:	321f0021 	orr	w1, w1, #0x2
+    61000064:	b9003001 	str	w1, [x0, #48]
+
+}
+    61000068:	d65f03c0 	ret
+        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+    6100006c:	b8617844 	ldr	w4, [x2, x1, lsl #2]
+    61000070:	91000421 	add	x1, x1, #0x1
+    61000074:	b9002004 	str	w4, [x0, #32]
+    for(i=0; i < (size_in_bytes >> 2); i++)
+    61000078:	17fffff4 	b	61000048 <emmc_dwcmshc+0x30>

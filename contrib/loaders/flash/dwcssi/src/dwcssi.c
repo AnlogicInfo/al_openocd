@@ -9,7 +9,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../../../../../src/flash/nor/spi.h"
+#define	SPIFLASH_BSY		0
+#define SPIFLASH_BSY_BIT	(1 << SPIFLASH_BSY)	/* WIP Bit of SPI SR */
+#define SPIFLASH_WRITE_ENABLE	0x06 /* Write Enable */
+#define SPIFLASH_READ_STATUS	0x05 /* Read Status Register */
 
 
 /*Register offsets*/

@@ -1,0 +1,83 @@
+
+D:/work/2022/al9000/sw/debugger/al_openocd/contrib/loaders/flash/emmc/dwcmshc/build/emmc_riscv_64.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+61000000 <_start>:
+#endif
+
+		.section .text.entry
+		.global _start
+_start:
+		lla		sp, stack_end
+61000000:	00000117          	auipc	sp,0x0
+61000004:	09810113          	addi	sp,sp,152 # 61000098 <stack_end>
+		jal 	emmc_dwcmshc
+61000008:	006000ef          	jal	ra,6100000e <emmc_dwcmshc>
+		ebreak
+6100000c:	9002                	ebreak
+
+6100000e <emmc_dwcmshc>:
+{
+    uint32_t i, int_val;
+    uint8_t done_flag;
+
+    reg_write((ctrl_base + ARGUMENT_R), offset);
+    reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
+6100000e:	183a07b7          	lui	a5,0x183a0
+    reg_write((ctrl_base + ARGUMENT_R), offset);
+61000012:	c50c                	sw	a1,8(a0)
+    reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
+61000014:	08278793          	addi	a5,a5,130 # 183a0082 <_start-0x48c5ff7e>
+61000018:	c55c                	sw	a5,12(a0)
+    // poll int val
+    while(1)
+    {
+        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+6100001a:	5918                	lw	a4,48(a0)
+        done_flag = (int_val >> INT_BUF_WR_READY) & 0x1;
+        if(done_flag && ((int_val >> 16) ==0))
+6100001c:	01077793          	andi	a5,a4,16
+61000020:	dfed                	beqz	a5,6100001a <emmc_dwcmshc+0xc>
+61000022:	01075793          	srli	a5,a4,0x10
+61000026:	fbf5                	bnez	a5,6100001a <emmc_dwcmshc+0xc>
+            break;
+    }
+
+    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_BUF_WR_READY));
+61000028:	01076713          	ori	a4,a4,16
+6100002c:	d918                	sw	a4,48(a0)
+
+    for(i=0; i < (size_in_bytes >> 2); i++)
+6100002e:	8289                	srli	a3,a3,0x2
+61000030:	00f69d63          	bne	a3,a5,6100004a <emmc_dwcmshc+0x3c>
+        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+    
+    while(1)
+    {
+        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+61000034:	591c                	lw	a5,48(a0)
+        done_flag = (int_val >> INT_XFER_COMPLETE_OFFSET) & 0x1;
+        if(done_flag && ((int_val >> 16) ==0))
+61000036:	0027f713          	andi	a4,a5,2
+6100003a:	df6d                	beqz	a4,61000034 <emmc_dwcmshc+0x26>
+6100003c:	0107d713          	srli	a4,a5,0x10
+61000040:	fb75                	bnez	a4,61000034 <emmc_dwcmshc+0x26>
+            break;
+    }
+    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
+61000042:	0027e793          	ori	a5,a5,2
+61000046:	d91c                	sw	a5,48(a0)
+
+}
+61000048:	8082                	ret
+        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+6100004a:	00279713          	slli	a4,a5,0x2
+6100004e:	9732                	add	a4,a4,a2
+61000050:	4318                	lw	a4,0(a4)
+    for(i=0; i < (size_in_bytes >> 2); i++)
+61000052:	0785                	addi	a5,a5,1
+        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+61000054:	d118                	sw	a4,32(a0)
+61000056:	bfe9                	j	61000030 <emmc_dwcmshc+0x22>
