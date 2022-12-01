@@ -2217,7 +2217,7 @@ static int aarch64_write_cpu_memory(struct target *target,
 	dpm->dscr = dscr;
 	if (dscr & (DSCR_ERR | DSCR_SYS_ERROR_PEND)) {
 		/* Abort occurred - clear it and exit */
-		LOG_ERROR("abort occurred - dscr = 0x%08" PRIx32, dscr);
+		// LOG_ERROR("abort occurred - dscr = 0x%08" PRIx32, dscr);
 		armv8_dpm_handle_exception(dpm, true);
 		return ERROR_FAIL;
 	}

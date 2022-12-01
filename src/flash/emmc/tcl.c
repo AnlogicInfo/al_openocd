@@ -97,14 +97,16 @@ COMMAND_HANDLER(handle_emmmc_write_image_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
-	int retval = CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
+	int retval ;	
+
+	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
 			&s, &emmc, FILEIO_READ, false);
 	if(retval != ERROR_OK)
 		return retval;
 
 	uint32_t total_bytes = s.size;
 
-	while(s.size > 0)
+	// while(s.size > 0)
 	{
 		int bytes_read = emmc_fileio_read(emmc, &s);
 		if(bytes_read <= 0) 
@@ -336,7 +338,6 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 	c->controller_priv = NULL;
 	c->device = NULL;
 	c->next = NULL;
-
 
 	retval = CALL_COMMAND_HANDLER(controller->emmc_device_command, c);
 	if (retval != ERROR_OK) {

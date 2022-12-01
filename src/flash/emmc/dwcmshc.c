@@ -11,8 +11,6 @@
 
 #include "dwcmshc_subs.h"
 
-
-
 EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc;
@@ -31,6 +29,8 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
     emmc->controller_priv = dwcmshc_emmc;
     dwcmshc_emmc->probed = false;
     dwcmshc_emmc->ctrl_base = base;
+    dwcmshc_emmc->loader.target = emmc->target;
+    dwcmshc_emmc->loader.copy_area = NULL;
 
     return ERROR_OK;    
 }
@@ -64,6 +64,11 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 
 static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
+    int retval;
+    retval = fast_dwcmshc_emmc_write_block(emmc, buffer, addr);
+    if(retval == ERROR_OK)
+        return retval;
+
     slow_dwcmshc_emmc_write_block(emmc, buffer, addr);
     return ERROR_OK;
 }
