@@ -57,6 +57,7 @@ struct nand_flash_controller {
 
 	/** Write an address to the NAND device. */
 	int (*address)(struct nand_device *nand, uint8_t address);
+	int (*address_u32)(struct nand_device *nand, uint32_t address);
 
 	/** Write word of data to the NAND device. */
 	int (*write_data)(struct nand_device *nand, uint16_t data);

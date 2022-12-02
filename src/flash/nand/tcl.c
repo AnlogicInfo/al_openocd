@@ -280,6 +280,75 @@ COMMAND_HANDLER(handle_nand_write_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(handle_nand_write_image_command)
+{
+	struct nand_device *nand = NULL;
+	struct nand_fileio_state s;
+	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
+			&s, &nand, FILEIO_READ, false, true);
+	if (retval != ERROR_OK)
+		return retval;
+
+	size_t one_read, bytes_read = 0;
+	uint32_t total_bytes = s.size;
+
+	uint32_t page_nums = 0, page_size = 0;
+	page_nums = (s.size - 1) / s.page_size + 1;
+	page_size = page_nums * s.page_size;
+
+	int32_t offset, length;
+	offset = s.address / nand->erase_size;
+	length = (page_size - 1) / nand->erase_size + 1;
+
+	uint8_t *write_data = malloc(page_size);
+	if (write_data) {
+		fileio_read(s.fileio, page_size, write_data, &one_read);
+		if (one_read < page_size)
+			memset(write_data + one_read, 0xff, page_size - one_read);
+		bytes_read += one_read;
+	}
+	if (bytes_read <= 0) {
+		command_print(CMD, "error while reading file");
+		nand_fileio_cleanup(&s);
+		if (write_data)
+			free(write_data);
+		return ERROR_FAIL;
+	}
+
+	if (s.erase) {
+		retval = nand_erase(nand, offset, offset + length - 1);
+		if (retval != ERROR_OK)
+			return retval;
+	}
+
+	retval = nand_write_page(nand, s.address / nand->page_size,
+				write_data, page_size, s.oob, s.oob_size);
+	if (retval != ERROR_OK) {
+		command_print(CMD, "failed writing file %s "
+			"to NAND flash %s at offset 0x%8.8" PRIx32,
+			CMD_ARGV[1], CMD_ARGV[0], s.address);
+		nand_fileio_cleanup(&s);
+		if (write_data) {
+			free(write_data);
+		}
+		return retval;
+	}
+	
+	s.address += page_size;
+	if (nand_fileio_finish(&s) == ERROR_OK) {
+		command_print(CMD, "wrote file %s to NAND flash %s up to "
+			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
+			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
+			duration_kbps(&s.bench, total_bytes));
+	}
+
+	if (write_data) {
+		free(write_data);
+	}
+
+	return ERROR_OK;
+}
+
 COMMAND_HANDLER(handle_nand_verify_command)
 {
 	struct nand_device *nand = NULL;
@@ -464,6 +533,13 @@ static const struct command_registration nand_exec_command_handlers[] = {
 		.usage = "bank_id filename offset "
 			"['oob_raw'|'oob_only'|'oob_softecc'|'oob_softecc_kw']",
 		.help = "write to NAND flash device",
+	},
+	{
+		.name = "write_image",
+		.handler = handle_nand_write_image_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id filename offset",
+		.help = "Write an image to NAND flash device",
 	},
 	{
 		.name = "raw_access",

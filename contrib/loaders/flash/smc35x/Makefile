@@ -16,7 +16,7 @@ RISCV32_CFLAGS = -march=rv32e -mabi=ilp32e $(CFLAGS)
 RISCV64_CFLAGS = -march=rv64i -mabi=lp64 $(CFLAGS)
 AARCH64_CFLAGS = -mabi=lp64 $(CFLAGS)
 
-all: riscv32_smc35x.inc riscv64_smc35x.inc aarch64_smc35x.inc riscv64_smc35x.lst riscv64_smc35x.elf
+all: riscv32_smc35x.inc riscv64_smc35x.inc aarch64_smc35x.inc
 
 .PHONY: clean
 

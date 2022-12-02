@@ -143,7 +143,9 @@ COMMAND_HELPER(nand_fileio_parse_args, struct nand_fileio_state *state,
 
 	if (minargs < CMD_ARGC) {
 		for (unsigned i = minargs; i < CMD_ARGC; i++) {
-			if (!strcmp(CMD_ARGV[i], "oob_raw"))
+			if (!strcmp(CMD_ARGV[i], "erase"))
+				state->erase = 1;
+			else if (!strcmp(CMD_ARGV[i], "oob_raw"))
 				state->oob_format |= NAND_OOB_RAW;
 			else if (!strcmp(CMD_ARGV[i], "oob_only"))
 				state->oob_format |= NAND_OOB_RAW | NAND_OOB_ONLY;

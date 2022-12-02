@@ -1822,6 +1822,24 @@ static int riscv_arch_state(struct target *target)
 	return tt->arch_state(target);
 }
 
+static int riscv_start_algorithm(struct target *target,
+	int num_mem_params, struct mem_param *mem_params,
+	int num_reg_params, struct reg_param *reg_params,
+	target_addr_t entry_point, target_addr_t exit_point,
+	void *arch_info)
+{
+	return ERROR_OK;
+}
+
+static int riscv_wait_algorithm(struct target *target,
+	int num_mem_params, struct mem_param *mem_params,
+	int num_reg_params, struct reg_param *reg_params,
+	target_addr_t exit_point, int timeout_ms,
+	void *arch_info)
+{
+	return ERROR_OK;
+}
+
 /* Algorithm must end with a software breakpoint instruction. */
 static int riscv_run_algorithm(struct target *target, int num_mem_params,
 		struct mem_param *mem_params, int num_reg_params,
@@ -3188,6 +3206,8 @@ struct target_type riscv_target = {
 
 	.arch_state = riscv_arch_state,
 
+	.start_algorithm = riscv_start_algorithm,
+	.wait_algorithm = riscv_wait_algorithm,
 	.run_algorithm = riscv_run_algorithm,
 
 	.commands = riscv_command_handlers,
