@@ -323,7 +323,7 @@ static int dwcmshc_emmc_rd_buf(struct emmc_device *emmc, uint32_t* buf, uint32_t
     for(i = 0; i < count; i++)
     {
         target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_BUF_DATA_R, buf+i);
-        LOG_DEBUG("rd buf %d val %x ", i, *(buf+i));
+        // LOG_DEBUG("rd buf %d val %x ", i, *(buf+i));
     }
 
     return dwcmshc_emmc_poll_int(emmc, WAIT_XFER_COMPLETE, TIMEOUT_1S);
@@ -670,16 +670,17 @@ int fast_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ta
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
 
     int retval = ERROR_OK;
-    int size = emmc->device->block_size;
-    dwcmshc_emmc->loader.chunk_size = emmc->device->block_size;
+    // int size = emmc->device->block_size;
+    // dwcmshc_emmc->loader.chunk_size = emmc->device->block_size;
     // dwcmshc_emmc_cmd_set_block_length(emmc, 512);
     // dwcmshc_emmc_cmd_set_block_count(emmc, 1);
     
-    retval = target_emmc_write(&dwcmshc_emmc->loader, (uint8_t*)buffer, addr, size);
+    retval = target_emmc_write(&dwcmshc_emmc->loader, (uint8_t*)buffer, addr);
 
     return retval;
 
 }
+
 
 int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
@@ -688,6 +689,78 @@ int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ui
     dwcmshc_emmc_cmd_24_write_single_block(emmc, buffer, addr);
     return ERROR_OK;
 }
+
+static const uint8_t riscv32_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_riscv_32.inc"
+};
+
+static const uint8_t riscv64_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_riscv_64.inc"
+};
+
+static const uint8_t aarch64_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_aarch_64.inc"
+};
+
+static const struct target_code_srcs srcs = 
+{
+    .riscv32_bin = riscv32_bin,
+    .riscv32_size = sizeof(riscv32_bin),
+    .riscv64_bin = riscv64_bin,
+    .riscv64_size = sizeof(riscv64_bin),
+    .aarch64_bin = aarch64_bin,
+    .aarch64_size = sizeof(aarch64_bin),
+
+};
+
+static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* reg_params)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    uint32_t block_size;
+    block_size = emmc->device->block_size;
+
+    dwcmshc_emmc->loader.reg_params = reg_params;
+    target_sel_code(&dwcmshc_emmc->loader, srcs, reg_params, block_size);
+    return ERROR_OK;
+}
+
+
+int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
+    struct target* target = emmc->target;
+    struct reg_param reg_params[4];
+    int retval = ERROR_OK;
+    int wa_size, data_wa_size;
+    
+    dwcmshc_emmc_init_loader(emmc, reg_params);
+    wa_size = target_get_working_area_avail(target);
+    data_wa_size = wa_size - loader->code_size;
+    // LOG_INFO("work area size %x code size %x", wa_size, loader->code_size);
+    while(image_size>0)
+    {
+
+        // set data
+        loader->data_size = MIN(data_wa_size, image_size);
+        // LOG_INFO("wr image total count %x start val %x addr " TARGET_ADDR_FMT, loader->data_size, *buffer, addr);
+        retval = target_emmc_write(loader, (uint8_t*)buffer, addr);
+        if(retval != ERROR_OK)
+            break;
+        addr += loader->data_size;
+        buffer += (loader->data_size >> 2);
+        image_size -= loader->data_size;
+    }
+
+    destroy_reg_param(&loader->reg_params[0]);
+	destroy_reg_param(&loader->reg_params[1]);
+	destroy_reg_param(&loader->reg_params[2]);
+    destroy_reg_param(&loader->reg_params[3]);
+
+    target_free_working_area(emmc->target, dwcmshc_emmc->loader.copy_area);
+    return retval;
+}
+
 
 
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)

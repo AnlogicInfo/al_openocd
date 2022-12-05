@@ -27,5 +27,7 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 	struct emmc_device **dev, enum fileio_access filemode,
 	bool need_size);
 
-int emmc_fileio_read(struct emmc_device *emmc, struct emmc_fileio_state *s);
+int emmc_fileio_read_block(struct emmc_fileio_state *s);
+int emmc_fileio_read(struct emmc_fileio_state *s);
+
 #endif

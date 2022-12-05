@@ -111,7 +111,7 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
  * @returns If no error occurred, returns number of bytes consumed;
  * otherwise, returns a negative error code.)
  */
-int emmc_fileio_read(struct emmc_device *emmc, struct emmc_fileio_state *s)
+int emmc_fileio_read_block(struct emmc_fileio_state *s)
 {
 	size_t total_read = 0;
 	size_t one_read;
@@ -123,6 +123,28 @@ int emmc_fileio_read(struct emmc_device *emmc, struct emmc_fileio_state *s)
 		total_read += one_read;
 	}
 	return total_read;
+}
+
+int emmc_fileio_read(struct emmc_fileio_state *s)
+{
+	size_t one_read;
+	uint32_t total_size;
+
+	total_size = (s->size / s->block_size + 1) * s->block_size;
+
+	s->block = malloc(total_size);
+	if(s->block) 
+	{
+		fileio_read(s->fileio, total_size, s->block, &one_read);
+		if(one_read < total_size)
+			memset(s->block + one_read, 0xff, total_size - one_read);
+	}
+
+	// for(uint32_t i=0; i<total_size; i++)
+	// 	LOG_INFO("file rd index %x val %x", i, *(s->block + i));
+
+
+	return total_size;
 }
 
 

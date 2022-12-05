@@ -63,15 +63,12 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
     return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
 
-static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
+static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, uint32_t addr, int size)
 {
     int retval;
-    retval = fast_dwcmshc_emmc_write_block(emmc, buffer, addr);
-    if(retval == ERROR_OK)
-        return retval;
-
-    slow_dwcmshc_emmc_write_block(emmc, buffer, addr);
-    return ERROR_OK;
+    retval = fast_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
+    
+    return retval;
 }
 
 static int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
@@ -91,7 +88,7 @@ const struct emmc_flash_controller dwcmshc_emmc_controller = {
     .emmc_device_command = dwcmshc_emmc_device_command,
     .command = dwcmshc_emmc_command,
     .reset = dwcmshc_emmc_reset,
-    .write_block_data = dwcmshc_emmc_write_block,
+    .write_image = dwcmshc_emmc_write_image,
     .read_block_data = dwcmshc_emmc_read_block,
     .emmc_ready = dwcmshc_emmc_ready,
     .init = dwcmshc_emmc_init,

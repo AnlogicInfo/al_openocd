@@ -1,8 +1,11 @@
 #include <stdint.h>
-#define ARGUMENT_R            (0x8 >> 2)
-#define XFER_CMD_R            (0xC >> 2)
-#define BUF_DATA_R            (0x20>> 2)
-#define NORMAL_ERROR_INT_R    (0x30>> 2)
+#define BLOCK_SIZE                (512)
+#define BLOCK_SIZE_IN_WORD        (BLOCK_SIZE >> 2)
+
+#define ARGUMENT_R                (0x8 >> 2)
+#define XFER_CMD_R                (0xC >> 2)
+#define BUF_DATA_R                (0x20>> 2)
+#define NORMAL_ERROR_INT_R        (0x30>> 2)
 
 #define XFER_DIR_WRITE            (0<<4)
 #define XFER_BLOCK_COUNT_ENABLE   (1<<1)
@@ -30,35 +33,43 @@ do { \
 
 #define reg_read(addr) (*(volatile uint32_t *)(addr))
 
-void emmc_dwcmshc(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer, uint32_t size_in_bytes)
+void emmc_dwcmshc(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer, int size_in_bytes)
 {
     uint32_t i, int_val;
     uint8_t done_flag;
 
-    reg_write((ctrl_base + ARGUMENT_R), offset);
-    reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
-    // poll int val
-    while(1)
+    while(size_in_bytes > 0)
     {
-        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
-        done_flag = (int_val >> INT_BUF_WR_READY) & 0x1;
-        if(done_flag && ((int_val >> 16) ==0))
-            break;
+        reg_write((ctrl_base + ARGUMENT_R), offset);
+        reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
+        // poll int val
+        while(1)
+        {
+            int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+            done_flag = (int_val >> INT_BUF_WR_READY) & 0x1;
+            if(done_flag && ((int_val >> 16) ==0))
+                break;
+        }
+
+        reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_BUF_WR_READY));
+
+        for(i=0; i < BLOCK_SIZE_IN_WORD; i++)
+            reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+
+        while(1)
+        {
+            int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+            done_flag = (int_val >> INT_XFER_COMPLETE_OFFSET) & 0x1;
+            if(done_flag && ((int_val >> 16) ==0))
+                break;
+        }
+        reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
+
+        size_in_bytes -= BLOCK_SIZE;
+        offset += BLOCK_SIZE;
+        buffer += BLOCK_SIZE_IN_WORD;
     }
 
-    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_BUF_WR_READY));
-
-    for(i=0; i < (size_in_bytes >> 2); i++)
-        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
-    
-    while(1)
-    {
-        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
-        done_flag = (int_val >> INT_XFER_COMPLETE_OFFSET) & 0x1;
-        if(done_flag && ((int_val >> 16) ==0))
-            break;
-    }
-    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
 
 }
 

@@ -62,41 +62,13 @@ COMMAND_HANDLER(handle_emmc_probe_command)
 	return retval;
 }
 
-COMMAND_HANDLER(handle_emmc_write_block_command)
-{
-	uint32_t addr=0;
-	uint8_t *buffer;
-
-	// struct duration bench;
-	// duration_start(&bench);
-
-	struct emmc_device *emmc;
-	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &emmc);
-	if (retval != ERROR_OK)
-		return retval;
-
-	buffer = malloc(2048);
-	for(int i=0; i<1024; i++)
-	{
-		*(buffer+i) = 0xaa;
-	}
-
-	if (!buffer) {
-		// fileio_close(fileio);
-		LOG_ERROR("Out of memory");
-		return ERROR_FAIL;
-	}
-
-	retval = emmc_write_data_block(emmc, (uint32_t*) buffer, addr);
-
-	free(buffer);
-	return retval;
-}
 
 COMMAND_HANDLER(handle_emmmc_write_image_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
+	uint32_t total_bytes;
+	int total_size;
 	int retval ;	
 
 	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
@@ -104,30 +76,10 @@ COMMAND_HANDLER(handle_emmmc_write_image_command)
 	if(retval != ERROR_OK)
 		return retval;
 
-	uint32_t total_bytes = s.size;
+	total_bytes = s.size;
+	total_size = emmc_fileio_read(&s);
+	retval = emmc_write_image(emmc, (uint32_t*) s.block, s.address, total_size);
 
-	while(s.size > 0)
-	{
-		int bytes_read = emmc_fileio_read(emmc, &s);
-		if(bytes_read <= 0) 
-		{
-			command_print(CMD, "error while reading file");
-			emmc_fileio_cleanup(&s);
-			return ERROR_FAIL;
-		}
-		s.size -=bytes_read;
-
-		retval = emmc_write_data_block(emmc, (uint32_t*) s.block, s.address);
-		if(retval != ERROR_OK)
-		{
-			command_print(CMD, "failed writing file %s "
-				"to EMMC flash %s at offset 0x%8.8" PRIx32,
-				CMD_ARGV[1], CMD_ARGV[0], s.address);
-			emmc_fileio_cleanup(&s);
-			return retval;
-		}
-		s.address += s.block_size;
-	}
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "wrote file %s to EMMC flash %s up to "
 			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
@@ -136,7 +88,6 @@ COMMAND_HANDLER(handle_emmmc_write_image_command)
 	}
 	return ERROR_OK;
 }
-
 
 COMMAND_HANDLER(handle_emmc_read_block_command)
 {
@@ -182,7 +133,7 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 			return retval;
 		}
 
-		int bytes_read = emmc_fileio_read(emmc, &file);
+		int bytes_read = emmc_fileio_read_block(&file);
 		if (bytes_read <= 0) {
 			command_print(CMD, "error while reading file");
 			emmc_fileio_cleanup(&dev);
@@ -192,7 +143,7 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 
 		if (dev.block && memcmp(dev.block, file.block, dev.block_size)) {
 			command_print(CMD, "emmc flash contents differ "
-				"at 0x%8.8" PRIx32, dev.address);
+				"at 0x%8.8" PRIx32 " get %x expect %x", dev.address, *(dev.block + dev.address), *(file.block + dev.address));
 			emmc_fileio_cleanup(&dev);
 			emmc_fileio_cleanup(&file);
 			return ERROR_FAIL;
@@ -227,14 +178,6 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.usage = "bank_id",
 		.help = "identify EMMC flash device",
 	},	
-	{
-		.name = "write_block",
-		.handler = handle_emmc_write_block_command,
-		.mode = COMMAND_EXEC,
-		.usage = "bank_id filename [offset]",
-		.help = "Write binary data from file to flash bank. Allow optional "
-			"offset from beginning of the bank (defaults to zero).",
-	},
 	{
 		.name = "write_image",
 		.handler = handle_emmmc_write_image_command,

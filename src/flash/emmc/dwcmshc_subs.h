@@ -66,7 +66,9 @@ int dwcmshc_emmc_rd_id(struct emmc_device *emmc);
 
 int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf);
 int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc, bool mode, uint32_t div);
+
 int fast_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, target_addr_t addr);
+int fast_dwcmshc_emmc_write_image(struct emmc_device *emmc, uint32_t *buffer, target_addr_t addr, int size);
 
 int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
