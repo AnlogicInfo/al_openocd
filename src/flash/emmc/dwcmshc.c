@@ -46,7 +46,6 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command, uint3
 static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 {
     int status = ERROR_OK;
-    LOG_INFO("dwcmshc init");
     status = dwcmshc_mio_init(emmc);
     dwcmshc_emmc_ctl_init(emmc);
     dwcmshc_emmc_interrupt_init(emmc);

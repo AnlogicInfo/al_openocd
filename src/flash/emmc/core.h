@@ -146,6 +146,8 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status);
 
 int emmc_register_commands(struct command_context *cmd_ctx);
 COMMAND_HELPER(emmc_command_get_device, unsigned name_index, struct emmc_device **emmc);
+COMMAND_HELPER(emmc_command_auto_probe, struct emmc_device **emmc);
+
 
 #define         ERROR_EMMC_DEVICE_INVALID               (-1100)
 #define         ERROR_EMMC_OPERATION_FAILED             (-1101)

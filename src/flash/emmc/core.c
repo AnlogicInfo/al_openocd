@@ -91,6 +91,12 @@ COMMAND_HELPER(emmc_command_get_device, unsigned name_index,
 	return ERROR_OK;
 }
 
+COMMAND_HELPER(emmc_command_auto_probe, struct emmc_device **emmc)
+{
+	emmc_probe(*emmc);
+	return ERROR_OK;
+}
+
 
 int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 {
@@ -98,19 +104,12 @@ int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
 	return ERROR_OK;
 }
 
-
-// static int emmc_poll_ready(struct emmc_device *emmc, int timeout)
-// {
-//     return ERROR_OK;
-// }
-
 static void emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 {
 	int mrf_id = 0;
 	size_t prd_name;
 	mrf_id = (cid_buf[3] >> 16) & 0xff;
 	prd_name = ((((size_t)cid_buf[3]) & 0xff) << 40)| (((size_t) cid_buf[2]) << 8) | (cid_buf[1] >> 24);
-	LOG_INFO("product name %llx", prd_name);
     for (int i = 0; emmc_flash_ids[i].name; i++)
     {
         if(emmc_flash_ids[i].prd_name == prd_name && (emmc_flash_ids[i].mfr_id == mrf_id))
@@ -120,7 +119,13 @@ static void emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 		}
         break;
     }
-
+	if(!emmc->device)
+	{
+		LOG_ERROR("unknown EMMC device, cid: %llx", prd_name);
+	}
+	else{
+		LOG_INFO("found %s", emmc->device->name);
+	}
 }
 
 static void emmc_csd_parse(struct emmc_device *emmc, uint32_t* csd_buf)

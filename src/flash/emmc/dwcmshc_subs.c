@@ -630,24 +630,18 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
 int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* buf)
 {
     int status = ERROR_OK;
-    LOG_INFO("target_ emmc cmd reset");
     dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 
-    LOG_INFO("target_ emmc cmd setop");
     status = dwcmshc_emmc_cmd_setop(emmc);
     if(status!= ERROR_OK)
         return status;
 
-    LOG_INFO("target_ emmc cmd cid");
     dwcmshc_emmc_cmd_cid(emmc, buf);
 
     //set relative device address
-    LOG_INFO("target_ emmc cmd ra");
     dwcmshc_emmc_cmd_ra(emmc);
     // get csd
-    LOG_INFO("target_ emmc cmd csd");
     dwcmshc_emmc_cmd_csd(emmc, buf + 4);
-    LOG_INFO("target_ emmc cmd desel");
     // sel/desel card
     dwcmshc_emmc_cmd_desel(emmc);
 
@@ -664,23 +658,6 @@ int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf)
 
     return ERROR_OK;
 }
-
-int fast_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, target_addr_t addr)
-{
-    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-
-    int retval = ERROR_OK;
-    // int size = emmc->device->block_size;
-    // dwcmshc_emmc->loader.chunk_size = emmc->device->block_size;
-    // dwcmshc_emmc_cmd_set_block_length(emmc, 512);
-    // dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    
-    retval = target_emmc_write(&dwcmshc_emmc->loader, (uint8_t*)buffer, addr);
-
-    return retval;
-
-}
-
 
 int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {

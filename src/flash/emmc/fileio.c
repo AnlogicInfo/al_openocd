@@ -77,8 +77,12 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 		return retval;
 
 	if (!emmc->device) {
-		command_print(CMD, "#%s: not probed", CMD_ARGV[0]);
-		return ERROR_EMMC_DEVICE_NOT_PROBED;
+		retval = CALL_COMMAND_HANDLER(emmc_command_auto_probe, &emmc);
+		if(retval != ERROR_OK)
+		{
+			command_print(CMD, "#%s: not probed", CMD_ARGV[0]);
+			return ERROR_EMMC_DEVICE_NOT_PROBED;
+		}
 	}
 
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->address);
