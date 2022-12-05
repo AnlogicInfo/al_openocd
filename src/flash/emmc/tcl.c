@@ -67,8 +67,7 @@ COMMAND_HANDLER(handle_emmmc_write_image_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
-	uint32_t total_bytes;
-	int total_size;
+	int file_size, total_size;
 	int retval ;	
 
 	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
@@ -76,7 +75,7 @@ COMMAND_HANDLER(handle_emmmc_write_image_command)
 	if(retval != ERROR_OK)
 		return retval;
 
-	total_bytes = s.size;
+	file_size = s.size;
 	total_size = emmc_fileio_read(&s);
 	retval = emmc_write_image(emmc, (uint32_t*) s.block, s.address, total_size);
 
@@ -84,7 +83,7 @@ COMMAND_HANDLER(handle_emmmc_write_image_command)
 		command_print(CMD, "wrote file %s to EMMC flash %s up to "
 			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
 			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
-			duration_kbps(&s.bench, total_bytes));
+			duration_kbps(&s.bench, file_size));
 	}
 	return ERROR_OK;
 }
@@ -162,6 +161,45 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 
 	return emmc_fileio_cleanup(&dev);
 }
+
+// COMMAND_HANDLER(handle_emmc_verify_command)
+// {
+// 	struct emmc_device *emmc = NULL;
+// 	struct emmc_fileio_state file;
+// 	int file_size, total_size;
+// 	int retval = CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
+// 			&file, &emmc, FILEIO_READ, false);
+// 	if (retval != ERROR_OK)
+// 		return retval;
+
+// 	struct emmc_fileio_state dev;
+// 	emmc_fileio_init(&dev);
+
+// 	file_size = file.size;
+// 	total_size = emmc_fileio_read(&file);
+
+// 	retval = emmc_fileio_start_image();
+// 	if(retval != ERROR_OK)
+// 		return retal;
+// 	retval = emmc_read_image();
+
+// 	if (dev.block && memcmp(dev.block, file.block, dev.file_size)) {
+// 		command_print(CMD, "emmc flash contents differ "
+// 			"at 0x%8.8" PRIx32 " get %x expect %x", dev.address, *(dev.block + dev.address), *(file.block + dev.address));
+// 		emmc_fileio_cleanup(&dev);
+// 		emmc_fileio_cleanup(&file);
+// 		return ERROR_FAIL;
+// 	}
+
+// 	if (emmc_fileio_finish(&file) == ERROR_OK) {
+// 		command_print(CMD, "verified file %s in emmc flash %s "
+// 			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
+// 			CMD_ARGV[1], CMD_ARGV[0], dev.address, duration_elapsed(&file.bench),
+// 			duration_kbps(&file.bench, dev.size));
+// 	}
+
+// 	return emmc_fileio_cleanup(&dev);
+// }
 
 static const struct command_registration emmc_exec_command_handlers[] = {
 	{

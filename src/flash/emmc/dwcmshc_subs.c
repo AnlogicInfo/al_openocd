@@ -549,7 +549,6 @@ static int dwcmshc_emmc_cmd_17_read_single_block(struct emmc_device *emmc, uint3
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
     uint32_t rd_cnt = emmc->device->block_size >> 2;
 
-    LOG_INFO("read single block");
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
     cmd_pkt->argu_en = ARGU_EN;
     cmd_pkt->argument = addr;
