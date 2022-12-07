@@ -122,7 +122,7 @@ static uint32_t __attribute__((aligned(4))) NandOob16[3] = {13, 14, 15};		/* dat
 static uint8_t oob_data[512] = {0xff, 0xff};
 static uint8_t ecc_data[12] = {0};
 
-int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint32_t nand_base, uint32_t ecc_num)
+int flash(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint32_t nand_base, uint32_t ecc_num)
 {
 	int retval = ERROR_OK;
 	uint8_t state, nums = 0;
@@ -295,53 +295,11 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 	return retval;
 }
 
-int flash_smc35x_re(uint8_t *work_area_p, uint8_t *fifo_end, uint32_t offset, uint8_t *buffer, uint32_t page_size, uint32_t oob_size, uint32_t ecc_num)
+int flash_smc35x(uint8_t *work_area_p, uint8_t *fifo_end, uint32_t offset, uint32_t count, uint32_t page_size, uint32_t oob_size, uint32_t ecc_num)
 {
-	int retval = ERROR_OK;
-	uint8_t state, nums = 0;
-    uint32_t index, status;
+	int index, retval = ERROR_OK;
 	volatile work_area_t *work_area = (work_area_t *) work_area_p;
 	uint8_t *fifo_start = (uint8_t *) work_area->rp;
-	
-    uint32_t count = oob_size + page_size;
-	uint32_t *temp_buffer, temp_length = 0;
-
-	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
-	uint8_t *pecc_data = ecc_data, *poob_data = oob_data;
-	volatile uint8_t ecc_reg = 0;
-	uint32_t ecc_value = 0;
-
-	volatile unsigned long status_addr = 0;
-	volatile unsigned long cmd_phase_addr = 0;
-	volatile unsigned long data_phase_addr = 0;
-	uint32_t cmd_phase_data;
-
-	switch (oob_size)
-	{
-		case(16):
-			eccDataNums = 3;
-			nums = 1;
-			dataOffsetPtr = NandOob16;
-			break;
-		case(32):
-			eccDataNums = 6;
-			nums = 2;
-			dataOffsetPtr = NandOob32;
-			break;
-		case(64):
-			eccDataNums = 12;
-			nums = 4;
-			dataOffsetPtr = NandOob64;
-			break;
-		case(224):
-			eccDataNums = 12;
-			nums = 4;
-			dataOffsetPtr = NandOob64;
-			break;
-		default:
-			/* Page size 256 bytes & 4096 bytes not supported by ECC block */
-			break;
-	}
 
 	while (count) {
 		volatile int32_t fifo_linear_size;
@@ -361,116 +319,17 @@ int flash_smc35x_re(uint8_t *work_area_p, uint8_t *fifo_end, uint32_t offset, ui
 				fifo_linear_size = 0;
 			}	
 		}
-		if (fifo_linear_size < oob_size) {
+		if (fifo_linear_size < 16) {
 			/* We should never get here */
 			continue;
 		}
 		
-		buffer = work_area->rp;
-
-		/* Check Nand Status */
-		cmd_phase_addr = (NAND_BASE | (ONFI_CMD_READ_STATUS1 << 3));
-		cmd_phase_data = ONFI_COLUMN_NOT_VALID;
-		SMC_WriteReg(cmd_phase_addr, cmd_phase_data);
-
-		data_phase_addr = (NAND_BASE | NAND_DATA_PHASE_FLAG);
-		state = SMC_Read8BitReg(data_phase_addr);
-		if (!(state & ONFI_STATUS_WP)) {
-			return FAILED_FLAG;
+		for (index = 0; index < fifo_linear_size; index += (page_size)) {
+			flash(SMC_BASE, page_size, work_area->rp, offset, oob_size, NAND_BASE, ecc_num);
+			++offset;
+			work_area->rp += page_size;
 		}
 
-		/* Send Write Page Command */
-		cmd_phase_addr = (NAND_BASE | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
-		cmd_phase_data = 0 | (offset << (2*8));
-		SMC_WriteReg(cmd_phase_addr, cmd_phase_data);
-		cmd_phase_data = offset >> (32 - (2*8));
-		SMC_WriteReg(cmd_phase_addr, cmd_phase_data);
-
-		/* Write Page Data */
-		data_phase_addr = (NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-		temp_buffer = (uint32_t *)buffer;
-		temp_length = (page_size - ONFI_AXI_DATA_WIDTH) >> 2;
-		for (index = 0; index < temp_length; ++index)
-		{
-			SMC_WriteReg(data_phase_addr, temp_buffer[index]);
-		}
-
-		data_phase_addr = (NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
-		buffer += (page_size - ONFI_AXI_DATA_WIDTH);
-		temp_buffer = (uint32_t *)buffer;
-		temp_length = ONFI_AXI_DATA_WIDTH >> 2;
-		for (index = 0; index < temp_length; ++index)
-		{
-			SMC_WriteReg(data_phase_addr, temp_buffer[index]);
-		}
-
-		if (ecc_num == 1 && dataOffsetPtr != NULL) {
-			/* Check busy signal if it is busy to poll*/
-			while (SMC_Read8BitReg(SMC_BASE + SMC_REG_ECC1_STATUS) & (1 << SMC_EccStatus_EccStatus_FIELD));
-
-			for (ecc_reg = 0; ecc_reg < nums; ++ecc_reg)
-			{
-				ecc_value = SMC_ReadReg(SMC_BASE + SMC_REG_ECC1_BLOCK0 + ecc_reg*4);
-				
-				if ((ecc_value) & (1 << SMC_EccBlock_ISCheakValueValid_FIELD))
-				{
-					for (index = 0; index < 3; ++index)
-					{
-						*pecc_data = ecc_value & 0xFF;
-						ecc_value = ecc_value >> 8;
-						++pecc_data;
-					}
-				}
-				else {
-					retval = 16;
-					break;
-				}
-			}
-
-			for (index = 0; index < eccDataNums; index++)
-			{
-				oob_data[dataOffsetPtr[index]] = (~ecc_data[index]);
-			}
-		}
-
-		/* Write Oob Data */
-		data_phase_addr = (NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-		temp_buffer = (uint32_t *)poob_data;
-		temp_length = (oob_size - ONFI_AXI_DATA_WIDTH) >> 2;
-		for (index = 0; index < temp_length; ++index)
-		{
-			SMC_WriteReg(data_phase_addr, temp_buffer[index]);
-		}
-
-		data_phase_addr =(NAND_BASE | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
-		poob_data += oob_size - ONFI_AXI_DATA_WIDTH;
-		temp_buffer = (uint32_t *)poob_data;
-		temp_length = ONFI_AXI_DATA_WIDTH >> 2;
-		for (index = 0; index < temp_length; ++index)
-		{
-			SMC_WriteReg(data_phase_addr, temp_buffer[index]);
-		}
-
-		/* Check Controller Status */
-		while (!(SMC_ReadReg(SMC_BASE + SMC_REG_MEMC_STATUS) & (1 << SMC_MemcStatus_SmcInt1RawStatus_FIELD)));
-
-		/* Clear SMC Interrupt 1, as an alternative to an AXI read */
-		status_addr = ( + SMC_REG_MEM_CFG_CLR);
-		status = SMC_ReadReg(SMC_BASE + SMC_REG_MEM_CFG_CLR);
-		SMC_WriteReg(status_addr, (status | SMC_MemCfgClr_ClrSmcInt1));
-
-		/* Check Nand Status */
-		cmd_phase_addr = (NAND_BASE | (ONFI_CMD_READ_STATUS1 << 3));
-		cmd_phase_data = ONFI_COLUMN_NOT_VALID;
-		SMC_WriteReg(cmd_phase_addr, cmd_phase_data);
-
-		data_phase_addr = (NAND_BASE | NAND_DATA_PHASE_FLAG);
-		state = SMC_Read8BitReg(data_phase_addr);
-		if (state & ONFI_STATUS_FAIL) {
-			return FAILED_FLAG;
-		}
-
-		++offset;
 		if (work_area->rp >= fifo_end) {
 			work_area->rp = fifo_start;
 		}

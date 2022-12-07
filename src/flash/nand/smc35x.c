@@ -866,7 +866,7 @@ int slow_smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *dat
 
 	return ERROR_OK;
 }
-int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
 	int retval = ERROR_OK;
@@ -1023,14 +1023,14 @@ err:
 
     return retval;
 }
-int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
 			uint8_t *oob, uint32_t oob_size)
 {
 	int retval = ERROR_OK;
 	struct target *target = nand->target;
 	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	nand_size_type *nand_size = &smc35x_info->nand_size;
-	uint32_t buffer_size = 16384 + 8;	// 240KB + 8B
+	uint32_t buffer_size = 16384 + 8;	// 16KB + 8B
 	uint32_t count = nand_size->dataBytesPerPage;
 
 	// 设置工作区
@@ -1041,8 +1041,11 @@ int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data,
 	struct working_area *source;
 	const uint8_t *bin;
 	size_t bin_size;
-	struct aarch64_algorithm aarch64_info;
-	// struct riscv_algorithm riscv_info;
+
+	// struct aarch64_algorithm aarch64_info;
+	struct riscv_algorithm *riscv_info = calloc(1, sizeof(struct riscv_algorithm));
+	assert(riscv_info);
+	// void *arch_info = NULL;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
@@ -1071,12 +1074,14 @@ int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data,
 			bin = riscv64_bin;
 			bin_size = sizeof(riscv64_bin);
 		}
+		// arch_info = &riscv_info;
 	} else {
 		LOG_INFO("target arch: aarch64");
 		loader_target = ARM;
 		xlen = 64;
 		bin = aarch64_bin;
 		bin_size = sizeof(aarch64_bin);
+		// arch_info = &aarch64_info;
 	}
 
 	if (target_alloc_working_area(target, bin_size, &write_algorithm) == ERROR_OK) {
@@ -1102,8 +1107,8 @@ int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data,
 		write_algorithm = NULL;
 	}
 
-	aarch64_info.common_magic = AARCH64_COMMON_MAGIC;
-	aarch64_info.core_mode = ARMV8_64_EL0T;
+	LOG_INFO("work area algorithm address: %llx, data length: %d", write_algorithm->address, write_algorithm->size);
+	LOG_INFO("work area data address: %llx, data length: %d", source->address, source->size);
 	if (write_algorithm)
     {
         if (loader_target == RISCV)
@@ -1147,7 +1152,7 @@ int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data,
 						source->size,
 						write_algorithm->address,
 						0,
-						&aarch64_info);
+						riscv_info);
 
 		if (retval == ERROR_FLASH_OPERATION_FAILED)
 		{

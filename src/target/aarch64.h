@@ -79,11 +79,11 @@ target_to_aarch64(struct target *target)
 }
 
 struct aarch64_algorithm {
-	int common_magic;
+	uint64_t saved_pc;
 
-	enum arm_mode core_mode;
+	uint64_t saved_regs[32];
 
-	uint32_t context[ARMV8_LAST_REG]; /* ARMV8_NUM_REGS */
+	uint64_t current_mstatus;
 };
 
 #endif /* OPENOCD_TARGET_AARCH64_H */
