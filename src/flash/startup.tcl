@@ -19,6 +19,7 @@ proc program_error {description exit} {
 proc program {media filename args} {
 	set exit 0
 	set needsflash 1
+	set num 0
 
 	foreach arg $args {
 		if {[string equal $arg "preverify"]} {
@@ -39,6 +40,8 @@ proc program {media filename args} {
 	set filename \{$filename\}
 	if {[info exists address]} {
 		set flash_args "$filename $address"
+	} elseif {[string equal $media \{nand\}]} {
+		set flash_args "$filename 0"
 	} else {
 		set flash_args "$filename"
 	}
@@ -54,10 +57,21 @@ proc program {media filename args} {
 		program_error "** Unable to reset target **" $exit
 	}
 
+	if {[string equal $media \{nand\}]} {
+		if {[catch {eval nand probe $num}] != 0} {
+			programs_error "** Nand probe Failed **" $exit
+   		}
+	}
+
 	# Check whether programming is needed
 	if {[info exists preverify]} {
 		echo "**pre-verifying**"
-		if {[catch {eval verify_image $flash_args}] == 0} {
+		if {[string equal $media \{nand\}]} {
+			if {[catch {eval nand verify $num $flash_args}] == 0} {
+				echo "**Verified OK - No flashing**"
+				set needsflash 0
+			}
+		} elseif {[catch {eval verify_image $flash_args}] == 0} {
 			echo "**Verified OK - No flashing**"
 			set needsflash 0
 		}
@@ -68,8 +82,22 @@ proc program {media filename args} {
 	# start programming phase
 	if {$needsflash == 1} {
 		echo "** Programming Started **"
-
-		if {[catch {eval $media write_image erase $flash_args}] == 0} {
+		if {[string equal $media \{nand\}]} {
+			if {[catch {eval nand write_image $num $flash_args erase}] == 0} {
+				echo "** Programming Finished **"
+				if {[info exists verify]} {
+					# verify phase
+					echo "** Verify Started **"
+					if {[catch {eval nand verify $num $flash_args}] == 0} {
+						echo "** Verified OK **"
+					} else {
+						programs_error "** Verify Failed **" $exit
+					}
+				}
+			} else {
+				programs_error "** Programming Failed **" $exit
+			}
+		} elseif {[catch {eval $media write_image erase $flash_args}] == 0} {
 			echo "** Programming Finished **"
 			if {[info exists verify]} {
 				# verify phase
@@ -105,7 +133,7 @@ proc program {media filename args} {
 # set qspi_usage 
 
 add_help_text program "write an image to flash, address is only required for binary images. verify, reset, exit are optional"
-add_usage_text program " qspi: <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n emmc: <filename> \[bankid\] \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n nand: "
+add_usage_text program " qspi: <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n emmc: <filename> \[bankid\] \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n nand: <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] "
 
 # stm32[f0x|f3x] uses the same flash driver as the stm32f1x
 proc stm32f0x args { eval stm32f1x $args }
