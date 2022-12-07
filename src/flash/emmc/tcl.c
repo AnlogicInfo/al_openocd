@@ -80,9 +80,9 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 	retval = emmc_write_image(emmc, (uint32_t*) s.block, s.address, total_size);
 
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
-		command_print(CMD, "wrote file %s to EMMC flash %s up to "
+		command_print(CMD, "wrote file %s to EMMC flash %d up to "
 			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
-			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
+			CMD_ARGV[0], s.bank_num, s.address, duration_elapsed(&s.bench),
 			duration_kbps(&s.bench, file_size));
 	}
 	return ERROR_OK;

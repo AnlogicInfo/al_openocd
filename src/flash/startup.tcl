@@ -102,10 +102,10 @@ proc program {media filename args} {
 	return
 }
 
-add_help_text program "write an image to flash, address is only required for binary images. verify, reset, exit are optional"
-add_usage_text program "<filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\]"
+# set qspi_usage 
 
-# add_usage_text program "emmc: <filename> \[bankid\] \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\]"
+add_help_text program "write an image to flash, address is only required for binary images. verify, reset, exit are optional"
+add_usage_text program " qspi: <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n emmc: <filename> \[bankid\] \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n nand: "
 
 # stm32[f0x|f3x] uses the same flash driver as the stm32f1x
 proc stm32f0x args { eval stm32f1x $args }

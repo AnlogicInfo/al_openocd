@@ -4,6 +4,7 @@
 #include <helper/fileio.h>
 struct emmc_fileio_state 
 {
+    uint32_t bank_num;
     uint32_t address;
     uint32_t size;
     uint8_t *block;

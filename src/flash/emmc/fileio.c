@@ -65,7 +65,6 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 	struct emmc_device **dev, enum fileio_access filemode,
 	bool need_size)
 {
-	uint32_t bank_num = 0;
 	int retval;
 	emmc_fileio_init(state);
 
@@ -84,17 +83,17 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 	}
 
 	if(CMD_ARGC >= 3) {
-		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], bank_num);
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], state->bank_num);
 		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->address);
 	}
 
 	struct emmc_device *emmc;
-	emmc = get_emmc_device_by_num(bank_num); 
+	emmc = get_emmc_device_by_num(state->bank_num); 
 	if (!emmc)
 		return ERROR_FAIL;
 
 	if (!emmc->device) {
-		retval = CALL_COMMAND_HANDLER(emmc_command_auto_probe, bank_num, &emmc); // auto probe bank 0, need update index according to offset later
+		retval = CALL_COMMAND_HANDLER(emmc_command_auto_probe, state->bank_num, &emmc); // auto probe bank 0, need update index according to offset later
 		if(retval != ERROR_OK)
 		{
 			command_print(CMD, " not probed");

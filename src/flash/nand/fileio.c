@@ -177,6 +177,7 @@ COMMAND_HELPER(nand_fileio_parse_args, struct nand_fileio_state *state,
 	return ERROR_OK;
 }
 
+
 /**
  * @returns If no error occurred, returns number of bytes consumed;
  * otherwise, returns a negative error code.)
