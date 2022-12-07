@@ -48,14 +48,14 @@ wait_fifo:
 	cmp 	r5, r6			/* wait until rp != wp */
 	beq 	wait_fifo
 	ldrh	r6, [r5]	/* "*target_address++ = *rp++" */
-	strh	r6, [r4]
-	adds	r5, #2
-	adds	r4, #2
+	strh	r6, [r4] // [target address] <- [rp]
+	adds	r5, #2 // rp + 2
+	adds	r4, #2 // address + 2
 busy:
 	ldr 	r6, [r0, #STM32_FLASH_SR_OFFSET]	/* wait until BSY flag is reset */
 	movs	r7, #1
 	tst 	r6, r7
-	bne 	busy
+	bne 	busy // wait busy
 	movs	r7, #0x14		/* check the error bits */
 	tst 	r6, r7
 	bne 	error

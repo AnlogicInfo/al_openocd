@@ -30,13 +30,11 @@ COMMAND_HANDLER(handle_emmc_list_command)
 	}
 
 	for (p = emmc_devices, i = 0; p; p = p->next, i++) {
-		// if (p->device)
-		// 	command_print(CMD, "#%i: %s (%s) "
-		// 		"pagesize: %i, buswidth: %i,\n\t"
-		// 		"blocksize: %i, blocks: %i",
-		// 		i, p->device->name, p->manufacturer->name,
-		// 		p->erase_size, p->num_blocks);
-		// else
+		if (p->device)
+			command_print(CMD, "#%i: %s blocksize: %i",
+				i, p->device->name,
+				p->block_size);
+		else
 			command_print(CMD, "#%i: not probed", i);
 	}
 
