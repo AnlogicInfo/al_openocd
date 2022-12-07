@@ -91,16 +91,9 @@ COMMAND_HELPER(emmc_command_get_device, unsigned name_index,
 	return ERROR_OK;
 }
 
-COMMAND_HELPER(emmc_command_auto_probe, struct emmc_device **emmc)
+COMMAND_HELPER(emmc_command_auto_probe, unsigned name_index, struct emmc_device **emmc)
 {
 	emmc_probe(*emmc);
-	return ERROR_OK;
-}
-
-
-int emmc_read_status(struct emmc_device *emmc, uint8_t *status)
-{
-
 	return ERROR_OK;
 }
 

@@ -63,7 +63,7 @@ COMMAND_HANDLER(handle_emmc_probe_command)
 }
 
 
-COMMAND_HANDLER(handle_emmmc_write_image_command)
+COMMAND_HANDLER(handle_emmc_write_image_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
@@ -218,7 +218,7 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 	},	
 	{
 		.name = "write_image",
-		.handler = handle_emmmc_write_image_command,
+		.handler = handle_emmc_write_image_command,
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id filename offset",
 		.help = "Write an image to flash. "

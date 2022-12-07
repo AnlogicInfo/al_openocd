@@ -16,7 +16,7 @@ proc program_error {description exit} {
 	error $description
 }
 
-proc program {filename args} {
+proc program {media filename args} {
 	set exit 0
 	set needsflash 1
 
@@ -35,6 +35,7 @@ proc program {filename args} {
 	}
 
 	# Set variables
+	set media  \{$media\}
 	set filename \{$filename\}
 	if {[info exists address]} {
 		set flash_args "$filename $address"
@@ -62,11 +63,13 @@ proc program {filename args} {
 		}
 	}
 
+	echo $flash_args
+
 	# start programming phase
 	if {$needsflash == 1} {
 		echo "** Programming Started **"
 
-		if {[catch {eval flash write_image erase $flash_args}] == 0} {
+		if {[catch {eval $media write_image erase $flash_args}] == 0} {
 			echo "** Programming Finished **"
 			if {[info exists verify]} {
 				# verify phase
@@ -101,6 +104,8 @@ proc program {filename args} {
 
 add_help_text program "write an image to flash, address is only required for binary images. verify, reset, exit are optional"
 add_usage_text program "<filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\]"
+
+# add_usage_text program "emmc: <filename> \[bankid\] \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\]"
 
 # stm32[f0x|f3x] uses the same flash driver as the stm32f1x
 proc stm32f0x args { eval stm32f1x $args }
