@@ -220,6 +220,8 @@ int nand_register_commands(struct command_context *cmd_ctx);
 /** helper for parsing a nand device command argument string */
 COMMAND_HELPER(nand_command_get_device, unsigned name_index,
 	struct nand_device **nand);
+COMMAND_HELPER(nand_command_auto_probe, unsigned name_index,
+	struct nand_device **nand);
 
 
 #define         ERROR_NAND_DEVICE_INVALID               (-1100)

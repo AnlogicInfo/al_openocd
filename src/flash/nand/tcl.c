@@ -408,6 +408,65 @@ COMMAND_HANDLER(handle_nand_verify_command)
 	return nand_fileio_cleanup(&dev);
 }
 
+COMMAND_HANDLER(handle_nand_verify_image_command)
+{
+	struct nand_device *nand = NULL;
+	struct nand_fileio_state file;
+	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
+			&file, &nand, FILEIO_READ, false, true);
+	if (retval != ERROR_OK)
+		return retval;
+
+	struct nand_fileio_state dev;
+	nand_fileio_init(&dev);
+	dev.address = file.address;
+	dev.size = file.size;
+	dev.oob_format = file.oob_format;
+	retval = nand_fileio_start(CMD, nand, NULL, FILEIO_NONE, &dev);
+	if (retval != ERROR_OK)
+		return retval;
+
+	while (file.size > 0) {
+		retval = nand_read_page(nand, dev.address / dev.page_size,
+				dev.page, dev.page_size, dev.oob, dev.oob_size);
+		if (retval != ERROR_OK) {
+			command_print(CMD, "reading NAND flash page failed");
+			nand_fileio_cleanup(&dev);
+			nand_fileio_cleanup(&file);
+			return retval;
+		}
+
+		int bytes_read = nand_fileio_read(nand, &file);
+		if (bytes_read <= 0) {
+			command_print(CMD, "error while reading file");
+			nand_fileio_cleanup(&dev);
+			nand_fileio_cleanup(&file);
+			return ERROR_FAIL;
+		}
+
+		if ((dev.page && memcmp(dev.page, file.page, dev.page_size)) ||
+				(dev.oob && memcmp(dev.oob, file.oob, dev.oob_size))) {
+			command_print(CMD, "NAND flash contents differ "
+				"at 0x%8.8" PRIx32, dev.address);
+			nand_fileio_cleanup(&dev);
+			nand_fileio_cleanup(&file);
+			return ERROR_FAIL;
+		}
+
+		file.size -= bytes_read;
+		dev.address += nand->page_size;
+	}
+
+	if (nand_fileio_finish(&file) == ERROR_OK) {
+		command_print(CMD, "verified file %s in NAND flash %s "
+			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
+			CMD_ARGV[1], CMD_ARGV[0], dev.address, duration_elapsed(&file.bench),
+			duration_kbps(&file.bench, dev.size));
+	}
+
+	return nand_fileio_cleanup(&dev);
+}
+
 COMMAND_HANDLER(handle_nand_dump_command)
 {
 	size_t filesize;
@@ -521,6 +580,14 @@ static const struct command_registration nand_exec_command_handlers[] = {
 	{
 		.name = "verify",
 		.handler = handle_nand_verify_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id filename offset "
+			"['oob_raw'|'oob_only'|'oob_softecc'|'oob_softecc_kw']",
+		.help = "verify NAND flash device",
+	},
+	{
+		.name = "verify_image",
+		.handler = handle_nand_verify_image_command,
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id filename offset "
 			"['oob_raw'|'oob_only'|'oob_softecc'|'oob_softecc_kw']",
