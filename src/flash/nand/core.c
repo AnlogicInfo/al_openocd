@@ -222,6 +222,14 @@ COMMAND_HELPER(nand_command_get_device, unsigned name_index,
 	}
 	return ERROR_OK;
 }
+COMMAND_HELPER(nand_command_auto_probe, unsigned name_index,
+	struct nand_device **nand)
+{
+	int retval = nand_probe(*nand);
+	if (retval != ERROR_OK)
+		return retval;
+	return ERROR_OK;
+}
 
 int nand_build_bbt(struct nand_device *nand, int first, int last)
 {

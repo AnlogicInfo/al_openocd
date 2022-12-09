@@ -116,23 +116,50 @@ COMMAND_HELPER(nand_fileio_parse_args, struct nand_fileio_state *state,
 	struct nand_device **dev, enum fileio_access filemode,
 	bool need_size, bool sw_ecc)
 {
+	int retval = ERROR_OK;
 	nand_fileio_init(state);
-
-	unsigned minargs = need_size ? 4 : 3;
-	if (minargs > CMD_ARGC)
-		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	struct nand_device *nand;
-	int retval = CALL_COMMAND_HANDLER(nand_command_get_device, 0, &nand);
-	if (retval != ERROR_OK)
-		return retval;
-
-	if (!nand->device) {
-		command_print(CMD, "#%s: not probed", CMD_ARGV[0]);
-		return ERROR_NAND_DEVICE_NOT_PROBED;
+	
+	if (!strcmp(CMD_ARGV[0], "erase")) {
+		CMD_ARGV++;
+		CMD_ARGC--;
+		state->erase = 1;
 	}
 
-	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->address);
+	struct nand_device *nand;
+	if (strspn(CMD_ARGV[0], "0123456789") == strlen(CMD_ARGV[0])) {
+		retval = CALL_COMMAND_HANDLER(nand_command_get_device, 0, &nand);
+		if (retval != ERROR_OK)
+			return retval;
+		if (!nand->device) {
+			retval = CALL_COMMAND_HANDLER(nand_command_auto_probe, 0, &nand);
+			if(retval != ERROR_OK) {
+				command_print(CMD, "#%s: not probed", CMD_ARGV[0]);
+				return ERROR_NAND_DEVICE_NOT_PROBED;
+			}
+		}
+    } else {
+		nand = get_nand_device_by_num(0);
+		if (!nand)
+			return ERROR_FAIL;
+		if (!nand->device) {
+			retval = CALL_COMMAND_HANDLER(nand_command_auto_probe, 0, &nand);
+			if(retval != ERROR_OK) {
+				command_print(CMD, "#0: auto probe fail");
+				return ERROR_NAND_DEVICE_NOT_PROBED;
+			}
+		}
+		CMD_ARGV--;
+		CMD_ARGC++;
+    }
+	
+	unsigned minargs = need_size ? 4 : 3;
+	if (!need_size && CMD_ARGC == 2)
+		COMMAND_PARSE_NUMBER(u32, "0", state->address);
+	else if (minargs > CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	else
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->address);
+
 	if (need_size) {
 		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], state->size);
 		if (state->size % nand->page_size) {
