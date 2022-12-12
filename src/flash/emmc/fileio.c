@@ -78,17 +78,16 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 
 	if (CMD_ARGC < 1)
 	{
-		LOG_INFO("emmc wr args error");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
-	if(CMD_ARGC >= 3) {
-		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], state->bank_num);
-		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->address);
+	if(CMD_ARGC >= 2) {
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], state->address);
 	}
 
 	struct emmc_device *emmc;
 	emmc = get_emmc_device_by_num(state->bank_num); 
+
 	if (!emmc)
 		return ERROR_FAIL;
 
@@ -102,7 +101,7 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 	}
 
 	if (need_size) {
-		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], state->size);
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->size);
 		if (state->size % emmc->block_size) {
 			command_print(CMD, "only block-aligned sizes are supported");
 			return ERROR_COMMAND_SYNTAX_ERROR;

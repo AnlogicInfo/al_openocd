@@ -46,12 +46,27 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command, uint3
 static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 {
     int status = ERROR_OK;
+    struct target *target = emmc->target;
+
+    if (target->state != TARGET_HALTED) {
+        LOG_ERROR("Target not halted");
+        return ERROR_TARGET_NOT_HALTED;
+    }
+
+    // LOG_INFO("emmc mio init");
     status = dwcmshc_mio_init(emmc);
+    // LOG_INFO("emmc ctl init");
     dwcmshc_emmc_ctl_init(emmc);
+    // LOG_INFO("emmc interrupt init");
     dwcmshc_emmc_interrupt_init(emmc);
+
+    // LOG_INFO("emmc card init");
     dwcmshc_emmc_card_init(emmc, in_field);
 
-    dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
+    // LOG_INFO("emmc rd ext csd");
+    status = dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
+
+    // LOG_INFO("emmc set clk");
     dwcmshc_emmc_set_clk_ctrl(emmc, MMC_CC_CLK_CARD_OPER, 0);
     return status;
 }

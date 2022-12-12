@@ -857,28 +857,28 @@ err:
     return ERROR_OK;
 }
 
-// static int dwcssi_reset_flash(struct flash_bank *bank)
-// {
-//     int flash_err;
-//     uint8_t flash_sr;
-//     // uint32_t flash_cr;
+static int dwcssi_reset_flash(struct flash_bank *bank)
+{
+    int flash_err;
+    uint8_t flash_sr;
+    // uint32_t flash_cr;
 
-//     flash_err = dwcssi_wait_flash_idle(bank, 100, &flash_sr);
-//     // dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-//     if(flash_err != 0)
-//     {
-//         // LOG_INFO("Flash Status Error %x", flash_sr);
-//         dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
+    flash_err = dwcssi_wait_flash_idle(bank, 100, &flash_sr);
+    // dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
+    if(flash_err != 0)
+    {
+        // LOG_INFO("Flash Status Error %x", flash_sr);
+        dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
 
-//         dwcssi_tx(bank, 0xF0);
-//         if(dwcssi_txwm_wait(bank) != 0)
-//             return ERROR_TARGET_TIMEOUT;
-//         dwcssi_wait_flash_idle(bank, 100, &flash_sr);
-//     }
+        dwcssi_tx(bank, 0xF0);
+        if(dwcssi_txwm_wait(bank) != 0)
+            return ERROR_TARGET_TIMEOUT;
+        dwcssi_wait_flash_idle(bank, 100, &flash_sr);
+    }
 
-//     dwcssi_flash_quad_disable(bank);
-//     return ERROR_OK;
-// }
+    // dwcssi_flash_quad_disable(bank);
+    return ERROR_OK;
+}
 
 
 int dwcssi_info_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwcssi_info)
@@ -927,7 +927,7 @@ static int dwcssi_probe(struct flash_bank *bank)
     qspi_mio_init(bank);
     dwcssi_config_init(bank);
 
-    if(dwcssi_info->dev->reset(bank) == ERROR_OK)
+    if(dwcssi_reset_flash(bank) == ERROR_OK)
     {
         // read flash ID
         dwcssi_read_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
@@ -937,6 +937,8 @@ static int dwcssi_probe(struct flash_bank *bank)
     }
     else
         return ERROR_FAIL;
+
+    dwcssi_info->dev->quad_dis(bank);
 
     return ERROR_OK;
 }

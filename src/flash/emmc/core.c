@@ -93,8 +93,7 @@ COMMAND_HELPER(emmc_command_get_device, unsigned name_index,
 
 COMMAND_HELPER(emmc_command_auto_probe, unsigned name_index, struct emmc_device **emmc)
 {
-	emmc_probe(*emmc);
-	return ERROR_OK;
+	return emmc_probe(*emmc);
 }
 
 static void emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)

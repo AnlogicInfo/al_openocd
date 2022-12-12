@@ -323,7 +323,6 @@ static int dwcmshc_emmc_rd_buf(struct emmc_device *emmc, uint32_t* buf, uint32_t
     for(i = 0; i < count; i++)
     {
         target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_BUF_DATA_R, buf+i);
-        // LOG_DEBUG("rd buf %d val %x ", i, *(buf+i));
     }
 
     return dwcmshc_emmc_poll_int(emmc, WAIT_XFER_COMPLETE, TIMEOUT_1S);
@@ -439,6 +438,7 @@ static int dwcmshc_emmc_cmd_cid(struct emmc_device *emmc, uint32_t* buf)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    int status = ERROR_OK;
 
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
     cmd_pkt->argu_en = ARGU_EN;
@@ -448,9 +448,14 @@ static int dwcmshc_emmc_cmd_cid(struct emmc_device *emmc, uint32_t* buf)
     cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
     cmd_pkt->resp_type = EMMC_RESP_R2;
 
-    dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+    status = dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+    if(status != ERROR_OK)
+    {
+        LOG_ERROR("emmc cmd cid error");
+        return ERROR_FAIL;
+    }
     dwcmshc_emmc_dump_resp(cmd_pkt->resp_buf, buf, MMC_C_RESP_LEN_136);
-    return ERROR_OK;
+    return status;
 }
 
 static int dwcmshc_emmc_cmd_desel(struct emmc_device *emmc)
@@ -479,6 +484,7 @@ static int dwcmshc_emmc_cmd_ext_csd(struct emmc_device *emmc, uint32_t* buf)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    int retval = ERROR_OK;
 
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
     cmd_pkt->argu_en = ARGU_EN;
@@ -494,15 +500,16 @@ static int dwcmshc_emmc_cmd_ext_csd(struct emmc_device *emmc, uint32_t* buf)
     cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
     cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_HS_SEND_EXT_CSD;
     dwcmshc_emmc_command(emmc, WAIT_BUF_RD_READY);
-    dwcmshc_emmc_rd_buf(emmc, buf, 128);
-    return ERROR_OK;
+    retval = dwcmshc_emmc_rd_buf(emmc, buf, 128);
+    return retval;
 }
 
 static int dwcmshc_emmc_cmd_csd(struct emmc_device *emmc, uint32_t* buf)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
-    
+    int status = ERROR_OK;
+
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
     cmd_pkt->argu_en = ARGU_EN;
     cmd_pkt->argument = EMMC_CMD3_PARA_DEFAULT_VAL;
@@ -514,9 +521,14 @@ static int dwcmshc_emmc_cmd_csd(struct emmc_device *emmc, uint32_t* buf)
     cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
     cmd_pkt->resp_type = EMMC_RESP_R2;
 
-    dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+    status = dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+    if(status != ERROR_OK)
+    {
+        LOG_ERROR("emmc csd cmd fail");
+        return ERROR_FAIL;
+    }
     dwcmshc_emmc_dump_resp(cmd_pkt->resp_buf, buf, MMC_C_RESP_LEN_136);
-    return ERROR_OK;
+    return status;
 }
 
 static int dwcmshc_emmc_cmd_set_block_length(struct emmc_device *emmc, uint32_t block_len)
@@ -548,6 +560,7 @@ static int dwcmshc_emmc_cmd_17_read_single_block(struct emmc_device *emmc, uint3
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
     uint32_t rd_cnt = emmc->device->block_size >> 2;
+    int retval = ERROR_OK;
 
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
     cmd_pkt->argu_en = ARGU_EN;
@@ -564,8 +577,8 @@ static int dwcmshc_emmc_cmd_17_read_single_block(struct emmc_device *emmc, uint3
     cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
     cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_READ_SINGLE_BLOCK;
     dwcmshc_emmc_command(emmc, WAIT_BUF_RD_READY);
-    dwcmshc_emmc_rd_buf(emmc, buffer, rd_cnt);
-    return ERROR_OK;
+    retval = dwcmshc_emmc_rd_buf(emmc, buffer, rd_cnt);
+    return retval;
 }
 
 static int dwcmshc_emmc_cmd_set_block_count(struct emmc_device *emmc, uint32_t block_cnt)
@@ -629,33 +642,41 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
 int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* buf)
 {
     int status = ERROR_OK;
+
+    LOG_INFO("card reset");
     dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 
+    LOG_INFO("card setop");
     status = dwcmshc_emmc_cmd_setop(emmc);
     if(status!= ERROR_OK)
         return status;
 
-    dwcmshc_emmc_cmd_cid(emmc, buf);
+    LOG_INFO("card rd cid");
+    status = dwcmshc_emmc_cmd_cid(emmc, buf);
 
     //set relative device address
+    LOG_INFO("card ra");
     dwcmshc_emmc_cmd_ra(emmc);
     // get csd
+    LOG_INFO("card rd csd");
     dwcmshc_emmc_cmd_csd(emmc, buf + 4);
     // sel/desel card
+    LOG_INFO("card cmd desel");
     dwcmshc_emmc_cmd_desel(emmc);
 
-    return ERROR_OK;
+    return status;
 }
 
 
 int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf)
 {
+    int retval = ERROR_OK;
 
     dwcmshc_emmc_cmd_set_block_length(emmc, 512);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    dwcmshc_emmc_cmd_ext_csd(emmc, buf);
+    retval = dwcmshc_emmc_cmd_ext_csd(emmc, buf);
 
-    return ERROR_OK;
+    return retval;
 }
 
 int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
@@ -741,8 +762,9 @@ int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, ta
 
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
+    int retval = ERROR_OK;
     dwcmshc_emmc_cmd_set_block_length(emmc, 512);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, addr);
-    return ERROR_OK;
+    retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, addr);
+    return retval;
 }
