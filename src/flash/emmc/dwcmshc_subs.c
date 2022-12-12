@@ -643,25 +643,25 @@ int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* buf)
 {
     int status = ERROR_OK;
 
-    LOG_INFO("card reset");
+    // LOG_INFO("card reset");
     dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 
-    LOG_INFO("card setop");
+    // LOG_INFO("card setop");
     status = dwcmshc_emmc_cmd_setop(emmc);
     if(status!= ERROR_OK)
         return status;
 
-    LOG_INFO("card rd cid");
+    // LOG_INFO("card rd cid");
     status = dwcmshc_emmc_cmd_cid(emmc, buf);
 
     //set relative device address
-    LOG_INFO("card ra");
+    // LOG_INFO("card ra");
     dwcmshc_emmc_cmd_ra(emmc);
     // get csd
-    LOG_INFO("card rd csd");
+    // LOG_INFO("card rd csd");
     dwcmshc_emmc_cmd_csd(emmc, buf + 4);
     // sel/desel card
-    LOG_INFO("card cmd desel");
+    // LOG_INFO("card cmd desel");
     dwcmshc_emmc_cmd_desel(emmc);
 
     return status;
