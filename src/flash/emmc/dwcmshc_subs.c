@@ -116,15 +116,7 @@ static int dwcmshc_emmc_set_pwr_ctrl(struct emmc_device *emmc)
 {
     struct target *target = emmc->target;
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv; 
-    // PWR_CTRL_R pwr_ctrl;
-    // // vdd1 pwr on support
-    // target_read_u32(target, IO_BANK1_REF, &dwcmshc_emmc->io_bank_pwr);
-    // pwr_ctrl.bit.sd_bus_pwr_vdd1 = MMC_PC_SBP_VDD1_ON;
-    // if(dwcmshc_emmc->io_bank_pwr == 1)
-    //     pwr_ctrl.bit.sd_bus_vol_vdd1 = EMMC_PC_SBV_VDD1_1V8;
-    // else
-    //     pwr_ctrl.bit.sd_bus_vol_vdd1 = MMC_PC_SBV_VDD1_3V3;
-    // target_write_u8(target, dwcmshc_emmc->ctrl_base + OFFSET_PWR_CTRL_R, pwr_ctrl.d8);
+
     target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, 0x0000f00);
     return ERROR_OK;
 }

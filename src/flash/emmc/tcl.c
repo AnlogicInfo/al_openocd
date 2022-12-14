@@ -292,7 +292,6 @@ COMMAND_HANDLER(handle_emmc_init_command)
 	}
 	emmc_initialized = true;
 
-	LOG_INFO("Initializing emmc devices...");
 	return emmc_init(CMD_CTX);
 }
 

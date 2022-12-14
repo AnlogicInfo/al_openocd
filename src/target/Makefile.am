@@ -1,5 +1,6 @@
 %C%_libtarget_la_LIBADD = %D%/openrisc/libopenrisc.la \
-	%D%/riscv/libriscv.la
+	%D%/riscv/libriscv.la \
+	%D%/anlogic/libsystap.la
 
 %C%_libtarget_la_CPPFLAGS = $(AM_CPPFLAGS)
 
@@ -260,3 +261,5 @@ ARC_SRC = \
 
 include %D%/openrisc/Makefile.am
 include %D%/riscv/Makefile.am
+include %D%/anlogic/Makefile.am
+

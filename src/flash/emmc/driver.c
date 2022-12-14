@@ -14,7 +14,6 @@ static struct emmc_flash_controller *emmc_flash_controllers[] = {
 
 struct emmc_flash_controller *emmc_driver_find_by_name(const char *name)
 {
-	LOG_INFO("finding emmc driver");
 	for (unsigned i = 0; emmc_flash_controllers[i]; i++) {
 		struct emmc_flash_controller *controller = emmc_flash_controllers[i];
 		if (strcmp(name, controller->name) == 0)
