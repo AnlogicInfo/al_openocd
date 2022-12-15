@@ -1,4 +1,4 @@
-noinst_LTLIBRARIES += %D%/libsystap.la
-%C%_libsystap_la_SOURCES = \
-    %D%/systap.c
+noinst_LTLIBRARIES += %D%/libpstap.la
+%C%_libpstap_la_SOURCES = \
+    %D%/pstap.c
 

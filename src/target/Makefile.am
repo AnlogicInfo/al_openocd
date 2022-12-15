@@ -1,6 +1,6 @@
 %C%_libtarget_la_LIBADD = %D%/openrisc/libopenrisc.la \
 	%D%/riscv/libriscv.la \
-	%D%/anlogic/libsystap.la
+	%D%/anlogic/libpstap.la
 
 %C%_libtarget_la_CPPFLAGS = $(AM_CPPFLAGS)
 

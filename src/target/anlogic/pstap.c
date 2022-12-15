@@ -1,5 +1,5 @@
 /*
- * File: systap.c
+ * File: pstap.c
  * Author: Tianyi Wang (tianyi.wang@anlogic.com)
  * Date:  2022-12-12
  * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
@@ -27,33 +27,33 @@
 #define WRITE    0b10
 
 
-struct systap {
+struct pstap {
     struct jtag_tap *tap;
 };
 
-static int systap_target_create(struct target *target, Jim_Interp *interp)
+static int pstap_target_create(struct target *target, Jim_Interp *interp)
 {
-    struct systap *systap = calloc(1, sizeof(struct systap));
+    struct pstap *pstap = calloc(1, sizeof(struct pstap));
 
-    systap->tap = target->tap;
-    target->arch_info = systap;
+    pstap->tap = target->tap;
+    target->arch_info = pstap;
     return ERROR_OK;
 }
 
-static int systap_init_target(struct command_context *cmd_ctx, struct target *target)
+static int pstap_init_target(struct command_context *cmd_ctx, struct target *target)
 {
 	LOG_DEBUG("%s", __func__);
 	return ERROR_OK;
 }
 
-static int systap_arch_state(struct target *target)
+static int pstap_arch_state(struct target *target)
 {
 	LOG_DEBUG("%s", __func__);
 	return ERROR_OK;
 }
 
 
-static int systap_poll(struct target *target)
+static int pstap_poll(struct target *target)
 {
 	if ((target->state == TARGET_UNKNOWN) ||
 	    (target->state == TARGET_RUNNING) ||
@@ -64,27 +64,27 @@ static int systap_poll(struct target *target)
 }
 
 
-static int systap_halt(struct target *target)
+static int pstap_halt(struct target *target)
 {
 	LOG_DEBUG("%s", __func__);
 	return ERROR_OK;
 }
 
-static int systap_resume(struct target *target, int current, target_addr_t address,
+static int pstap_resume(struct target *target, int current, target_addr_t address,
 		int handle_breakpoints, int debug_execution)
 {
 	LOG_DEBUG("%s", __func__);
 	return ERROR_OK;
 }
 
-static int systap_step(struct target *target, int current, target_addr_t address,
+static int pstap_step(struct target *target, int current, target_addr_t address,
 				int handle_breakpoints)
 {
 	LOG_DEBUG("%s", __func__);
 	return ERROR_OK;
 }
 
-static int systap_assert_reset(struct target *target)
+static int pstap_assert_reset(struct target *target)
 {
 	target->state = TARGET_RESET;
 
@@ -92,7 +92,7 @@ static int systap_assert_reset(struct target *target)
 	return ERROR_OK;
 }
 
-static int systap_deassert_reset(struct target *target)
+static int pstap_deassert_reset(struct target *target)
 {
 	target->state = TARGET_RUNNING;
 
@@ -100,7 +100,7 @@ static int systap_deassert_reset(struct target *target)
 	return ERROR_OK;
 }
 
-static void systap_set_instr(struct jtag_tap *tap, uint32_t new_instr)
+static void pstap_set_instr(struct jtag_tap *tap, uint32_t new_instr)
 {
 
     if(buf_get_u32(tap->cur_instr, 0, tap->ir_length) == new_instr)
@@ -118,14 +118,14 @@ static void systap_set_instr(struct jtag_tap *tap, uint32_t new_instr)
 	free(t);
 }
 
-static void systap_memory_cmd(struct jtag_tap *tap, size_t address, const uint8_t* data, uint8_t rnw)
+static void pstap_memory_cmd(struct jtag_tap *tap, size_t address, const uint8_t* data, uint8_t rnw)
 {
 	struct scan_field field[3];
     uint8_t instr_buf;
     uint8_t addr_buf[5] = {0};
     uint8_t data_buf[4] = {0};
 
-	systap_set_instr(tap, DBGACC);
+	pstap_set_instr(tap, DBGACC);
 
     field[0].num_bits = 2;
     field[0].out_value = &instr_buf;
@@ -151,14 +151,14 @@ static void systap_memory_cmd(struct jtag_tap *tap, size_t address, const uint8_
 	jtag_add_dr_scan(tap, 3, field, TAP_IDLE);
 }
 
-static void systap_result_read(struct jtag_tap *tap, size_t address, uint32_t size, uint8_t *value)
+static void pstap_result_read(struct jtag_tap *tap, size_t address, uint32_t size, uint8_t *value)
 {
 	struct scan_field field[3];
     uint8_t instr_buf;
     uint8_t addr_buf[5] = {0};
     uint8_t data_buf[4] = {0}; 
 
-	systap_set_instr(tap, DBGACC);
+	pstap_set_instr(tap, DBGACC);
 
     field[0].num_bits = 2;
     field[0].out_value = &instr_buf;
@@ -186,7 +186,7 @@ static void systap_result_read(struct jtag_tap *tap, size_t address, uint32_t si
 
 }
 
-static int systap_read_memory(struct target *target, target_addr_t address, 
+static int pstap_read_memory(struct target *target, target_addr_t address, 
                             uint32_t size, uint32_t count, uint8_t *buffer)
 {
 	LOG_DEBUG("Reading memory at physical address 0x%" TARGET_PRIxADDR
@@ -196,10 +196,10 @@ static int systap_read_memory(struct target *target, target_addr_t address,
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
     while(count --) {
-        systap_memory_cmd(target->tap, address, NULL, READ);
-        systap_memory_cmd(target->tap, address, NULL, READ);
+        pstap_memory_cmd(target->tap, address, NULL, READ);
+        pstap_memory_cmd(target->tap, address, NULL, READ);
 
-        systap_result_read(target->tap, address, size, buffer);
+        pstap_result_read(target->tap, address, size, buffer);
         address += size;
         buffer += size;
     }
@@ -208,7 +208,7 @@ static int systap_read_memory(struct target *target, target_addr_t address,
 
 }
 
-static int systap_write_memory(struct target *target, target_addr_t address,
+static int pstap_write_memory(struct target *target, target_addr_t address,
 				uint32_t size, uint32_t count,
 				const uint8_t *buffer)
 {
@@ -219,7 +219,7 @@ static int systap_write_memory(struct target *target, target_addr_t address,
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
     while(count --) {
-        systap_memory_cmd(target->tap, address, buffer, WRITE);
+        pstap_memory_cmd(target->tap, address, buffer, WRITE);
         address += size;
         buffer += size;
     }
@@ -229,22 +229,22 @@ static int systap_write_memory(struct target *target, target_addr_t address,
 }
 
 
-struct target_type systap_target = 
+struct target_type pstap_target = 
 {
-    .name = "systap",
-    .target_create = systap_target_create,
-    .init_target = systap_init_target,
+    .name = "pstap",
+    .target_create = pstap_target_create,
+    .init_target = pstap_init_target,
 
-    .poll = systap_poll,
-    .arch_state = systap_arch_state,
+    .poll = pstap_poll,
+    .arch_state = pstap_arch_state,
 
-    .halt = systap_halt,
-    .resume = systap_resume,
-    .step = systap_step,
+    .halt = pstap_halt,
+    .resume = pstap_resume,
+    .step = pstap_step,
 
-    .assert_reset = systap_assert_reset,
-    .deassert_reset = systap_deassert_reset,
+    .assert_reset = pstap_assert_reset,
+    .deassert_reset = pstap_deassert_reset,
 
-    .read_memory = systap_read_memory,
-    .write_memory = systap_write_memory
+    .read_memory = pstap_read_memory,
+    .write_memory = pstap_write_memory
 };
