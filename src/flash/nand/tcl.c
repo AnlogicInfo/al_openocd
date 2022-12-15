@@ -509,6 +509,49 @@ COMMAND_HANDLER(handle_nand_dump_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(handle_nand_dump_image_command)
+{
+	size_t filesize;
+	struct nand_device *nand = NULL;
+	struct nand_fileio_state s;
+	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
+			&s, &nand, FILEIO_WRITE, true, false);
+	if (retval != ERROR_OK)
+		return retval;
+
+	uint32_t dump_size = s.size;
+	uint8_t *dump_data = malloc(dump_size);
+
+	if (dump_data) {
+		size_t size_written;
+		retval = nand_read_page(nand, s.address / nand->page_size,
+				dump_data, dump_size, s.oob, s.oob_size);
+		if (retval != ERROR_OK) {
+			command_print(CMD, "reading NAND flash page failed");
+			nand_fileio_cleanup(&s);
+			return retval;
+		}
+		
+		if (dump_data)
+			fileio_write(s.fileio, dump_size, dump_data, &size_written);
+
+		if (s.oob)
+			fileio_write(s.fileio, s.oob_size, s.oob, &size_written);
+	}
+
+	retval = fileio_size(s.fileio, &filesize);
+	if (retval != ERROR_OK)
+		return retval;
+
+	if (nand_fileio_finish(&s) == ERROR_OK) {
+		command_print(CMD, "dumped %zu bytes in %fs (%0.3f KiB/s)",
+			filesize, duration_elapsed(&s.bench),
+			duration_kbps(&s.bench, filesize));
+	}
+
+	return ERROR_OK;
+}
+
 COMMAND_HANDLER(handle_nand_raw_access_command)
 {
 	if ((CMD_ARGC < 1) || (CMD_ARGC > 2))
@@ -575,6 +618,13 @@ static const struct command_registration nand_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id filename offset length "
 			"['oob_raw'|'oob_only']",
+		.help = "dump from NAND flash device",
+	},
+	{
+		.name = "dump_image",
+		.handler = handle_nand_dump_image_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id filename offset length ",
 		.help = "dump from NAND flash device",
 	},
 	{
