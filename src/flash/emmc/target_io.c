@@ -1,12 +1,26 @@
 
 #include "target_io.h"
 
+int target_set_arch_info(struct target_emmc_loader *loader, void* arm_info)
+{
+    struct target *target = loader->target;
+    if(strncmp(target_name(target), "riscv", 4) == 0)
+    {
+        loader->arch = TARGET_RISCV;        
+    }
+    else{
+        loader->arch = TARGET_AARCH64;
+        loader->arch_info = arm_info;
+    }
+    return ERROR_OK;
+}
+
 
 int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs srcs, struct reg_param* reg_params, uint32_t block_size)
 {
     struct target *target = loader->target;
     uint32_t code_size;    
-    if(strncmp(target_name(target), "riscv", 4) == 0)
+    if(loader->arch == TARGET_RISCV)
     {
         loader->xlen = riscv_xlen(target);
         init_reg_param(&reg_params[0], "a0", loader->xlen, PARAM_IN_OUT);
