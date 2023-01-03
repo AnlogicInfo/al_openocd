@@ -2950,9 +2950,9 @@ static int aarch64_wait_algorithm(struct target *target,
 	struct aarch64_algorithm *aarch64_algorithm_info = arch_info;
 	int retval = ERROR_OK;
 
-	if(aarch64_algorithm_info->common_magic != ARMV8_COMMON_MAGIC) 
+	if(aarch64_algorithm_info->common_magic != AARCH64_COMMON_MAGIC) 
  	{
-		LOG_ERROR("current target isn't an ARMV8 target");
+		LOG_ERROR("current target isn't an AARCH64");
 		return ERROR_TARGET_INVALID;
 	}
 

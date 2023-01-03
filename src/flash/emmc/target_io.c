@@ -131,7 +131,7 @@ int target_emmc_write(struct target_emmc_loader *loader, uint8_t *data, target_a
     // run algorithm
     retval = target_run_algorithm(target, 0, NULL, 
                         4, loader->reg_params, 
-                        loader->copy_area->address, 0, 10000, NULL);
+                        loader->copy_area->address, 0, 10000, loader->arch_info);
 
     if(retval != ERROR_OK){
         LOG_ERROR("error executing hosted EMMC write");
