@@ -12,6 +12,9 @@
 #include <target/riscv/riscv.h>
 #include <target/algorithm.h>
 
+#define SYNC_TRANS        0
+#define ASYNC_TRANS       1
+
 enum target_emmc_op {
     TARGET_EMMC_NONE,
     TARGET_EMMC_READ,
@@ -32,6 +35,7 @@ struct target_emmc_loader {
     const uint8_t *code_src;
     int code_size;
     int data_size;
+    int image_size;
     struct reg_param* reg_params;
     target_addr_t ctrl_base;
     enum target_emmc_op op;
@@ -51,7 +55,7 @@ struct target_code_srcs
 int target_set_arch_info(struct target_emmc_loader *loader, void* arm_info);
 int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs srcs, struct reg_param* reg_params, uint32_t block_size);
 int target_emmc_write(struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
-
+int target_emmc_write_async(struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
 
 
 #endif

@@ -1,0 +1,163 @@
+
+D:/work/2022/al9000/sw/debugger/al_openocd/contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_aarch_64.elf:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+0000000061000000 <_start>:
+# define REGBYTES 16
+
+		.section .text.entry
+		.global _start
+_start:
+		ldr x28, =stack_end
+    61000000:	5800009c 	ldr	x28, 61000010 <_start+0x10>
+        mov sp, x28
+    61000004:	9100039f 	mov	sp, x28
+		bl    	emmc_dwcmshc_async
+    61000008:	9400001f 	bl	61000084 <emmc_dwcmshc_async>
+
+        hlt #0x0B
+    6100000c:	d4400160 	hlt	#0xb
+    61000010:	61000110 	.word	0x61000110
+    61000014:	00000000 	.word	0x00000000
+
+0000000061000018 <emmc_wait_fifo>:
+}while(0)
+
+#define reg_read(addr) (*(volatile uint32_t *)(addr))
+
+uint32_t  emmc_wait_fifo(uint32_t *work_area_start)
+{
+    61000018:	aa0003e1 	mov	x1, x0
+    uint32_t wp = 0, rp = 0;
+    while(wp == rp)
+    {
+        wp = * (volatile uint32_t *) work_area_start;
+    6100001c:	b9400022 	ldr	w2, [x1]
+        rp = *(volatile uint32_t *) (work_area_start + 1);
+    61000020:	b9400420 	ldr	w0, [x1, #4]
+    while(wp == rp)
+    61000024:	6b00005f 	cmp	w2, w0
+    61000028:	54ffffa0 	b.eq	6100001c <emmc_wait_fifo+0x4>  // b.none
+    }
+    return rp;
+}
+    6100002c:	d65f03c0 	ret
+
+0000000061000030 <emmc_write_block>:
+void emmc_write_block(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer)
+{
+    uint32_t i, int_val;
+    uint8_t done_flag;
+
+    reg_write((ctrl_base + ARGUMENT_R), offset);
+    61000030:	b9000801 	str	w1, [x0, #8]
+    reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
+    61000034:	52801041 	mov	w1, #0x82                  	// #130
+    61000038:	72a30741 	movk	w1, #0x183a, lsl #16
+    6100003c:	b9000c01 	str	w1, [x0, #12]
+    while(1)
+    {
+        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+    61000040:	b9403001 	ldr	w1, [x0, #48]
+        done_flag = (int_val >> INT_BUF_WR_READY) & 0x1;
+        if(done_flag && ((int_val >> 16) ==0))
+    61000044:	3627ffe1 	tbz	w1, #4, 61000040 <emmc_write_block+0x10>
+    61000048:	6b4143ff 	cmp	wzr, w1, lsr #16
+    6100004c:	54ffffa1 	b.ne	61000040 <emmc_write_block+0x10>  // b.any
+    61000050:	d2800001 	mov	x1, #0x0                   	// #0
+            break;
+    }
+    for(i=0; i < BLOCK_SIZE_IN_WORD; i++)
+        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+    61000054:	b8617843 	ldr	w3, [x2, x1, lsl #2]
+    for(i=0; i < BLOCK_SIZE_IN_WORD; i++)
+    61000058:	91000421 	add	x1, x1, #0x1
+        reg_write(ctrl_base + BUF_DATA_R, *(buffer + i));
+    6100005c:	b9002003 	str	w3, [x0, #32]
+    for(i=0; i < BLOCK_SIZE_IN_WORD; i++)
+    61000060:	f102003f 	cmp	x1, #0x80
+    61000064:	54ffff81 	b.ne	61000054 <emmc_write_block+0x24>  // b.any
+    while(1)
+    {
+        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
+    61000068:	b9403001 	ldr	w1, [x0, #48]
+        done_flag = (int_val >> INT_XFER_COMPLETE_OFFSET) & 0x1;
+        if(done_flag && ((int_val >> 16) ==0))
+    6100006c:	360fffe1 	tbz	w1, #1, 61000068 <emmc_write_block+0x38>
+    61000070:	6b4143ff 	cmp	wzr, w1, lsr #16
+    61000074:	54ffffa1 	b.ne	61000068 <emmc_write_block+0x38>  // b.any
+            break;
+    }
+    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
+    61000078:	321f0021 	orr	w1, w1, #0x2
+    6100007c:	b9003001 	str	w1, [x0, #48]
+
+}
+    61000080:	d65f03c0 	ret
+
+0000000061000084 <emmc_dwcmshc_async>:
+
+void emmc_dwcmshc_async(volatile uint32_t *ctrl_base, int size_in_bytes, uint32_t *work_area_start, uint32_t *work_area_end, uint32_t offset)
+{
+    61000084:	a9bb7bfd 	stp	x29, x30, [sp, #-80]!
+    61000088:	910003fd 	mov	x29, sp
+    6100008c:	a90153f3 	stp	x19, x20, [sp, #16]
+    61000090:	aa0203f4 	mov	x20, x2
+    uint32_t* rp;
+
+    while(size_in_bytes > 0)
+    61000094:	2a0103f3 	mov	w19, w1
+{
+    61000098:	a9025bf5 	stp	x21, x22, [sp, #32]
+    6100009c:	0b040036 	add	w22, w1, w4
+    610000a0:	a90363f7 	stp	x23, x24, [sp, #48]
+    610000a4:	aa0003f7 	mov	x23, x0
+    610000a8:	aa0303f8 	mov	x24, x3
+    610000ac:	a9046bf9 	stp	x25, x26, [sp, #64]
+    {
+        rp = (uint32_t*) emmc_wait_fifo(work_area_start);
+        // wrap rp when reaches workarea end
+        if(rp == work_area_end)
+            rp = work_area_start + 2;
+    610000b0:	9100205a 	add	x26, x2, #0x8
+    610000b4:	4b1302d9 	sub	w25, w22, w19
+    while(size_in_bytes > 0)
+    610000b8:	7100027f 	cmp	w19, #0x0
+    610000bc:	540000ec 	b.gt	610000d8 <emmc_dwcmshc_async+0x54>
+        *(work_area_start + 1) = (uint32_t) rp;
+        // update count
+        size_in_bytes -= BLOCK_SIZE;
+    }
+
+}
+    610000c0:	a94153f3 	ldp	x19, x20, [sp, #16]
+    610000c4:	a9425bf5 	ldp	x21, x22, [sp, #32]
+    610000c8:	a94363f7 	ldp	x23, x24, [sp, #48]
+    610000cc:	a9446bf9 	ldp	x25, x26, [sp, #64]
+    610000d0:	a8c57bfd 	ldp	x29, x30, [sp], #80
+    610000d4:	d65f03c0 	ret
+        rp = (uint32_t*) emmc_wait_fifo(work_area_start);
+    610000d8:	aa1403e0 	mov	x0, x20
+    610000dc:	97ffffcf 	bl	61000018 <emmc_wait_fifo>
+    610000e0:	2a0003f5 	mov	w21, w0
+        if(rp == work_area_end)
+    610000e4:	eb20431f 	cmp	x24, w0, uxtw
+    610000e8:	54000041 	b.ne	610000f0 <emmc_dwcmshc_async+0x6c>  // b.any
+            rp = work_area_start + 2;
+    610000ec:	aa1a03f5 	mov	x21, x26
+        emmc_write_block(ctrl_base, offset, rp);
+    610000f0:	aa1503e2 	mov	x2, x21
+    610000f4:	2a1903e1 	mov	w1, w25
+    610000f8:	aa1703e0 	mov	x0, x23
+        rp += BLOCK_SIZE_IN_WORD;
+    610000fc:	910802b5 	add	x21, x21, #0x200
+        emmc_write_block(ctrl_base, offset, rp);
+    61000100:	97ffffcc 	bl	61000030 <emmc_write_block>
+        size_in_bytes -= BLOCK_SIZE;
+    61000104:	51080273 	sub	w19, w19, #0x200
+        *(work_area_start + 1) = (uint32_t) rp;
+    61000108:	b9000695 	str	w21, [x20, #4]
+        size_in_bytes -= BLOCK_SIZE;
+    6100010c:	17ffffea 	b	610000b4 <emmc_dwcmshc_async+0x30>

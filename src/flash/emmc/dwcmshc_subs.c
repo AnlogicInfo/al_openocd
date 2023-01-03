@@ -691,6 +691,10 @@ static const uint8_t aarch64_bin[] = {
 #include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_aarch_64.inc"
 };
 
+static const uint8_t aarch64_async_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_aarch_64.inc"
+};
+
 static const struct target_code_srcs srcs = 
 {
     .riscv32_bin = riscv32_bin,
@@ -699,10 +703,20 @@ static const struct target_code_srcs srcs =
     .riscv64_size = sizeof(riscv64_bin),
     .aarch64_bin = aarch64_bin,
     .aarch64_size = sizeof(aarch64_bin),
+};
+
+static const struct target_code_srcs async_srcs = 
+{
+    .riscv32_bin = riscv32_bin,
+    .riscv32_size = sizeof(riscv32_bin),
+    .riscv64_bin = riscv64_bin,
+    .riscv64_size = sizeof(riscv64_bin),
+    .aarch64_bin = aarch64_async_bin,
+    .aarch64_size = sizeof(aarch64_async_bin),
 
 };
 
-static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* reg_params, void* arm_info)
+static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* reg_params, void* arm_info, uint8_t async)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     uint32_t block_size;
@@ -710,11 +724,44 @@ static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* 
 
     dwcmshc_emmc->loader.reg_params = reg_params;
     target_set_arch_info(&dwcmshc_emmc->loader, arm_info);
-    target_sel_code(&dwcmshc_emmc->loader, srcs, reg_params, block_size);
+    if(async == ASYNC_TRANS)
+        target_sel_code(&dwcmshc_emmc->loader, async_srcs, reg_params, block_size);
+    else{
+        target_sel_code(&dwcmshc_emmc->loader, srcs, reg_params, block_size);
+    }
 
     return ERROR_OK;
 }
 
+int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
+    struct aarch64_algorithm aarch64_info;
+    struct target* target = emmc->target;
+    struct reg_param reg_params[4];
+    int retval = ERROR_OK;
+    int wa_size;
+
+    aarch64_info.common_magic = AARCH64_COMMON_MAGIC;
+    aarch64_info.core_mode = ARMV8_64_EL0T;
+
+    dwcmshc_emmc_init_loader(emmc, reg_params, &aarch64_info, ASYNC_TRANS);
+    wa_size = target_get_working_area_avail(target);
+
+    loader->image_size = image_size;
+    loader->data_size = wa_size - loader->code_size;
+    target_emmc_write_async(loader, (uint8_t*)buffer, addr);
+
+    destroy_reg_param(&loader->reg_params[0]);
+	destroy_reg_param(&loader->reg_params[1]);
+	destroy_reg_param(&loader->reg_params[2]);
+    destroy_reg_param(&loader->reg_params[3]);
+    destroy_reg_param(&loader->reg_params[4]);
+
+    target_free_working_area(emmc->target, dwcmshc_emmc->loader.copy_area);
+    return retval;
+}
 
 int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
 {
@@ -729,7 +776,7 @@ int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, ta
     aarch64_info.common_magic = AARCH64_COMMON_MAGIC;
     aarch64_info.core_mode = ARMV8_64_EL0T;
     
-    dwcmshc_emmc_init_loader(emmc, reg_params, &aarch64_info);
+    dwcmshc_emmc_init_loader(emmc, reg_params, &aarch64_info, SYNC_TRANS);
     wa_size = target_get_working_area_avail(target);
     data_wa_size = wa_size - loader->code_size;
     // LOG_INFO("work area size %x code size %x", wa_size, loader->code_size);
