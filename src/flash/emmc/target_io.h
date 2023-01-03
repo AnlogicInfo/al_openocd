@@ -33,9 +33,12 @@ struct target_emmc_loader {
 
     uint8_t xlen;
     const uint8_t *code_src;
+
     int code_size;
     int data_size;
     int image_size;
+
+    uint8_t async;
     struct reg_param* reg_params;
     target_addr_t ctrl_base;
     enum target_emmc_op op;

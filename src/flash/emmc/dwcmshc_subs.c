@@ -22,7 +22,7 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
             return status;
         if(value != 0xb)
         {
-            LOG_INFO("mio reg %x init ", mio_num);
+            LOG_DEBUG("mio reg %x init ", mio_num);
             status = target_write_u32(target,  mio_addr, 0xb);
             if(status != ERROR_OK)
                 return status;
@@ -724,6 +724,7 @@ static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* 
 
     dwcmshc_emmc->loader.reg_params = reg_params;
     target_set_arch_info(&dwcmshc_emmc->loader, arm_info);
+    dwcmshc_emmc->loader.async = async;
     if(async == ASYNC_TRANS)
         target_sel_code(&dwcmshc_emmc->loader, async_srcs, reg_params, block_size);
     else{
@@ -739,7 +740,7 @@ int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, t
     struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
     struct aarch64_algorithm aarch64_info;
     struct target* target = emmc->target;
-    struct reg_param reg_params[4];
+    struct reg_param reg_params[5];
     int retval = ERROR_OK;
     int wa_size;
 
@@ -775,7 +776,6 @@ int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, ta
 
     aarch64_info.common_magic = AARCH64_COMMON_MAGIC;
     aarch64_info.core_mode = ARMV8_64_EL0T;
-    
     dwcmshc_emmc_init_loader(emmc, reg_params, &aarch64_info, SYNC_TRANS);
     wa_size = target_get_working_area_avail(target);
     data_wa_size = wa_size - loader->code_size;

@@ -27,7 +27,10 @@ int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs s
         init_reg_param(&reg_params[1], "a1", loader->xlen, PARAM_OUT);
         init_reg_param(&reg_params[2], "a2", loader->xlen, PARAM_OUT);
         init_reg_param(&reg_params[3], "a3", loader->xlen, PARAM_OUT);
-        init_reg_param(&reg_params[4], "a4", loader->xlen, PARAM_OUT);
+        if(loader->async == ASYNC_TRANS)
+        {
+            init_reg_param(&reg_params[4], "a4", loader->xlen, PARAM_OUT);
+        }
 
         if(loader->xlen == 32)
         {
@@ -47,7 +50,10 @@ int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs s
         init_reg_param(&reg_params[1], "x1", loader->xlen, PARAM_OUT);
         init_reg_param(&reg_params[2], "x2", loader->xlen, PARAM_OUT);
         init_reg_param(&reg_params[3], "x3", loader->xlen, PARAM_OUT);
-        init_reg_param(&reg_params[4], "x4", loader->xlen, PARAM_OUT);
+        if(loader->async == ASYNC_TRANS)
+        {
+            init_reg_param(&reg_params[4], "x4", loader->xlen, PARAM_OUT);
+        }
 
         loader->code_src = srcs.aarch64_bin;
         code_size = srcs.aarch64_size;
