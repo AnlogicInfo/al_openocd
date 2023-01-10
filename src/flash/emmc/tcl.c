@@ -70,12 +70,41 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 
 	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
 			&s, &emmc, FILEIO_READ, false);
-	if(retval != ERROR_OK)
+	if(retval != ERROR_OK) 
+	{
 		return retval;
+	}
 
 	file_size = s.size;
 	total_size = emmc_fileio_read(&s);
-	retval = emmc_write_image(emmc, (uint32_t*) s.block, s.address, total_size);
+	retval = emmc_write_image(emmc, (uint32_t*) s.block, s.address, total_size, 0);
+
+	if (emmc_fileio_finish(&s) == ERROR_OK) {
+		command_print(CMD, "wrote file %s to EMMC flash %d up to "
+			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
+			CMD_ARGV[0], s.bank_num, s.address, duration_elapsed(&s.bench),
+			duration_kbps(&s.bench, file_size));
+	}
+	return ERROR_OK;
+}
+
+COMMAND_HANDLER(handle_emmc_write_image_async_command)
+{
+	struct emmc_device *emmc = NULL;
+	struct emmc_fileio_state s;
+	int file_size, total_size;
+	int retval ;	
+
+	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
+			&s, &emmc, FILEIO_READ, false);
+	if(retval != ERROR_OK) 
+	{
+		return retval;
+	}
+
+	file_size = s.size;
+	total_size = emmc_fileio_read(&s);
+	retval = emmc_write_image(emmc, (uint32_t*) s.block, s.address, total_size, 1);
 
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "wrote file %s to EMMC flash %d up to "
@@ -251,7 +280,15 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.usage = "filename offset",
 		.help = "Write an image to flash. "
 			"Allow optional offset from beginning of bank (defaults to zero)",	
-	},	
+	},
+	{
+		.name = "write_image_async",
+		.handler = handle_emmc_write_image_async_command,
+		.mode = COMMAND_EXEC,
+		.usage = "filename offset",
+		.help = "Write an image to flash. "
+			"Allow optional offset from beginning of bank (defaults to zero)",	
+	},
 	{
 		.name = "read_block",
 		.handler = handle_emmc_read_block_command,

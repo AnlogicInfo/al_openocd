@@ -28,6 +28,16 @@ enum param_direction {
 	PARAM_IN_OUT
 };
 
+
+// struct async_fifo {
+// 	uint32_t wp_addr;
+// 	uint32_t rp_addr;
+// 	uint32_t fifo_start_addr;
+// 	uint32_t fifo_end_addr;
+// 	uint32_t wp;
+// 	uint32_t rp;
+// };
+
 struct mem_param {
 	target_addr_t address;
 	uint32_t size;

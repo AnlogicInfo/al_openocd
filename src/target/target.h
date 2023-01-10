@@ -355,6 +355,17 @@ struct target_memory_check_block {
 	uint32_t result;
 };
 
+
+struct async_fifo {
+	uint32_t wp_addr;
+	uint32_t rp_addr;
+	uint32_t fifo_start_addr;
+	uint32_t fifo_end_addr;
+	uint32_t wp;
+	uint32_t rp;
+};
+
+
 int target_register_commands(struct command_context *cmd_ctx);
 int target_examine(void);
 
@@ -595,6 +606,20 @@ int target_run_flash_async_algorithm(struct target *target,
 		uint32_t entry_point, uint32_t exit_point,
 		void *arch_info);
 
+
+/**
+ * This routine is a wrapper for asynchronous algorithms.
+ *
+ */
+int target_run_async_algorithm(struct target *trans_target, struct target *exec_target,
+		const uint8_t *buffer, uint32_t count, int block_size,
+		int num_mem_params, struct mem_param *mem_params,
+		int num_reg_params, struct reg_param *reg_params,
+		uint32_t buffer_start, uint32_t buffer_size,
+		uint32_t entry_point, uint32_t exit_point,
+		void *arch_info);
+
+
 /**
  * This routine is a wrapper for asynchronous algorithms.
  *
@@ -737,6 +762,11 @@ int target_alloc_working_area(struct target *target,
  */
 int target_alloc_working_area_try(struct target *target,
 		uint32_t size, struct working_area **area);
+
+
+int target_free_working_area_restore(struct target *target, struct working_area *area, int restore);
+
+
 /**
  * Free a working area.
  * Restore target data if area backup is configured.

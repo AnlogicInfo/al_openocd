@@ -33,8 +33,9 @@ struct target_emmc_loader {
 
     uint8_t xlen;
     const uint8_t *code_src;
-
     int code_size;
+
+    int code_area;
     int data_size;
     int image_size;
 
@@ -58,7 +59,7 @@ struct target_code_srcs
 int target_set_arch_info(struct target_emmc_loader *loader, void* arm_info);
 int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs srcs, struct reg_param* reg_params, uint32_t block_size);
 int target_emmc_write(struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
-int target_emmc_write_async(struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
+int target_emmc_write_async(struct target* trans_target, struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
 
 
 #endif

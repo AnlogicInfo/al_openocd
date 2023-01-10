@@ -95,6 +95,7 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 		retval = CALL_COMMAND_HANDLER(emmc_command_auto_probe, state->bank_num, &emmc); // auto probe bank 0, need update index according to offset later
 		if(retval != ERROR_OK)
 		{
+			LOG_ERROR("auto probe fail");
 			command_print(CMD, " not probed");
 			return ERROR_EMMC_DEVICE_NOT_PROBED;
 		}

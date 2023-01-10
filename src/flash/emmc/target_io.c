@@ -59,7 +59,10 @@ int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs s
         code_size = srcs.aarch64_size;
     }
 
-    loader->code_size = (code_size/block_size +1) * block_size;
+    loader->code_area = (code_size/block_size +1) * block_size;
+    loader->code_size = code_size;
+
+    LOG_INFO("code size %x padded size %x", code_size, loader->code_area);
 
     return ERROR_OK;
 }
@@ -68,7 +71,7 @@ int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs s
 static int target_code_to_working_area(struct target_emmc_loader * loader)
 {
 	int retval;
-	unsigned wa_size = loader->code_size + loader->data_size;
+	unsigned wa_size = loader->code_area + loader->data_size;
     struct working_area **area = &(loader->copy_area);
     struct target* target = loader->target;
 
@@ -107,7 +110,7 @@ static int target_set_wa(struct target_emmc_loader *loader, uint8_t *data, targe
             return retval;
     }
 
-    data_wa = loader->copy_area->address + loader->code_size;
+    data_wa = loader->copy_area->address + loader->code_area;
     loader->op = TARGET_EMMC_WRITE;
     // copy data to work area
 
@@ -115,16 +118,19 @@ static int target_set_wa(struct target_emmc_loader *loader, uint8_t *data, targe
 
     if(retval != ERROR_OK)
         return retval;
-    
+
     buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
     buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, addr);
     buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, data_wa);
     buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, loader->data_size);
 
-    // LOG_DEBUG("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
-    // LOG_DEBUG("target set reg parm addr %llx", addr);
-    // LOG_DEBUG("target set reg parm buf base " TARGET_ADDR_FMT , data_wa);
-    // LOG_DEBUG("target set reg parm size %x", loader->data_size);
+    LOG_INFO("sizeof reg param %llx", sizeof(loader->reg_params[0].value));
+    
+
+    LOG_INFO("target set reg parm ctrl base %llx",*(uint64_t *) loader->reg_params[0].value);
+    LOG_INFO("target set reg parm addr %llx", *(uint64_t *) loader->reg_params[1].value);
+    LOG_INFO("target set reg parm buf base %llx", *(uint64_t *) loader->reg_params[2].value);
+    LOG_INFO("target set reg parm size %llx", *(uint64_t *) loader->reg_params[3].value);
 
     return ERROR_OK;
 }
@@ -156,16 +162,18 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint8_t *data,
     // copy code to work area
     if(loader->op != TARGET_EMMC_WRITE || !loader->copy_area)
     {
-        // LOG_DEBUG("target wr code size %x to workarea", loader->code_size);
+        LOG_DEBUG("target wr code size %x to workarea", loader->code_size);
         retval = target_code_to_working_area(loader);
 
         if(retval != ERROR_OK)
             return retval;
     }
 
-    buf_start = loader->copy_area->address + loader->code_size;
+    buf_start = loader->copy_area->address + loader->code_area;
     buf_end = loader->copy_area->address + loader->copy_area->size;
     loader->op = TARGET_EMMC_WRITE;
+
+    LOG_INFO("buf start %llx end %llx", buf_start, buf_end);
 
     buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
     buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->image_size);
@@ -173,27 +181,27 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint8_t *data,
     buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, buf_end);
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, addr);
 
-    // LOG_DEBUG("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
-    // LOG_DEBUG("target set reg parm addr %llx", addr);
-    // LOG_DEBUG("target set reg parm buf base " TARGET_ADDR_FMT , data_wa);
-    // LOG_DEBUG("target set reg parm size %x", loader->data_size);
-
+    LOG_INFO("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
+    LOG_INFO("target set reg parm img size %x" , loader->image_size);
+    LOG_INFO("target set reg parm buf start %llx", buf_start);
+    LOG_INFO("target set reg parm buf end %llx", buf_end);
+    LOG_INFO("target set reg parm addr %llx", addr);
     return ERROR_OK;
 }
 
-int target_emmc_write_async(struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr)
+int target_emmc_write_async(struct target* trans_target, struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr)
 {
-    struct target *target = loader->target;
+    struct target *exec_target = loader->target;
     int retval = ERROR_OK;
     retval = target_set_wa_async(loader, data, addr);
 
-    retval = target_run_flash_async_algorithm(target, data, loader->image_size, 512, 
+    retval = target_run_async_algorithm(trans_target, exec_target, data, loader->image_size, 512, 
         0, NULL,
         5, loader->reg_params, 
-        loader->copy_area->address + loader->code_size, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
+        loader->copy_area->address + loader->code_area, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
     if(retval != ERROR_OK){
         LOG_ERROR("error executing target hosted async EMMC write");
     }
-    return ERROR_OK;
+    return retval;
 }

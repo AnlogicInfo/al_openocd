@@ -75,7 +75,9 @@ void emmc_dwcmshc_async(volatile uint32_t *ctrl_base, int size_in_bytes, uint32_
 {
     uint32_t* rp;
 
-    while(size_in_bytes > 0)
+    asm volatile("hlt #0x0B");
+    
+    // while(size_in_bytes > 0)
     {
         rp = (uint32_t*) emmc_wait_fifo(work_area_start);
         // wrap rp when reaches workarea end

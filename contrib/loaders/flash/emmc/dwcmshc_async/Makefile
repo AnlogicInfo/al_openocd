@@ -78,7 +78,7 @@ $(IMAGE).elf: $(OBJS)
 
 
 $(IMAGE).bin: $(IMAGE).elf
-	@$(OBJDUMP) -S $(IMAGE).elf > $(IMAGE).txt
+	@$(OBJDUMP) -D $(IMAGE).elf > $(IMAGE).txt
 	@$(OBJCOPY) -S -Obinary $(IMAGE).elf $(IMAGE).bin
 
 $(IMAGE).inc: $(IMAGE).bin

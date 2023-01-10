@@ -14,6 +14,7 @@ struct emmc_device
 {
     const char *name;
     struct target *target;
+    struct target *trans_target;
     struct emmc_flash_controller *controller;
     void *controller_priv;
     struct emmc_info *device;

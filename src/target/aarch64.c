@@ -2929,12 +2929,10 @@ static int aarch64_start_algorithm(struct target *target,
 		}
 
 		reg->type->set(reg, reg_params[i].value);
-		
 	}
 
 
 	aarch64_algorithm_info->core_mode = core_mode;
-
 	retval = target_resume(target, 0, entry_point, 1, 1);
 	return retval;
 }
@@ -2987,7 +2985,7 @@ static int aarch64_wait_algorithm(struct target *target,
 				return ERROR_COMMAND_SYNTAX_ERROR;
 			}
 
-			buf_set_u64(reg_params[i].value, 0, 64, buf_get_u32(reg->value, 0, 64));
+			buf_set_u64(reg_params[i].value, 0, 64, buf_get_u64(reg->value, 0, 64));
 		}
 	}
 

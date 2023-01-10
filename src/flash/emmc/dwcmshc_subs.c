@@ -716,9 +716,11 @@ static const struct target_code_srcs async_srcs =
 
 };
 
-static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* reg_params, void* arm_info, uint8_t async)
+static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* reg_params, int image_size , void* arm_info, uint8_t async)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    struct target* target = emmc->target;
+    int wa_size;
     uint32_t block_size;
     block_size = emmc->device->block_size;
 
@@ -731,28 +733,40 @@ static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* 
         target_sel_code(&dwcmshc_emmc->loader, srcs, reg_params, block_size);
     }
 
+    wa_size = target_get_working_area_avail(target);
+    dwcmshc_emmc->loader.image_size = image_size;
+    dwcmshc_emmc->loader.data_size = wa_size - dwcmshc_emmc->loader.code_area;
+
     return ERROR_OK;
 }
 
 int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
 {
+    struct target *trans_target = get_target("al9000.ahb");
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
     struct aarch64_algorithm aarch64_info;
-    struct target* target = emmc->target;
+    // struct target* target = emmc->target;
     struct reg_param reg_params[5];
     int retval = ERROR_OK;
-    int wa_size;
+    // int wa_size;
 
     aarch64_info.common_magic = AARCH64_COMMON_MAGIC;
     aarch64_info.core_mode = ARMV8_64_EL0T;
 
-    dwcmshc_emmc_init_loader(emmc, reg_params, &aarch64_info, ASYNC_TRANS);
-    wa_size = target_get_working_area_avail(target);
+    if(trans_target == NULL)
+    {
+        LOG_ERROR("get transtarget fail");
+    }
 
-    loader->image_size = image_size;
-    loader->data_size = wa_size - loader->code_size;
-    target_emmc_write_async(loader, (uint8_t*)buffer, addr);
+    LOG_INFO("dwcmshc async write image");
+
+    dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, ASYNC_TRANS);
+    // wa_size = target_get_working_area_avail(target);
+
+    // loader->image_size = image_size;
+    // loader->data_size = wa_size - loader->code_area;
+    target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, addr);
 
     destroy_reg_param(&loader->reg_params[0]);
 	destroy_reg_param(&loader->reg_params[1]);
@@ -760,7 +774,7 @@ int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, t
     destroy_reg_param(&loader->reg_params[3]);
     destroy_reg_param(&loader->reg_params[4]);
 
-    target_free_working_area(emmc->target, dwcmshc_emmc->loader.copy_area);
+    target_free_working_area_restore(emmc->target, dwcmshc_emmc->loader.copy_area, 0);
     return retval;
 }
 
@@ -769,22 +783,22 @@ int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, ta
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
     struct aarch64_algorithm aarch64_info;
-    struct target* target = emmc->target;
+    // struct target* target = emmc->target;
     struct reg_param reg_params[4];
     int retval = ERROR_OK;
-    int wa_size, data_wa_size;
+    // int data_wa_size;
 
     aarch64_info.common_magic = AARCH64_COMMON_MAGIC;
     aarch64_info.core_mode = ARMV8_64_EL0T;
-    dwcmshc_emmc_init_loader(emmc, reg_params, &aarch64_info, SYNC_TRANS);
-    wa_size = target_get_working_area_avail(target);
-    data_wa_size = wa_size - loader->code_size;
+    dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, SYNC_TRANS);
+    // wa_size = target_get_working_area_avail(target);
+    // data_wa_size = wa_size - loader->code_area;
     // LOG_INFO("work area size %x code size %x", wa_size, loader->code_size);
     while(image_size>0)
     {
 
         // set data
-        loader->data_size = MIN(data_wa_size, image_size);
+        loader->data_size = MIN(loader->data_size, image_size);
         // LOG_INFO("wr image total count %x start val %x addr " TARGET_ADDR_FMT, loader->data_size, *buffer, addr);
         retval = target_emmc_write(loader, (uint8_t*)buffer, addr);
         if(retval != ERROR_OK)
@@ -799,7 +813,7 @@ int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, ta
 	destroy_reg_param(&loader->reg_params[2]);
     destroy_reg_param(&loader->reg_params[3]);
 
-    target_free_working_area(emmc->target, dwcmshc_emmc->loader.copy_area);
+    target_free_working_area_restore(emmc->target, dwcmshc_emmc->loader.copy_area, 1);
     return retval;
 }
 

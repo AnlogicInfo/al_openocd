@@ -163,8 +163,9 @@ int emmc_read_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t ad
     return ERROR_OK;
 }
 
-int emmc_write_image(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr, int size)
+int emmc_write_image(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr, int size, int sync)
 {
-	emmc->controller->write_image(emmc, buffer, addr, size);
+	emmc->controller->write_image(emmc, buffer, addr, size, sync);
 	return ERROR_OK;
 }
+
