@@ -734,7 +734,8 @@ static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* 
     }
 
     wa_size = target_get_working_area_avail(target);
-    dwcmshc_emmc->loader.image_size = image_size;
+    dwcmshc_emmc->loader.block_size = block_size;
+    dwcmshc_emmc->loader.image_block_cnt = image_size/block_size;
     dwcmshc_emmc->loader.data_size = wa_size - dwcmshc_emmc->loader.code_area;
 
     return ERROR_OK;
@@ -764,7 +765,7 @@ int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, t
     dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, ASYNC_TRANS);
     // wa_size = target_get_working_area_avail(target);
 
-    // loader->image_size = image_size;
+    // loader->image_block_cnt = image_size;
     // loader->data_size = wa_size - loader->code_area;
     target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, addr);
 

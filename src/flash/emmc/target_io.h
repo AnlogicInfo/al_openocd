@@ -27,17 +27,20 @@ enum target_arch {
 };
 
 struct target_emmc_loader {
+    int block_size;
+
     struct target *target;
     enum target_arch arch;
     struct working_area *copy_area;
-
     uint8_t xlen;
     const uint8_t *code_src;
     int code_size;
-
     int code_area;
+
     int data_size;
-    int image_size;
+    int buf_start;
+
+    int image_block_cnt;
 
     uint8_t async;
     struct reg_param* reg_params;

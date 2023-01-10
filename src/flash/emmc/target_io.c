@@ -71,7 +71,7 @@ int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs s
 static int target_code_to_working_area(struct target_emmc_loader * loader)
 {
 	int retval;
-	unsigned wa_size = loader->code_area + loader->data_size;
+	unsigned wa_size;
     struct working_area **area = &(loader->copy_area);
     struct target* target = loader->target;
 
@@ -79,6 +79,7 @@ static int target_code_to_working_area(struct target_emmc_loader * loader)
 	 * That's usually correct; but there are boards with
 	 * both large and small page chips, where it won't be...
 	 */
+    wa_size = target_get_working_area_avail(target);
 
 	/* make sure we have a working area */
 	if (!*area) {
@@ -154,9 +155,9 @@ int target_emmc_write(struct target_emmc_loader *loader, uint8_t *data, target_a
     return retval;
 }
 
-static int target_set_wa_async(struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr)
+static int target_set_wa_async(struct target_emmc_loader *loader, uint32_t block_size, target_addr_t addr)
 {
-    target_addr_t  buf_start, buf_end;
+    target_addr_t fifo_end;
     int retval = ERROR_OK;    
 
     // copy code to work area
@@ -169,22 +170,21 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint8_t *data,
             return retval;
     }
 
-    buf_start = loader->copy_area->address + loader->code_area;
-    buf_end = loader->copy_area->address + loader->copy_area->size;
+    loader->buf_start = loader->copy_area->address + loader->code_area;
+    loader->data_size = (loader->data_size/block_size - 1) * block_size + 8 ; //update data size for async write
+    fifo_end = loader->buf_start + loader->data_size;
     loader->op = TARGET_EMMC_WRITE;
 
-    LOG_INFO("buf start %llx end %llx", buf_start, buf_end);
-
     buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
-    buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->image_size);
-    buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, buf_start);
-    buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, buf_end);
+    buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->image_block_cnt);
+    buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, loader->buf_start);
+    buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, fifo_end);
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, addr);
 
     LOG_INFO("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
-    LOG_INFO("target set reg parm img size %x" , loader->image_size);
-    LOG_INFO("target set reg parm buf start %llx", buf_start);
-    LOG_INFO("target set reg parm buf end %llx", buf_end);
+    LOG_INFO("target set reg parm img block cnt %x" , loader->image_block_cnt);
+    LOG_INFO("target set reg parm buf start %x", loader->buf_start);
+    LOG_INFO("target set reg parm buf end %llx", fifo_end);
     LOG_INFO("target set reg parm addr %llx", addr);
     return ERROR_OK;
 }
@@ -193,12 +193,12 @@ int target_emmc_write_async(struct target* trans_target, struct target_emmc_load
 {
     struct target *exec_target = loader->target;
     int retval = ERROR_OK;
-    retval = target_set_wa_async(loader, data, addr);
+    retval = target_set_wa_async(loader, loader->block_size, addr);
 
-    retval = target_run_async_algorithm(trans_target, exec_target, data, loader->image_size, 512, 
+    retval = target_run_async_algorithm(trans_target, exec_target, data, loader->image_block_cnt, 512, 
         0, NULL,
         5, loader->reg_params, 
-        loader->copy_area->address + loader->code_area, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
+        loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
     if(retval != ERROR_OK){
         LOG_ERROR("error executing target hosted async EMMC write");

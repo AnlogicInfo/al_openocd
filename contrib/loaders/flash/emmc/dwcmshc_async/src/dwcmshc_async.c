@@ -71,13 +71,11 @@ void emmc_write_block(volatile uint32_t *ctrl_base, uint32_t offset, const uint3
 
 }
 
-void emmc_dwcmshc_async(volatile uint32_t *ctrl_base, int size_in_bytes, uint32_t *work_area_start, uint32_t *work_area_end, uint32_t offset)
+void emmc_dwcmshc_async(volatile uint32_t *ctrl_base, int block_cnt, uint32_t *work_area_start, uint32_t *work_area_end, uint32_t offset)
 {
     uint32_t* rp;
-
-    asm volatile("hlt #0x0B");
     
-    // while(size_in_bytes > 0)
+    while(block_cnt > 0)
     {
         rp = (uint32_t*) emmc_wait_fifo(work_area_start);
         // wrap rp when reaches workarea end
@@ -91,7 +89,7 @@ void emmc_dwcmshc_async(volatile uint32_t *ctrl_base, int size_in_bytes, uint32_
         // store rp
         *(work_area_start + 1) = (uint32_t) rp;
         // update count
-        size_in_bytes -= BLOCK_SIZE;
+        block_cnt -= 1;
     }
 
 }
