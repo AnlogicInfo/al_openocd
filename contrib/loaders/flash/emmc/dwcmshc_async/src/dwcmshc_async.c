@@ -79,13 +79,14 @@ void emmc_dwcmshc_async(volatile uint32_t *ctrl_base, int block_cnt, uint32_t *w
     {
         rp = (uint32_t*) emmc_wait_fifo(work_area_start);
         // wrap rp when reaches workarea end
-        if(rp == work_area_end)
-            rp = work_area_start + 2;
 
         emmc_write_block(ctrl_base, offset, rp);
 
         offset += BLOCK_SIZE;
         rp += BLOCK_SIZE_IN_WORD;
+
+        if(rp == work_area_end)
+            rp = work_area_start + 2;
         // store rp
         *(work_area_start + 1) = (uint32_t) rp;
         // update count

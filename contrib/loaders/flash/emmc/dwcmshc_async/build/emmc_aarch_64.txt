@@ -47,16 +47,16 @@ Disassembly of section .text:
     61000084:	a9bb7bfd 	stp	x29, x30, [sp, #-80]!
     61000088:	910003fd 	mov	x29, sp
     6100008c:	a90153f3 	stp	x19, x20, [sp, #16]
-    61000090:	2a0103f3 	mov	w19, w1
-    61000094:	aa0203f4 	mov	x20, x2
-    61000098:	a9025bf5 	stp	x21, x22, [sp, #32]
-    6100009c:	2a0403f5 	mov	w21, w4
+    61000090:	2a0103f4 	mov	w20, w1
+    61000094:	a9025bf5 	stp	x21, x22, [sp, #32]
+    61000098:	aa0203f5 	mov	x21, x2
+    6100009c:	2a0403f6 	mov	w22, w4
     610000a0:	a90363f7 	stp	x23, x24, [sp, #48]
     610000a4:	aa0003f7 	mov	x23, x0
     610000a8:	aa0303f8 	mov	x24, x3
     610000ac:	f90023f9 	str	x25, [sp, #64]
     610000b0:	91002059 	add	x25, x2, #0x8
-    610000b4:	7100027f 	cmp	w19, #0x0
+    610000b4:	7100029f 	cmp	w20, #0x0
     610000b8:	540000ec 	b.gt	610000d4 <emmc_dwcmshc_async+0x50>
     610000bc:	a94153f3 	ldp	x19, x20, [sp, #16]
     610000c0:	a9425bf5 	ldp	x21, x22, [sp, #32]
@@ -64,21 +64,20 @@ Disassembly of section .text:
     610000c8:	f94023f9 	ldr	x25, [sp, #64]
     610000cc:	a8c57bfd 	ldp	x29, x30, [sp], #80
     610000d0:	d65f03c0 	ret
-    610000d4:	aa1403e0 	mov	x0, x20
+    610000d4:	aa1503e0 	mov	x0, x21
     610000d8:	97ffffd0 	bl	61000018 <emmc_wait_fifo>
-    610000dc:	2a0003f6 	mov	w22, w0
-    610000e0:	eb20431f 	cmp	x24, w0, uxtw
-    610000e4:	54000041 	b.ne	610000ec <emmc_dwcmshc_async+0x68>  // b.any
-    610000e8:	aa1903f6 	mov	x22, x25
-    610000ec:	aa1603e2 	mov	x2, x22
-    610000f0:	2a1503e1 	mov	w1, w21
-    610000f4:	aa1703e0 	mov	x0, x23
-    610000f8:	910802d6 	add	x22, x22, #0x200
-    610000fc:	97ffffcd 	bl	61000030 <emmc_write_block>
-    61000100:	110802b5 	add	w21, w21, #0x200
-    61000104:	51000673 	sub	w19, w19, #0x1
-    61000108:	b9000696 	str	w22, [x20, #4]
-    6100010c:	17ffffea 	b	610000b4 <emmc_dwcmshc_async+0x30>
+    610000dc:	2a0003f3 	mov	w19, w0
+    610000e0:	2a1603e1 	mov	w1, w22
+    610000e4:	aa1303e2 	mov	x2, x19
+    610000e8:	aa1703e0 	mov	x0, x23
+    610000ec:	97ffffd1 	bl	61000030 <emmc_write_block>
+    610000f0:	110802d6 	add	w22, w22, #0x200
+    610000f4:	91080265 	add	x5, x19, #0x200
+    610000f8:	51000694 	sub	w20, w20, #0x1
+    610000fc:	eb1800bf 	cmp	x5, x24
+    61000100:	9a9910a5 	csel	x5, x5, x25, ne  // ne = any
+    61000104:	b90006a5 	str	w5, [x21, #4]
+    61000108:	17ffffeb 	b	610000b4 <emmc_dwcmshc_async+0x30>
 
 Disassembly of section .data:
 
@@ -119,7 +118,7 @@ Disassembly of section .data:
 Disassembly of section .debug_info:
 
 0000000000000000 <.debug_info>:
-   0:	0000025f 	udf	#607
+   0:	0000025e 	udf	#606
    4:	00000004 	udf	#4
    8:	01080000 	.inst	0x01080000 ; undefined
    c:	00000192 	udf	#402
@@ -127,7 +126,7 @@ Disassembly of section .debug_info:
   14:	00002300 	udf	#8960
   18:	00001800 	udf	#6144
   1c:	00000061 	udf	#97
-  20:	0000f800 	udf	#63488
+  20:	0000f400 	udf	#62464
 	...
   2c:	06010200 	.inst	0x06010200 ; undefined
   30:	00000079 	udf	#121
@@ -161,13 +160,13 @@ Disassembly of section .debug_info:
   a0:	000000aa 	udf	#170
   a4:	84064a01 	ld1b	{z1.s}, p2/z, [x16, z6.s, uxtw]
   a8:	00610000 	.inst	0x00610000 ; undefined
-  ac:	8c000000 	.inst	0x8c000000 ; undefined
+  ac:	88000000 	stxr	w0, w0, [x0]
   b0:	00000000 	udf	#0
   b4:	01000000 	.inst	0x01000000 ; undefined
-  b8:	00016e9c 	.inst	0x00016e9c ; undefined
+  b8:	00016d9c 	.inst	0x00016d9c ; undefined
   bc:	00000800 	udf	#2048
   c0:	4a010000 	eor	w0, w0, w1
-  c4:	00016e2c 	.inst	0x00016e2c ; undefined
+  c4:	00016d2c 	.inst	0x00016d2c ; undefined
   c8:	00000800 	udf	#2048
   cc:	00000000 	udf	#0
   d0:	01df0800 	.inst	0x01df0800 ; undefined
@@ -177,12 +176,12 @@ Disassembly of section .debug_info:
   e0:	00006700 	udf	#26368
   e4:	00c70800 	.inst	0x00c70800 ; undefined
   e8:	4a010000 	eor	w0, w0, w1
-  ec:	00017450 	.inst	0x00017450 ; undefined
+  ec:	00017350 	.inst	0x00017350 ; undefined
   f0:	0000ec00 	udf	#60416
   f4:	0000e200 	udf	#57856
   f8:	00fb0800 	.inst	0x00fb0800 ; undefined
   fc:	4a010000 	eor	w0, w0, w1
- 100:	0001746b 	.inst	0x0001746b ; undefined
+ 100:	0001736b 	.inst	0x0001736b ; undefined
  104:	00016800 	.inst	0x00016800 ; undefined
  108:	00016000 	.inst	0x00016000 ; undefined
  10c:	01710800 	.inst	0x01710800 ; undefined
@@ -192,98 +191,96 @@ Disassembly of section .debug_info:
  11c:	0001c700 	.inst	0x0001c700 ; undefined
  120:	70720900 	adr	x0, e4243 <_start-0x60f1bdbd>
  124:	0f4c0100 	.inst	0x0f4c0100 ; undefined
- 128:	00000174 	udf	#372
- 12c:	0000021c 	udf	#540
+ 128:	00000173 	udf	#371
+ 12c:	0000021a 	udf	#538
  130:	00000216 	udf	#534
  134:	0000dc0a 	udf	#56330
  138:	00000061 	udf	#97
- 13c:	00020900 	.inst	0x00020900 ; undefined
+ 13c:	00020800 	.inst	0x00020800 ; undefined
  140:	00014c00 	.inst	0x00014c00 ; undefined
  144:	50010b00 	adr	x0, 22a6 <_start-0x60ffdd5a>
- 148:	00008402 	udf	#33794
- 14c:	0001000c 	.inst	0x0001000c ; undefined
+ 148:	00008502 	udf	#34050
+ 14c:	0000f00c 	udf	#61452
  150:	00000061 	udf	#97
- 154:	00017a00 	.inst	0x00017a00 ; undefined
+ 154:	00017900 	.inst	0x00017900 ; undefined
  158:	50010b00 	adr	x0, 22ba <_start-0x60ffdd46>
  15c:	0b008702 	.inst	0x0b008702 ; undefined
- 160:	85025101 	ld1w	{z1.s}, p4/z, [x8, z2.s, uxtw]
+ 160:	86025101 	.inst	0x86025101 ; undefined
  164:	52010b00 	eor	w0, w24, #0x80000003
- 168:	7c808603 	.inst	0x7c808603 ; undefined
- 16c:	080d0000 	stxrb	w13, w0, [x0]
- 170:	00000095 	udf	#149
- 174:	0089080d 	.inst	0x0089080d ; undefined
- 178:	e2070000 	.inst	0xe2070000 ; undefined
- 17c:	01000000 	.inst	0x01000000 ; undefined
- 180:	0030062f 	.inst	0x0030062f ; NYI
- 184:	00006100 	udf	#24832
- 188:	00540000 	.inst	0x00540000 ; undefined
+ 168:	00008302 	udf	#33538
+ 16c:	95080d00 	bl	420356c <_start-0x5cdfca94>
+ 170:	0d000000 	st1	{v0.b}[0], [x0]
+ 174:	00008908 	udf	#35080
+ 178:	00e20700 	.inst	0x00e20700 ; undefined
+ 17c:	2f010000 	.inst	0x2f010000 ; undefined
+ 180:	00003006 	udf	#12294
+ 184:	00000061 	udf	#97
+ 188:	00005400 	udf	#21504
  18c:	00000000 	udf	#0
- 190:	9c010000 	ldr	q0, 2190 <_start-0x60ffde70>
- 194:	00000203 	udf	#515
- 198:	0000000e 	udf	#14
- 19c:	2a2f0100 	orn	w0, w8, w15
- 1a0:	0000016e 	udf	#366
- 1a4:	71085001 	subs	w1, w0, #0x214
- 1a8:	01000001 	.inst	0x01000001 ; undefined
- 1ac:	00893e2f 	.inst	0x00893e2f ; undefined
- 1b0:	026e0000 	.inst	0x026e0000 ; undefined
- 1b4:	02680000 	.inst	0x02680000 ; undefined
- 1b8:	820e0000 	.inst	0x820e0000 ; undefined
- 1bc:	01000001 	.inst	0x01000001 ; undefined
- 1c0:	0203562f 	.inst	0x0203562f ; undefined
- 1c4:	52010000 	eor	w0, w0, #0x80000000
- 1c8:	01006909 	.inst	0x01006909 ; undefined
- 1cc:	00890e31 	.inst	0x00890e31 ; undefined
- 1d0:	02bd0000 	.inst	0x02bd0000 ; undefined
- 1d4:	02bb0000 	.inst	0x02bb0000 ; undefined
- 1d8:	f30f0000 	.inst	0xf30f0000 ; undefined
- 1dc:	01000000 	.inst	0x01000000 ; undefined
- 1e0:	00891131 	.inst	0x00891131 ; undefined
- 1e4:	02e40000 	.inst	0x02e40000 ; undefined
- 1e8:	02e00000 	.inst	0x02e00000 ; undefined
- 1ec:	bd0f0000 	str	s0, [x0, #3840]
- 1f0:	01000000 	.inst	0x01000000 ; undefined
- 1f4:	007d0d32 	.inst	0x007d0d32 ; undefined
- 1f8:	031e0000 	.inst	0x031e0000 ; undefined
- 1fc:	031a0000 	.inst	0x031a0000 ; undefined
- 200:	0d000000 	st1	{v0.b}[0], [x0]
- 204:	00009a08 	udf	#39432
- 208:	00141000 	.inst	0x00141000 ; undefined
- 20c:	24010000 	cmphs	p0.b, p0/z, z0.b, z1.b
- 210:	0000890b 	udf	#35083
- 214:	00001800 	udf	#6144
- 218:	00000061 	udf	#97
- 21c:	00001800 	udf	#6144
+ 190:	029c0100 	.inst	0x029c0100 ; undefined
+ 194:	0e000002 	tbl	v2.8b, {v0.16b}, v0.8b
+ 198:	00000000 	udf	#0
+ 19c:	6d2a2f01 	stp	d1, d11, [x24, #-352]
+ 1a0:	01000001 	.inst	0x01000001 ; undefined
+ 1a4:	01710850 	.inst	0x01710850 ; undefined
+ 1a8:	2f010000 	.inst	0x2f010000 ; undefined
+ 1ac:	0000893e 	udf	#35134
+ 1b0:	00025600 	.inst	0x00025600 ; undefined
+ 1b4:	00025000 	.inst	0x00025000 ; undefined
+ 1b8:	01820e00 	.inst	0x01820e00 ; undefined
+ 1bc:	2f010000 	.inst	0x2f010000 ; undefined
+ 1c0:	00020256 	.inst	0x00020256 ; undefined
+ 1c4:	09520100 	.inst	0x09520100 ; undefined
+ 1c8:	31010069 	adds	w9, w3, #0x40
+ 1cc:	0000890e 	udf	#35086
+ 1d0:	0002a500 	.inst	0x0002a500 ; undefined
+ 1d4:	0002a300 	.inst	0x0002a300 ; undefined
+ 1d8:	00f30f00 	.inst	0x00f30f00 ; undefined
+ 1dc:	31010000 	adds	w0, w0, #0x40
+ 1e0:	00008911 	udf	#35089
+ 1e4:	0002cc00 	.inst	0x0002cc00 ; undefined
+ 1e8:	0002c800 	.inst	0x0002c800 ; undefined
+ 1ec:	00bd0f00 	.inst	0x00bd0f00 ; undefined
+ 1f0:	32010000 	orr	w0, w0, #0x80000000
+ 1f4:	00007d0d 	udf	#32013
+ 1f8:	00030600 	.inst	0x00030600 ; undefined
+ 1fc:	00030200 	.inst	0x00030200 ; undefined
+ 200:	080d0000 	stxrb	w13, w0, [x0]
+ 204:	0000009a 	udf	#154
+ 208:	00001410 	udf	#5136
+ 20c:	0b240100 	add	w0, w8, w4, uxtb
+ 210:	00000089 	udf	#137
+ 214:	61000018 	.inst	0x61000018 ; undefined
+ 218:	00000000 	udf	#0
+ 21c:	00000018 	udf	#24
  220:	00000000 	udf	#0
- 224:	089c0100 	stllrb	w0, [x8]
- 228:	000000c7 	udf	#199
- 22c:	74242401 	.inst	0x74242401 ; undefined
- 230:	64000001 	.inst	0x64000001 ; undefined
- 234:	60000003 	.inst	0x60000003 ; undefined
- 238:	09000003 	.inst	0x09000003 ; undefined
- 23c:	01007077 	.inst	0x01007077 ; undefined
- 240:	00890e26 	.inst	0x00890e26 ; undefined
- 244:	039e0000 	.inst	0x039e0000 ; undefined
- 248:	039a0000 	.inst	0x039a0000 ; undefined
- 24c:	72090000 	ands	w0, w0, #0x800000
- 250:	26010070 	.inst	0x26010070 ; undefined
- 254:	00008916 	udf	#35094
- 258:	0003d900 	.inst	0x0003d900 ; undefined
- 25c:	0003d500 	.inst	0x0003d500 ; undefined
- 260:	2a000000 	orr	w0, w0, w0
- 264:	02000000 	.inst	0x02000000 ; undefined
- 268:	0000f900 	udf	#63744
- 26c:	8b010800 	add	x0, x0, x1, lsl #2
- 270:	00000002 	udf	#2
- 274:	00610000 	.inst	0x00610000 ; undefined
- 278:	18000000 	ldr	w0, 278 <_start-0x60fffd88>
- 27c:	00610000 	.inst	0x00610000 ; undefined
- 280:	e9000000 	.inst	0xe9000000 ; undefined
- 284:	23000001 	.inst	0x23000001 ; undefined
- 288:	56000000 	.inst	0x56000000 ; undefined
- 28c:	01000002 	.inst	0x01000002 ; undefined
- 290:	Address 0x0000000000000290 is out of bounds.
-
+ 224:	c7089c01 	.inst	0xc7089c01 ; undefined
+ 228:	01000000 	.inst	0x01000000 ; undefined
+ 22c:	01732424 	.inst	0x01732424 ; undefined
+ 230:	034c0000 	.inst	0x034c0000 ; undefined
+ 234:	03480000 	.inst	0x03480000 ; undefined
+ 238:	77090000 	.inst	0x77090000 ; undefined
+ 23c:	26010070 	.inst	0x26010070 ; undefined
+ 240:	0000890e 	udf	#35086
+ 244:	00038600 	.inst	0x00038600 ; undefined
+ 248:	00038200 	.inst	0x00038200 ; undefined
+ 24c:	70720900 	adr	x0, e436f <_start-0x60f1bc91>
+ 250:	16260100 	b	fffffffff8980650 <stack_end+0xffffffff979804c0>
+ 254:	00000089 	udf	#137
+ 258:	000003c1 	udf	#961
+ 25c:	000003bd 	udf	#957
+ 260:	002a0000 	.inst	0x002a0000 ; NYI
+ 264:	00020000 	.inst	0x00020000 ; undefined
+ 268:	000000f9 	udf	#249
+ 26c:	02890108 	.inst	0x02890108 ; undefined
+ 270:	00000000 	udf	#0
+ 274:	00006100 	udf	#24832
+ 278:	00180000 	.inst	0x00180000 ; undefined
+ 27c:	00006100 	udf	#24832
+ 280:	01e90000 	.inst	0x01e90000 ; undefined
+ 284:	00230000 	.inst	0x00230000 ; NYI
+ 288:	02560000 	.inst	0x02560000 ; undefined
+ 28c:	80010000 	.inst	0x80010000 ; undefined
 
 Disassembly of section .debug_abbrev:
 
@@ -378,7 +375,7 @@ Disassembly of section .debug_loc:
   40:	9f5001f3 	.inst	0x9f5001f3 ; undefined
   44:	000000bc 	udf	#188
   48:	00000000 	udf	#0
-  4c:	000000f8 	udf	#248
+  4c:	000000f4 	udf	#244
   50:	00000000 	udf	#0
   54:	00670001 	.inst	0x00670001 ; undefined
 	...
@@ -392,22 +389,22 @@ Disassembly of section .debug_loc:
   88:	00000000 	udf	#0
   8c:	000000a8 	udf	#168
   90:	00000000 	udf	#0
-  94:	bc630001 	.inst	0xbc630001 ; undefined
+  94:	bc640001 	.inst	0xbc640001 ; undefined
   98:	00000000 	udf	#0
-  9c:	f0000000 	adrp	x0, 3000 <_start-0x60ffd000>
+  9c:	e4000000 	.inst	0xe4000000 ; undefined
   a0:	00000000 	udf	#0
   a4:	01000000 	.inst	0x01000000 ; undefined
-  a8:	00f06300 	.inst	0x00f06300 ; undefined
+  a8:	00e46400 	.inst	0x00e46400 ; undefined
   ac:	00000000 	udf	#0
-  b0:	00f40000 	.inst	0x00f40000 ; undefined
+  b0:	00f00000 	.inst	0x00f00000 ; undefined
   b4:	00000000 	udf	#0
   b8:	00030000 	.inst	0x00030000 ; undefined
-  bc:	f49f0183 	.inst	0xf49f0183 ; undefined
+  bc:	f09f0184 	adrp	x4, ffffffff3e033000 <stack_end+0xfffffffedd032e70>
   c0:	00000000 	udf	#0
-  c4:	f8000000 	stur	x0, [x0]
+  c4:	f4000000 	.inst	0xf4000000 ; undefined
   c8:	00000000 	udf	#0
   cc:	01000000 	.inst	0x01000000 ; undefined
-  d0:	00006300 	udf	#25344
+  d0:	00006400 	udf	#25600
 	...
   ec:	0000006c 	udf	#108
   f0:	00000000 	udf	#0
@@ -415,10 +412,10 @@ Disassembly of section .debug_loc:
   f8:	00000000 	udf	#0
   fc:	9c520001 	ldr	q1, a40fc <_start-0x60f5bf04>
  100:	00000000 	udf	#0
- 104:	a8000000 	stnp	x0, x0, [x0]
+ 104:	ac000000 	stnp	q0, q0, [x0]
  108:	00000000 	udf	#0
  10c:	01000000 	.inst	0x01000000 ; undefined
- 110:	00a86400 	.inst	0x00a86400 ; undefined
+ 110:	00ac6500 	.inst	0x00ac6500 ; undefined
  114:	00000000 	udf	#0
  118:	00b40000 	.inst	0x00b40000 ; undefined
  11c:	00000000 	udf	#0
@@ -431,9 +428,9 @@ Disassembly of section .debug_loc:
  138:	5201f300 	eor	w0, w24, #0xaaaaaaaa
  13c:	0000bc9f 	udf	#48287
  140:	00000000 	udf	#0
- 144:	0000f800 	udf	#63488
+ 144:	0000f400 	udf	#62464
  148:	00000000 	udf	#0
- 14c:	64000100 	.inst	0x64000100 ; undefined
+ 14c:	65000100 	.inst	0x65000100 ; undefined
 	...
  168:	0000006c 	udf	#108
  16c:	00000000 	udf	#0
@@ -452,7 +449,7 @@ Disassembly of section .debug_loc:
  1a0:	9f5301f3 	.inst	0x9f5301f3 ; undefined
  1a4:	000000bc 	udf	#188
  1a8:	00000000 	udf	#0
- 1ac:	000000f8 	udf	#248
+ 1ac:	000000f4 	udf	#244
  1b0:	00000000 	udf	#0
  1b4:	00680001 	.inst	0x00680001 ; undefined
 	...
@@ -465,114 +462,108 @@ Disassembly of section .debug_loc:
  1e4:	00000000 	udf	#0
  1e8:	000000ac 	udf	#172
  1ec:	00000000 	udf	#0
- 1f0:	bc650001 	.inst	0xbc650001 ; undefined
+ 1f0:	bc660001 	.inst	0xbc660001 ; undefined
  1f4:	00000000 	udf	#0
- 1f8:	f8000000 	stur	x0, [x0]
+ 1f8:	f4000000 	.inst	0xf4000000 ; undefined
  1fc:	00000000 	udf	#0
  200:	01000000 	.inst	0x01000000 ; undefined
- 204:	00006500 	udf	#25856
+ 204:	00006600 	udf	#26112
 	...
- 218:	01000000 	.inst	0x01000000 ; undefined
- 21c:	000000c8 	udf	#200
- 220:	00000000 	udf	#0
- 224:	000000e4 	udf	#228
- 228:	00000000 	udf	#0
- 22c:	e4660001 	.inst	0xe4660001 ; undefined
+ 218:	00c80000 	.inst	0x00c80000 ; undefined
+ 21c:	00000000 	udf	#0
+ 220:	00e00000 	.inst	0x00e00000 ; undefined
+ 224:	00000000 	udf	#0
+ 228:	00010000 	.inst	0x00010000 ; undefined
+ 22c:	0000e063 	udf	#57443
  230:	00000000 	udf	#0
- 234:	e7000000 	.inst	0xe7000000 ; undefined
+ 234:	0000f400 	udf	#62464
  238:	00000000 	udf	#0
- 23c:	01000000 	.inst	0x01000000 ; undefined
- 240:	00e75200 	.inst	0x00e75200 ; undefined
- 244:	00000000 	udf	#0
- 248:	00ec0000 	.inst	0x00ec0000 ; undefined
- 24c:	00000000 	udf	#0
- 250:	00040000 	.inst	0x00040000 ; undefined
- 254:	9f7c8086 	.inst	0x9f7c8086 ; undefined
+ 23c:	55000100 	.inst	0x55000100 ; undefined
 	...
- 26c:	00180000 	.inst	0x00180000 ; undefined
- 270:	00000000 	udf	#0
- 274:	00200000 	.inst	0x00200000 ; NYI
- 278:	00000000 	udf	#0
- 27c:	00010000 	.inst	0x00010000 ; undefined
- 280:	00002051 	udf	#8273
- 284:	00000000 	udf	#0
- 288:	00002800 	udf	#10240
- 28c:	00000000 	udf	#0
- 290:	70000200 	adr	x0, 2d3 <_start-0x60fffd2d>
- 294:	00002808 	udf	#10248
- 298:	00000000 	udf	#0
- 29c:	00006c00 	udf	#27648
- 2a0:	00000000 	udf	#0
- 2a4:	f3000400 	.inst	0xf3000400 ; undefined
- 2a8:	009f5101 	.inst	0x009f5101 ; undefined
+ 254:	00180000 	.inst	0x00180000 ; undefined
+ 258:	00000000 	udf	#0
+ 25c:	00200000 	.inst	0x00200000 ; NYI
+ 260:	00000000 	udf	#0
+ 264:	00010000 	.inst	0x00010000 ; undefined
+ 268:	00002051 	udf	#8273
+ 26c:	00000000 	udf	#0
+ 270:	00002800 	udf	#10240
+ 274:	00000000 	udf	#0
+ 278:	70000200 	adr	x0, 2bb <_start-0x60fffd45>
+ 27c:	00002808 	udf	#10248
+ 280:	00000000 	udf	#0
+ 284:	00006c00 	udf	#27648
+ 288:	00000000 	udf	#0
+ 28c:	f3000400 	.inst	0xf3000400 ; undefined
+ 290:	009f5101 	.inst	0x009f5101 ; undefined
 	...
- 2bc:	00003c00 	udf	#15360
- 2c0:	00000000 	udf	#0
- 2c4:	00004400 	udf	#17408
- 2c8:	00000000 	udf	#0
- 2cc:	51000100 	sub	w0, w8, #0x0
+ 2a4:	00003c00 	udf	#15360
+ 2a8:	00000000 	udf	#0
+ 2ac:	00004400 	udf	#17408
+ 2b0:	00000000 	udf	#0
+ 2b4:	51000100 	sub	w0, w8, #0x0
 	...
- 2e4:	0000002c 	udf	#44
+ 2cc:	0000002c 	udf	#44
+ 2d0:	00000000 	udf	#0
+ 2d4:	0000003c 	udf	#60
+ 2d8:	00000000 	udf	#0
+ 2dc:	54510001 	b.ne	a22dc <_start-0x60f5dd24>  // b.any
+ 2e0:	00000000 	udf	#0
+ 2e4:	64000000 	.inst	0x64000000 ; undefined
  2e8:	00000000 	udf	#0
- 2ec:	0000003c 	udf	#60
- 2f0:	00000000 	udf	#0
- 2f4:	54510001 	b.ne	a22f4 <_start-0x60f5dd0c>  // b.any
- 2f8:	00000000 	udf	#0
- 2fc:	64000000 	.inst	0x64000000 ; undefined
- 300:	00000000 	udf	#0
- 304:	01000000 	.inst	0x01000000 ; undefined
- 308:	00005100 	udf	#20736
+ 2ec:	01000000 	.inst	0x01000000 ; undefined
+ 2f0:	00005100 	udf	#20736
 	...
- 318:	00010000 	.inst	0x00010000 ; undefined
- 31c:	002c0001 	.inst	0x002c0001 ; NYI
+ 300:	00010000 	.inst	0x00010000 ; undefined
+ 304:	002c0001 	.inst	0x002c0001 ; NYI
+ 308:	00000000 	udf	#0
+ 30c:	003c0000 	.inst	0x003c0000 ; NYI
+ 310:	00000000 	udf	#0
+ 314:	00070000 	.inst	0x00070000 ; undefined
+ 318:	25340071 	whilegt	p1.b, w3, w20
+ 31c:	549f1a31 	.inst	0x549f1a31 ; undefined
  320:	00000000 	udf	#0
- 324:	003c0000 	.inst	0x003c0000 ; NYI
+ 324:	64000000 	.inst	0x64000000 ; undefined
  328:	00000000 	udf	#0
- 32c:	00070000 	.inst	0x00070000 ; undefined
- 330:	25340071 	whilegt	p1.b, w3, w20
- 334:	549f1a31 	.inst	0x549f1a31 ; undefined
- 338:	00000000 	udf	#0
- 33c:	64000000 	.inst	0x64000000 ; undefined
- 340:	00000000 	udf	#0
- 344:	07000000 	.inst	0x07000000 ; undefined
- 348:	31007100 	adds	w0, w8, #0x1c
- 34c:	9f1a3125 	.inst	0x9f1a3125 ; undefined
+ 32c:	07000000 	.inst	0x07000000 ; undefined
+ 330:	31007100 	adds	w0, w8, #0x1c
+ 334:	9f1a3125 	.inst	0x9f1a3125 ; undefined
 	...
- 360:	00030300 	.inst	0x00030300 ; undefined
+ 348:	00030300 	.inst	0x00030300 ; undefined
 	...
- 36c:	00000004 	udf	#4
- 370:	00000000 	udf	#0
- 374:	04500001 	mul	z1.h, p0/m, z1.h, z0.h
- 378:	00000000 	udf	#0
- 37c:	18000000 	ldr	w0, 37c <_start-0x60fffc84>
- 380:	00000000 	udf	#0
- 384:	01000000 	.inst	0x01000000 ; undefined
- 388:	00005100 	udf	#20736
+ 354:	00000004 	udf	#4
+ 358:	00000000 	udf	#0
+ 35c:	04500001 	mul	z1.h, p0/m, z1.h, z0.h
+ 360:	00000000 	udf	#0
+ 364:	18000000 	ldr	w0, 364 <_start-0x60fffc9c>
+ 368:	00000000 	udf	#0
+ 36c:	01000000 	.inst	0x01000000 ; undefined
+ 370:	00005100 	udf	#20736
 	...
- 398:	00010000 	.inst	0x00010000 ; undefined
- 39c:	00040000 	.inst	0x00040000 ; undefined
- 3a0:	00000000 	udf	#0
- 3a4:	00080000 	.inst	0x00080000 ; undefined
- 3a8:	00000000 	udf	#0
- 3ac:	00020000 	.inst	0x00020000 ; undefined
- 3b0:	00089f30 	.inst	0x00089f30 ; undefined
- 3b4:	00000000 	udf	#0
- 3b8:	00180000 	.inst	0x00180000 ; undefined
- 3bc:	00000000 	udf	#0
- 3c0:	00010000 	.inst	0x00010000 ; undefined
- 3c4:	00000052 	udf	#82
+ 380:	00010000 	.inst	0x00010000 ; undefined
+ 384:	00040000 	.inst	0x00040000 ; undefined
+ 388:	00000000 	udf	#0
+ 38c:	00080000 	.inst	0x00080000 ; undefined
+ 390:	00000000 	udf	#0
+ 394:	00020000 	.inst	0x00020000 ; undefined
+ 398:	00089f30 	.inst	0x00089f30 ; undefined
+ 39c:	00000000 	udf	#0
+ 3a0:	00180000 	.inst	0x00180000 ; undefined
+ 3a4:	00000000 	udf	#0
+ 3a8:	00010000 	.inst	0x00010000 ; undefined
+ 3ac:	00000052 	udf	#82
 	...
- 3d4:	00000100 	udf	#256
- 3d8:	00000400 	udf	#1024
- 3dc:	00000000 	udf	#0
- 3e0:	00000c00 	udf	#3072
- 3e4:	00000000 	udf	#0
- 3e8:	30000200 	adr	x0, 429 <_start-0x60fffbd7>
- 3ec:	00000c9f 	udf	#3231
- 3f0:	00000000 	udf	#0
- 3f4:	00001800 	udf	#6144
- 3f8:	00000000 	udf	#0
- 3fc:	50000100 	adr	x0, 41e <_start-0x60fffbe2>
+ 3bc:	00000100 	udf	#256
+ 3c0:	00000400 	udf	#1024
+ 3c4:	00000000 	udf	#0
+ 3c8:	00000c00 	udf	#3072
+ 3cc:	00000000 	udf	#0
+ 3d0:	30000200 	adr	x0, 411 <_start-0x60fffbef>
+ 3d4:	00000c9f 	udf	#3231
+ 3d8:	00000000 	udf	#0
+ 3dc:	00001800 	udf	#6144
+ 3e0:	00000000 	udf	#0
+ 3e4:	50000100 	adr	x0, 406 <_start-0x60fffbfa>
 	...
 
 Disassembly of section .debug_aranges:
@@ -584,10 +575,10 @@ Disassembly of section .debug_aranges:
    c:	00000000 	udf	#0
   10:	61000018 	.inst	0x61000018 ; undefined
   14:	00000000 	udf	#0
-  18:	000000f8 	udf	#248
+  18:	000000f4 	udf	#244
 	...
   30:	0000002c 	udf	#44
-  34:	02630002 	.inst	0x02630002 ; undefined
+  34:	02620002 	.inst	0x02620002 ; undefined
   38:	00080000 	.inst	0x00080000 ; undefined
   3c:	00000000 	udf	#0
   40:	61000000 	.inst	0x61000000 ; undefined
@@ -598,7 +589,7 @@ Disassembly of section .debug_aranges:
 Disassembly of section .debug_line:
 
 0000000000000000 <.debug_line>:
-   0:	00000287 	udf	#647
+   0:	00000285 	udf	#645
    4:	014f0003 	.inst	0x014f0003 ; undefined
    8:	01040000 	.inst	0x01040000 ; undefined
    c:	000d0efb 	.inst	0x000d0efb ; undefined
@@ -740,67 +731,68 @@ Disassembly of section .debug_line:
  22c:	23061406 	.inst	0x23061406 ; undefined
  230:	14130505 	b	4c1644 <_start-0x60b3e9bc>
  234:	0f060105 	.inst	0x0f060105 ; undefined
- 238:	05b41005 	.inst	0x05b41005 ; undefined
- 23c:	051b060a 	mov	z10.b, p11/z, #48
- 240:	11030601 	add	w1, w16, #0xc1
- 244:	2020202e 	.inst	0x2020202e ; undefined
- 248:	06090520 	.inst	0x06090520 ; undefined
- 24c:	052e7103 	trn1	z3.b, z8.b, z14.b
- 250:	0501061a 	orr	z26.b, z26.b, #0x1
- 254:	053e0609 	ext	z9.b, z9.b, z16.b, #241
- 258:	0501060b 	orr	z11.b, z11.b, #0x1
- 25c:	052f060d 	ext	z13.b, z13.b, z16.b, #121
- 260:	05010610 	orr	z16.b, z16.b, #0x1
- 264:	05220609 	ext	z9.b, z9.b, z16.b, #17
- 268:	053f060c 	ext	z12.b, z12.b, z16.b, #249
- 26c:	22061d09 	.inst	0x22061d09 ; undefined
- 270:	01061005 	.inst	0x01061005 ; undefined
- 274:	21060905 	.inst	0x21060905 ; undefined
- 278:	06130514 	.inst	0x06130514 ; undefined
- 27c:	1e220514 	fccmpe	s8, s2, #0x4, eq  // eq = none
- 280:	22060905 	.inst	0x22060905 ; undefined
- 284:	01020106 	.inst	0x01020106 ; undefined
- 288:	9d010100 	.inst	0x9d010100 ; undefined
- 28c:	03000000 	.inst	0x03000000 ; undefined
- 290:	00008300 	udf	#33536
- 294:	fb010400 	.inst	0xfb010400 ; undefined
- 298:	01000d0e 	.inst	0x01000d0e ; undefined
- 29c:	00010101 	.inst	0x00010101 ; undefined
- 2a0:	00010000 	.inst	0x00010000 ; undefined
- 2a4:	3a440100 	ccmn	w8, w4, #0x0, eq  // eq = none
- 2a8:	726f772f 	.inst	0x726f772f ; undefined
- 2ac:	30322f6b 	adr	x11, 64899 <_start-0x60f9b767>
- 2b0:	612f3232 	.inst	0x612f3232 ; undefined
- 2b4:	3030396c 	adr	x12, 609e1 <_start-0x60f9f61f>
- 2b8:	77732f30 	.inst	0x77732f30 ; undefined
- 2bc:	6265642f 	.inst	0x6265642f ; undefined
- 2c0:	65676775 	fnmls	z21.h, p1/m, z27.h, z7.h
- 2c4:	6c612f72 	ldnp	d18, d11, [x27, #-496]
- 2c8:	65706f5f 	fnmls	z31.h, p3/m, z26.h, z16.h
- 2cc:	64636f6e 	.inst	0x64636f6e ; undefined
- 2d0:	6e6f632f 	rsubhn2	v15.8h, v25.4s, v15.4s
- 2d4:	62697274 	.inst	0x62697274 ; undefined
- 2d8:	616f6c2f 	.inst	0x616f6c2f ; undefined
- 2dc:	73726564 	.inst	0x73726564 ; undefined
- 2e0:	616c662f 	.inst	0x616c662f ; undefined
- 2e4:	652f6873 	.inst	0x652f6873 ; undefined
- 2e8:	2f636d6d 	.inst	0x2f636d6d ; undefined
- 2ec:	6d637764 	ldp	d4, d29, [x27, #-464]
- 2f0:	5f636873 	.inst	0x5f636873 ; undefined
- 2f4:	6e797361 	uabdl2	v1.4s, v27.8h, v25.8h
- 2f8:	72732f63 	.inst	0x72732f63 ; undefined
- 2fc:	6f622f63 	.inst	0x6f622f63 ; undefined
- 300:	612f746f 	.inst	0x612f746f ; undefined
- 304:	68637261 	.inst	0x68637261 ; undefined
- 308:	72770000 	.inst	0x72770000 ; undefined
- 30c:	65707061 	fnmls	z1.h, p4/m, z3.h, z16.h
- 310:	00532e72 	.inst	0x00532e72 ; undefined
- 314:	00000001 	udf	#1
- 318:	00020900 	.inst	0x00020900 ; undefined
- 31c:	00610000 	.inst	0x00610000 ; undefined
- 320:	18000000 	ldr	w0, 320 <_start-0x60fffce0>
- 324:	02222121 	.inst	0x02222121 ; undefined
- 328:	01010003 	.inst	0x01010003 ; undefined
+ 238:	0e031005 	tbx	v5.8b, {v0.16b}, v3.8b
+ 23c:	060a05ac 	.inst	0x060a05ac ; undefined
+ 240:	05207503 	trn2	z3.b, z8.b, z0.b
+ 244:	12030601 	and	w1, w16, #0x60000000
+ 248:	2020202e 	.inst	0x2020202e ; undefined
+ 24c:	06090520 	.inst	0x06090520 ; undefined
+ 250:	052e7003 	trn1	z3.b, z0.b, z14.b
+ 254:	0501061a 	orr	z26.b, z26.b, #0x1
+ 258:	4c3f0609 	.inst	0x4c3f0609 ; undefined
+ 25c:	01061005 	.inst	0x01061005 ; undefined
+ 260:	21060905 	.inst	0x21060905 ; undefined
+ 264:	01060c05 	.inst	0x01060c05 ; undefined
+ 268:	22060905 	.inst	0x22060905 ; undefined
+ 26c:	17061305 	b	fffffffffc184e80 <stack_end+0xffffffff9b184cf0>
+ 270:	051b0b05 	mov	z5.b, p11/z, #88
+ 274:	09052110 	.inst	0x09052110 ; undefined
+ 278:	22052206 	.inst	0x22052206 ; undefined
+ 27c:	09050106 	.inst	0x09050106 ; undefined
+ 280:	01062206 	.inst	0x01062206 ; undefined
+ 284:	01000102 	.inst	0x01000102 ; undefined
+ 288:	00009d01 	udf	#40193
+ 28c:	83000300 	.inst	0x83000300 ; undefined
+ 290:	04000000 	add	z0.b, p0/m, z0.b, z0.b
+ 294:	0d0efb01 	.inst	0x0d0efb01 ; undefined
+ 298:	01010100 	.inst	0x01010100 ; undefined
+ 29c:	00000001 	udf	#1
+ 2a0:	01000001 	.inst	0x01000001 ; undefined
+ 2a4:	772f3a44 	.inst	0x772f3a44 ; undefined
+ 2a8:	2f6b726f 	fcmla	v15.4h, v19.4h, v11.h[1], #270
+ 2ac:	32323032 	orr	w18, w1, #0x7ffc000
+ 2b0:	396c612f 	ldrb	w15, [x9, #2840]
+ 2b4:	2f303030 	.inst	0x2f303030 ; undefined
+ 2b8:	642f7773 	.inst	0x642f7773 ; undefined
+ 2bc:	67756265 	.inst	0x67756265 ; undefined
+ 2c0:	2f726567 	.inst	0x2f726567 ; undefined
+ 2c4:	6f5f6c61 	.inst	0x6f5f6c61 ; undefined
+ 2c8:	6f6e6570 	sqshlu	v16.2d, v11.2d, #46
+ 2cc:	632f6463 	.inst	0x632f6463 ; undefined
+ 2d0:	72746e6f 	.inst	0x72746e6f ; undefined
+ 2d4:	6c2f6269 	stnp	d9, d24, [x19, #-272]
+ 2d8:	6564616f 	fnmls	z15.h, p0/m, z11.h, z4.h
+ 2dc:	662f7372 	.inst	0x662f7372 ; undefined
+ 2e0:	6873616c 	.inst	0x6873616c ; undefined
+ 2e4:	6d6d652f 	ldp	d15, d25, [x9, #-304]
+ 2e8:	77642f63 	.inst	0x77642f63 ; undefined
+ 2ec:	68736d63 	.inst	0x68736d63 ; undefined
+ 2f0:	73615f63 	.inst	0x73615f63 ; undefined
+ 2f4:	2f636e79 	.inst	0x2f636e79 ; undefined
+ 2f8:	2f637273 	fcmla	v19.4h, v19.4h, v3.h[1], #270
+ 2fc:	746f6f62 	.inst	0x746f6f62 ; undefined
+ 300:	7261612f 	.inst	0x7261612f ; undefined
+ 304:	00006863 	udf	#26723
+ 308:	70617277 	adr	x23, c3157 <_start-0x60f3cea9>
+ 30c:	2e726570 	umax	v16.4h, v11.4h, v18.4h
+ 310:	00010053 	.inst	0x00010053 ; undefined
+ 314:	09000000 	.inst	0x09000000 ; undefined
+ 318:	00000002 	udf	#2
+ 31c:	00000061 	udf	#97
+ 320:	21211800 	.inst	0x21211800 ; undefined
+ 324:	00030222 	.inst	0x00030222 ; undefined
+ 328:	Address 0x0000000000000328 is out of bounds.
+
 
 Disassembly of section .debug_str:
 
@@ -1010,13 +1002,13 @@ Disassembly of section .debug_frame:
   44:	00000000 	udf	#0
   48:	61000084 	.inst	0x61000084 ; undefined
   4c:	00000000 	udf	#0
-  50:	0000008c 	udf	#140
+  50:	00000088 	udf	#136
   54:	00000000 	udf	#0
   58:	9d500e41 	.inst	0x9d500e41 ; undefined
   5c:	42099e0a 	.inst	0x42099e0a ; undefined
   60:	07940893 	.inst	0x07940893 ; undefined
-  64:	96069543 	bl	fffffffff81a5570 <stack_end+0xffffffff971a53e0>
-  68:	04974205 	mla	z5.s, p0/m, z16.s, z23.s
+  64:	96069542 	bl	fffffffff81a556c <stack_end+0xffffffff971a53dc>
+  68:	04974305 	mla	z5.s, p0/m, z24.s, z23.s
   6c:	99430398 	ldapur	w24, [x28, #48]
   70:	de0a4802 	.inst	0xde0a4802 ; undefined
   74:	d8d7d9dd 	prfm	#0x1d, fffffffffffafbac <stack_end+0xffffffff9efafa1c>

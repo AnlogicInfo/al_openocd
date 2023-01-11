@@ -743,7 +743,7 @@ static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* 
 
 int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
 {
-    struct target *trans_target = get_target("al9000.ahb");
+    struct target *trans_target = get_target("al9000.a35.0");
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
     struct aarch64_algorithm aarch64_info;
@@ -758,15 +758,18 @@ int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, t
     if(trans_target == NULL)
     {
         LOG_ERROR("get transtarget fail");
+        return ERROR_FAIL;
+    }
+    else{
+        if(trans_target->state != TARGET_HALTED)
+        {
+            LOG_DEBUG("halt trans target");
+            target_halt(trans_target);
+            retval = target_wait_state(trans_target, TARGET_HALTED, 500);
+        }
     }
 
-    LOG_INFO("dwcmshc async write image");
-
     dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, ASYNC_TRANS);
-    // wa_size = target_get_working_area_avail(target);
-
-    // loader->image_block_cnt = image_size;
-    // loader->data_size = wa_size - loader->code_area;
     target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, addr);
 
     destroy_reg_param(&loader->reg_params[0]);
@@ -775,7 +778,7 @@ int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, t
     destroy_reg_param(&loader->reg_params[3]);
     destroy_reg_param(&loader->reg_params[4]);
 
-    target_free_working_area_restore(emmc->target, dwcmshc_emmc->loader.copy_area, 0);
+    target_free_working_area_restore(emmc->target, dwcmshc_emmc->loader.copy_area, 1);
     return retval;
 }
 

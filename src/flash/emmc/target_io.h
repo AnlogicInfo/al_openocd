@@ -6,6 +6,7 @@
 #include "core.h"
 
 #include <helper/binarybuffer.h>
+#include <helper/time_support.h>
 #include <target/arm.h>
 #include <target/armv7m.h>
 #include <target/aarch64.h>

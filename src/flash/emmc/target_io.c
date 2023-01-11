@@ -1,6 +1,7 @@
 
 #include "target_io.h"
 
+
 int target_set_arch_info(struct target_emmc_loader *loader, void* arm_info)
 {
     struct target *target = loader->target;
@@ -62,7 +63,7 @@ int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs s
     loader->code_area = (code_size/block_size +1) * block_size;
     loader->code_size = code_size;
 
-    LOG_INFO("code size %x padded size %x", code_size, loader->code_area);
+    // LOG_INFO("code size %x padded size %x", code_size, loader->code_area);
 
     return ERROR_OK;
 }
@@ -125,13 +126,11 @@ static int target_set_wa(struct target_emmc_loader *loader, uint8_t *data, targe
     buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, data_wa);
     buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, loader->data_size);
 
-    LOG_INFO("sizeof reg param %llx", sizeof(loader->reg_params[0].value));
-    
 
-    LOG_INFO("target set reg parm ctrl base %llx",*(uint64_t *) loader->reg_params[0].value);
-    LOG_INFO("target set reg parm addr %llx", *(uint64_t *) loader->reg_params[1].value);
-    LOG_INFO("target set reg parm buf base %llx", *(uint64_t *) loader->reg_params[2].value);
-    LOG_INFO("target set reg parm size %llx", *(uint64_t *) loader->reg_params[3].value);
+    // LOG_INFO("target set reg parm ctrl base %llx",*(uint64_t *) loader->reg_params[0].value);
+    // LOG_INFO("target set reg parm addr %llx", *(uint64_t *) loader->reg_params[1].value);
+    // LOG_INFO("target set reg parm buf base %llx", *(uint64_t *) loader->reg_params[2].value);
+    // LOG_INFO("target set reg parm size %llx", *(uint64_t *) loader->reg_params[3].value);
 
     return ERROR_OK;
 }
@@ -181,11 +180,11 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint32_t block
     buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, fifo_end);
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, addr);
 
-    LOG_INFO("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
-    LOG_INFO("target set reg parm img block cnt %x" , loader->image_block_cnt);
-    LOG_INFO("target set reg parm buf start %x", loader->buf_start);
-    LOG_INFO("target set reg parm buf end %llx", fifo_end);
-    LOG_INFO("target set reg parm addr %llx", addr);
+    // LOG_INFO("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
+    // LOG_INFO("target set reg parm img block cnt %x" , loader->image_block_cnt);
+    // LOG_INFO("target set reg parm buf start %x", loader->buf_start);
+    // LOG_INFO("target set reg parm buf end %llx", fifo_end);
+    // LOG_INFO("target set reg parm addr %llx", addr);
     return ERROR_OK;
 }
 
