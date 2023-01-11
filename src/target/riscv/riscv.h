@@ -87,10 +87,9 @@ typedef struct {
 struct riscv_algorithm {
 	/** Registers with numbers below and including this number will be backuped before algo start.
 	 * Set to GDB_REGNO_COUNT-1 to save all existing registers. @see enum gdb_regno. */
-	struct reg *reg_pc;
 	uint64_t saved_pc;
-	uint64_t current_mstatus;
-	uint64_t saved_regs[32];
+	uint64_t mstatus;
+	uint64_t context[32];
 };
 
 typedef struct {

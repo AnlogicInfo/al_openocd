@@ -2,14 +2,17 @@
 #include "target_io.h"
 
 
-int target_set_arch_info(struct target_emmc_loader *loader, void* arm_info)
+int target_set_arch_info(struct target_emmc_loader *loader, struct aarch64_algorithm* arm_info, struct riscv_algorithm* riscv_info)
 {
     struct target *target = loader->target;
     if(strncmp(target_name(target), "riscv", 4) == 0)
     {
         loader->arch = TARGET_RISCV;        
+        loader->arch_info = riscv_info;
     }
     else{
+        arm_info->common_magic = AARCH64_COMMON_MAGIC;
+        arm_info->core_mode = ARMV8_64_EL0T;
         loader->arch = TARGET_AARCH64;
         loader->arch_info = arm_info;
     }

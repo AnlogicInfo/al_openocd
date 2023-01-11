@@ -2994,7 +2994,7 @@ static int aarch64_wait_algorithm(struct target *target,
 		regvalue = buf_get_u64(arm->core_cache->reg_list[i].value, 0, 64);
 		if(regvalue != aarch64_algorithm_info->context[i])
 		{
-			LOG_DEBUG("restoring register %s with value 0x%8.8" PRIx32,
+			LOG_DEBUG("restoring register %s with value 0x%8.8" PRIx64,
 					arm->core_cache->reg_list[i].name,
 				aarch64_algorithm_info->context[i]);
 			

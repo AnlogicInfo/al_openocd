@@ -1844,12 +1844,9 @@ static int riscv_start_algorithm(struct target *target,
 	struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
 	if (!reg_pc || reg_pc->type->get(reg_pc) != ERROR_OK)
 		return ERROR_FAIL;
-	uint64_t saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
-	LOG_DEBUG("saved_pc=0x%" PRIx64, saved_pc);
-	algorithm_info->saved_pc = saved_pc;
-	algorithm_info->reg_pc = reg_pc;
+	algorithm_info->saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
+	LOG_DEBUG("saved_pc=0x%" PRIx64, algorithm_info->saved_pc);
 
-	uint64_t saved_regs[32];
 	for (int i = 0; i < num_reg_params; i++) {
 		LOG_DEBUG("save %s", reg_params[i].reg_name);
 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
@@ -1871,8 +1868,7 @@ static int riscv_start_algorithm(struct target *target,
 
 		if (r->type->get(r) != ERROR_OK)
 			return ERROR_FAIL;
-		saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
-		algorithm_info->saved_regs[r->number] = saved_regs[r->number];
+		algorithm_info->context[r->number] = buf_get_u64(r->value, 0, r->size);
 
 		if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
 			if (r->type->set(r, reg_params[i].value) != ERROR_OK)
@@ -1881,11 +1877,9 @@ static int riscv_start_algorithm(struct target *target,
 	}
 
 	/* Disable Interrupts before attempting to run the algorithm. */
-	uint64_t current_mstatus;
 	uint64_t irq_disabled_mask = MSTATUS_MIE | MSTATUS_HIE | MSTATUS_SIE | MSTATUS_UIE;
-	if (riscv_interrupts_disable(target, irq_disabled_mask, &current_mstatus) != ERROR_OK)
+	if (riscv_interrupts_disable(target, irq_disabled_mask, &algorithm_info->mstatus) != ERROR_OK)
 		return ERROR_FAIL;
-	algorithm_info->current_mstatus = current_mstatus;
 
 	/* Run algorithm */
 	LOG_DEBUG("resume at 0x%" TARGET_PRIxADDR, entry_point);
@@ -1940,7 +1934,7 @@ static int riscv_wait_algorithm(struct target *target,
 	if (riscv_select_current_hart(target) != ERROR_OK)
 		return ERROR_FAIL;
 
-	struct reg *reg_pc = algorithm_info->reg_pc;
+	struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
 	if (reg_pc->type->get(reg_pc) != ERROR_OK)
 		return ERROR_FAIL;
 	uint64_t final_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
@@ -1951,8 +1945,7 @@ static int riscv_wait_algorithm(struct target *target,
 	}
 
 	/* Restore Interrupts */
-	if (riscv_interrupts_restore(target, algorithm_info->current_mstatus) != ERROR_OK)
-		return ERROR_FAIL;
+	riscv_interrupts_restore(target, algorithm_info->mstatus);
 
 	/* Restore registers */
 	uint8_t buf[8] = { 0 };
@@ -1972,7 +1965,7 @@ static int riscv_wait_algorithm(struct target *target,
 		}
 		LOG_DEBUG("restore %s", reg_params[i].reg_name);
 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-		buf_set_u64(buf, 0, info->xlen, algorithm_info->saved_regs[r->number]);
+		buf_set_u64(buf, 0, info->xlen, algorithm_info->context[r->number]);
 		if (r->type->set(r, buf) != ERROR_OK) {
 			LOG_ERROR("set(%s) failed", r->name);
 			return ERROR_FAIL;
@@ -1988,161 +1981,179 @@ static int riscv_run_algorithm(struct target *target, int num_mem_params,
 		struct reg_param *reg_params, target_addr_t entry_point,
 		target_addr_t exit_point, int timeout_ms, void *arch_info)
 {
-	RISCV_INFO(info);
+	int retval;
 
-	if (num_mem_params > 0) {
-		LOG_ERROR("Memory parameters are not supported for RISC-V algorithms.");
-		return ERROR_FAIL;
-	}
-
-	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target not halted");
-		return ERROR_TARGET_NOT_HALTED;
-	}
-
-	/* Save registers */
-	struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
-	if (!reg_pc || reg_pc->type->get(reg_pc) != ERROR_OK)
-		return ERROR_FAIL;
-	uint64_t saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
-	LOG_DEBUG("saved_pc=0x%" PRIx64, saved_pc);
-
-	uint64_t saved_regs[32];
-	for (int i = 0; i < num_reg_params; i++) {
-		LOG_DEBUG("save %s", reg_params[i].reg_name);
-		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-		if (!r) {
-			LOG_ERROR("Couldn't find register named '%s'", reg_params[i].reg_name);
-			return ERROR_FAIL;
-		}
-
-		if (r->size != reg_params[i].size) {
-			LOG_ERROR("Register %s is %d bits instead of %d bits.",
-					reg_params[i].reg_name, r->size, reg_params[i].size);
-			return ERROR_FAIL;
-		}
-
-		if (r->number > GDB_REGNO_XPR31) {
-			LOG_ERROR("Only GPRs can be use as argument registers.");
-			return ERROR_FAIL;
-		}
-
-		if (r->type->get(r) != ERROR_OK)
-			return ERROR_FAIL;
-		saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
-
-		if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
-			if (r->type->set(r, reg_params[i].value) != ERROR_OK)
-				return ERROR_FAIL;
-		}
-	}
-
-
-	/* Disable Interrupts before attempting to run the algorithm. */
-	uint64_t current_mstatus;
-	uint8_t mstatus_bytes[8] = { 0 };
-
-	LOG_DEBUG("Disabling Interrupts");
-	struct reg *reg_mstatus = register_get_by_name(target->reg_cache,
-			"mstatus", true);
-	if (!reg_mstatus) {
-		LOG_ERROR("Couldn't find mstatus!");
-		return ERROR_FAIL;
-	}
-
-	reg_mstatus->type->get(reg_mstatus);
-	current_mstatus = buf_get_u64(reg_mstatus->value, 0, reg_mstatus->size);
-	uint64_t ie_mask = MSTATUS_MIE | MSTATUS_HIE | MSTATUS_SIE | MSTATUS_UIE;
-	buf_set_u64(mstatus_bytes, 0, info->xlen, set_field(current_mstatus,
-				ie_mask, 0));
-
-	reg_mstatus->type->set(reg_mstatus, mstatus_bytes);
-
-	/* Run algorithm */
-	LOG_DEBUG("resume at 0x%" TARGET_PRIxADDR, entry_point);
-	if (riscv_resume(target, 0, entry_point, 0, 0, true) != ERROR_OK)
-		return ERROR_FAIL;
-
-	int64_t start = timeval_ms();
-	while (target->state != TARGET_HALTED) {
-		LOG_DEBUG("poll()");
-		int64_t now = timeval_ms();
-		if (now - start > timeout_ms) {
-			LOG_ERROR("Algorithm timed out after %" PRId64 " ms.", now - start);
-			riscv_halt(target);
-			old_or_new_riscv_poll(target);
-			enum gdb_regno regnums[] = {
-				GDB_REGNO_RA, GDB_REGNO_SP, GDB_REGNO_GP, GDB_REGNO_TP,
-				GDB_REGNO_T0, GDB_REGNO_T1, GDB_REGNO_T2, GDB_REGNO_FP,
-				GDB_REGNO_S1, GDB_REGNO_A0, GDB_REGNO_A1, GDB_REGNO_A2,
-				GDB_REGNO_A3, GDB_REGNO_A4, GDB_REGNO_A5, GDB_REGNO_A6,
-				GDB_REGNO_A7, GDB_REGNO_S2, GDB_REGNO_S3, GDB_REGNO_S4,
-				GDB_REGNO_S5, GDB_REGNO_S6, GDB_REGNO_S7, GDB_REGNO_S8,
-				GDB_REGNO_S9, GDB_REGNO_S10, GDB_REGNO_S11, GDB_REGNO_T3,
-				GDB_REGNO_T4, GDB_REGNO_T5, GDB_REGNO_T6,
-				GDB_REGNO_PC,
-				GDB_REGNO_MSTATUS, GDB_REGNO_MEPC, GDB_REGNO_MCAUSE,
-			};
-			for (unsigned i = 0; i < ARRAY_SIZE(regnums); i++) {
-				enum gdb_regno regno = regnums[i];
-				riscv_reg_t reg_value;
-				if (riscv_get_register(target, &reg_value, regno) != ERROR_OK)
-					break;
-				LOG_ERROR("%s = 0x%" PRIx64, gdb_regno_name(regno), reg_value);
-			}
-			return ERROR_TARGET_TIMEOUT;
-		}
-
-		int result = old_or_new_riscv_poll(target);
-		if (result != ERROR_OK)
-			return result;
-	}
-
-	/* The current hart id might have been changed in poll(). */
-	if (riscv_select_current_hart(target) != ERROR_OK)
-		return ERROR_FAIL;
-
-	if (reg_pc->type->get(reg_pc) != ERROR_OK)
-		return ERROR_FAIL;
-	uint64_t final_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
-	if (exit_point && final_pc != exit_point) {
-		LOG_ERROR("PC ended up at 0x%" PRIx64 " instead of 0x%"
-				TARGET_PRIxADDR, final_pc, exit_point);
-		return ERROR_FAIL;
-	}
-
-	/* Restore Interrupts */
-	LOG_DEBUG("Restoring Interrupts");
-	buf_set_u64(mstatus_bytes, 0, info->xlen, current_mstatus);
-	reg_mstatus->type->set(reg_mstatus, mstatus_bytes);
-
-	/* Restore registers */
-	uint8_t buf[8] = { 0 };
-	buf_set_u64(buf, 0, info->xlen, saved_pc);
-	if (reg_pc->type->set(reg_pc, buf) != ERROR_OK)
-		return ERROR_FAIL;
-
-	for (int i = 0; i < num_reg_params; i++) {
-		if (reg_params[i].direction == PARAM_IN ||
-				reg_params[i].direction == PARAM_IN_OUT) {
-			struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-			if (r->type->get(r) != ERROR_OK) {
-				LOG_ERROR("get(%s) failed", r->name);
-				return ERROR_FAIL;
-			}
-			buf_cpy(r->value, reg_params[i].value, reg_params[i].size);
-		}
-		LOG_DEBUG("restore %s", reg_params[i].reg_name);
-		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-		buf_set_u64(buf, 0, info->xlen, saved_regs[r->number]);
-		if (r->type->set(r, buf) != ERROR_OK) {
-			LOG_ERROR("set(%s) failed", r->name);
-			return ERROR_FAIL;
-		}
-	}
-
-	return ERROR_OK;
+	retval = riscv_start_algorithm(target, num_mem_params, mem_params,
+	num_reg_params, reg_params, entry_point, exit_point, arch_info);
+	if(retval == ERROR_OK)
+		retval = riscv_wait_algorithm(target, num_mem_params, mem_params, 
+		num_reg_params, reg_params, exit_point, timeout_ms, arch_info);
+	
+	return retval;
 }
+
+
+
+// static int riscv_run_algorithm(struct target *target, int num_mem_params,
+// 		struct mem_param *mem_params, int num_reg_params,
+// 		struct reg_param *reg_params, target_addr_t entry_point,
+// 		target_addr_t exit_point, int timeout_ms, void *arch_info)
+// {
+// 	RISCV_INFO(info);
+
+// 	if (num_mem_params > 0) {
+// 		LOG_ERROR("Memory parameters are not supported for RISC-V algorithms.");
+// 		return ERROR_FAIL;
+// 	}
+
+// 	if (target->state != TARGET_HALTED) {
+// 		LOG_WARNING("target not halted");
+// 		return ERROR_TARGET_NOT_HALTED;
+// 	}
+
+// 	/* Save registers */
+// 	struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
+// 	if (!reg_pc || reg_pc->type->get(reg_pc) != ERROR_OK)
+// 		return ERROR_FAIL;
+// 	uint64_t saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
+// 	LOG_DEBUG("saved_pc=0x%" PRIx64, saved_pc);
+
+// 	uint64_t saved_regs[32];
+// 	for (int i = 0; i < num_reg_params; i++) {
+// 		LOG_DEBUG("save %s", reg_params[i].reg_name);
+// 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
+// 		if (!r) {
+// 			LOG_ERROR("Couldn't find register named '%s'", reg_params[i].reg_name);
+// 			return ERROR_FAIL;
+// 		}
+
+// 		if (r->size != reg_params[i].size) {
+// 			LOG_ERROR("Register %s is %d bits instead of %d bits.",
+// 					reg_params[i].reg_name, r->size, reg_params[i].size);
+// 			return ERROR_FAIL;
+// 		}
+
+// 		if (r->number > GDB_REGNO_XPR31) {
+// 			LOG_ERROR("Only GPRs can be use as argument registers.");
+// 			return ERROR_FAIL;
+// 		}
+
+// 		if (r->type->get(r) != ERROR_OK)
+// 			return ERROR_FAIL;
+// 		saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
+
+// 		if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
+// 			if (r->type->set(r, reg_params[i].value) != ERROR_OK)
+// 				return ERROR_FAIL;
+// 		}
+// 	}
+
+
+// 	/* Disable Interrupts before attempting to run the algorithm. */
+// 	uint64_t current_mstatus;
+// 	uint8_t mstatus_bytes[8] = { 0 };
+
+// 	LOG_DEBUG("Disabling Interrupts");
+// 	struct reg *reg_mstatus = register_get_by_name(target->reg_cache,
+// 			"mstatus", true);
+// 	if (!reg_mstatus) {
+// 		LOG_ERROR("Couldn't find mstatus!");
+// 		return ERROR_FAIL;
+// 	}
+
+// 	reg_mstatus->type->get(reg_mstatus);
+// 	current_mstatus = buf_get_u64(reg_mstatus->value, 0, reg_mstatus->size);
+// 	uint64_t ie_mask = MSTATUS_MIE | MSTATUS_HIE | MSTATUS_SIE | MSTATUS_UIE;
+// 	buf_set_u64(mstatus_bytes, 0, info->xlen, set_field(current_mstatus,
+// 				ie_mask, 0));
+
+// 	reg_mstatus->type->set(reg_mstatus, mstatus_bytes);
+
+// 	/* Run algorithm */
+// 	LOG_DEBUG("resume at 0x%" TARGET_PRIxADDR, entry_point);
+// 	if (riscv_resume(target, 0, entry_point, 0, 0, true) != ERROR_OK)
+// 		return ERROR_FAIL;
+
+// 	int64_t start = timeval_ms();
+// 	while (target->state != TARGET_HALTED) {
+// 		LOG_DEBUG("poll()");
+// 		int64_t now = timeval_ms();
+// 		if (now - start > timeout_ms) {
+// 			LOG_ERROR("Algorithm timed out after %" PRId64 " ms.", now - start);
+// 			riscv_halt(target);
+// 			old_or_new_riscv_poll(target);
+// 			enum gdb_regno regnums[] = {
+// 				GDB_REGNO_RA, GDB_REGNO_SP, GDB_REGNO_GP, GDB_REGNO_TP,
+// 				GDB_REGNO_T0, GDB_REGNO_T1, GDB_REGNO_T2, GDB_REGNO_FP,
+// 				GDB_REGNO_S1, GDB_REGNO_A0, GDB_REGNO_A1, GDB_REGNO_A2,
+// 				GDB_REGNO_A3, GDB_REGNO_A4, GDB_REGNO_A5, GDB_REGNO_A6,
+// 				GDB_REGNO_A7, GDB_REGNO_S2, GDB_REGNO_S3, GDB_REGNO_S4,
+// 				GDB_REGNO_S5, GDB_REGNO_S6, GDB_REGNO_S7, GDB_REGNO_S8,
+// 				GDB_REGNO_S9, GDB_REGNO_S10, GDB_REGNO_S11, GDB_REGNO_T3,
+// 				GDB_REGNO_T4, GDB_REGNO_T5, GDB_REGNO_T6,
+// 				GDB_REGNO_PC,
+// 				GDB_REGNO_MSTATUS, GDB_REGNO_MEPC, GDB_REGNO_MCAUSE,
+// 			};
+// 			for (unsigned i = 0; i < ARRAY_SIZE(regnums); i++) {
+// 				enum gdb_regno regno = regnums[i];
+// 				riscv_reg_t reg_value;
+// 				if (riscv_get_register(target, &reg_value, regno) != ERROR_OK)
+// 					break;
+// 				LOG_ERROR("%s = 0x%" PRIx64, gdb_regno_name(regno), reg_value);
+// 			}
+// 			return ERROR_TARGET_TIMEOUT;
+// 		}
+
+// 		int result = old_or_new_riscv_poll(target);
+// 		if (result != ERROR_OK)
+// 			return result;
+// 	}
+
+// 	/* The current hart id might have been changed in poll(). */
+// 	if (riscv_select_current_hart(target) != ERROR_OK)
+// 		return ERROR_FAIL;
+
+// 	if (reg_pc->type->get(reg_pc) != ERROR_OK)
+// 		return ERROR_FAIL;
+// 	uint64_t final_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
+// 	if (exit_point && final_pc != exit_point) {
+// 		LOG_ERROR("PC ended up at 0x%" PRIx64 " instead of 0x%"
+// 				TARGET_PRIxADDR, final_pc, exit_point);
+// 		return ERROR_FAIL;
+// 	}
+
+// 	/* Restore Interrupts */
+// 	LOG_DEBUG("Restoring Interrupts");
+// 	buf_set_u64(mstatus_bytes, 0, info->xlen, current_mstatus);
+// 	reg_mstatus->type->set(reg_mstatus, mstatus_bytes);
+
+// 	/* Restore registers */
+// 	uint8_t buf[8] = { 0 };
+// 	buf_set_u64(buf, 0, info->xlen, saved_pc);
+// 	if (reg_pc->type->set(reg_pc, buf) != ERROR_OK)
+// 		return ERROR_FAIL;
+
+// 	for (int i = 0; i < num_reg_params; i++) {
+// 		if (reg_params[i].direction == PARAM_IN ||
+// 				reg_params[i].direction == PARAM_IN_OUT) {
+// 			struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
+// 			if (r->type->get(r) != ERROR_OK) {
+// 				LOG_ERROR("get(%s) failed", r->name);
+// 				return ERROR_FAIL;
+// 			}
+// 			buf_cpy(r->value, reg_params[i].value, reg_params[i].size);
+// 		}
+// 		LOG_DEBUG("restore %s", reg_params[i].reg_name);
+// 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
+// 		buf_set_u64(buf, 0, info->xlen, saved_regs[r->number]);
+// 		if (r->type->set(r, buf) != ERROR_OK) {
+// 			LOG_ERROR("set(%s) failed", r->name);
+// 			return ERROR_FAIL;
+// 		}
+// 	}
+
+// 	return ERROR_OK;
+// }
 
 static int riscv_checksum_memory(struct target *target,
 		target_addr_t address, uint32_t count,
