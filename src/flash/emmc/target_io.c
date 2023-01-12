@@ -5,35 +5,45 @@
 int target_set_arch_info(struct target_emmc_loader *loader, struct aarch64_algorithm* arm_info, struct riscv_algorithm* riscv_info)
 {
     struct target *target = loader->target;
+    int arch_type = -1;
     if(strncmp(target_name(target), "riscv", 4) == 0)
     {
-        loader->arch = TARGET_RISCV;        
+        arch_type = TARGET_RISCV;
         loader->arch_info = riscv_info;
+        strcpy(loader->trans_name, "al9000.rpu");
     }
     else{
         arm_info->common_magic = AARCH64_COMMON_MAGIC;
         arm_info->core_mode = ARMV8_64_EL0T;
-        loader->arch = TARGET_AARCH64;
+        arch_type = TARGET_AARCH64;
         loader->arch_info = arm_info;
+        strcpy(loader->trans_name, "al9000.a35.0");
     }
-    return ERROR_OK;
+    return arch_type;
 }
 
 
-int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs srcs, struct reg_param* reg_params, uint32_t block_size)
+int target_set_code(int arch_type, struct target_emmc_loader *loader, struct target_code_srcs sync_srcs, struct target_code_srcs async_srcs, uint8_t async)
 {
     struct target *target = loader->target;
-    uint32_t code_size;    
-    if(loader->arch == TARGET_RISCV)
+    struct target_code_srcs srcs;
+    uint32_t code_size;
+
+    if(async == ASYNC_TRANS)
+        srcs = async_srcs;
+    else
+        srcs = sync_srcs;
+
+    if(arch_type == TARGET_RISCV)
     {
         loader->xlen = riscv_xlen(target);
-        init_reg_param(&reg_params[0], "a0", loader->xlen, PARAM_IN_OUT);
-        init_reg_param(&reg_params[1], "a1", loader->xlen, PARAM_OUT);
-        init_reg_param(&reg_params[2], "a2", loader->xlen, PARAM_OUT);
-        init_reg_param(&reg_params[3], "a3", loader->xlen, PARAM_OUT);
-        if(loader->async == ASYNC_TRANS)
+        init_reg_param(&loader->reg_params[0], "a0", loader->xlen, PARAM_IN_OUT);
+        init_reg_param(&loader->reg_params[1], "a1", loader->xlen, PARAM_OUT);
+        init_reg_param(&loader->reg_params[2], "a2", loader->xlen, PARAM_OUT);
+        init_reg_param(&loader->reg_params[3], "a3", loader->xlen, PARAM_OUT);
+        if(async == ASYNC_TRANS)
         {
-            init_reg_param(&reg_params[4], "a4", loader->xlen, PARAM_OUT);
+            init_reg_param(&loader->reg_params[4], "a4", loader->xlen, PARAM_OUT);
         }
 
         if(loader->xlen == 32)
@@ -50,20 +60,20 @@ int target_sel_code(struct target_emmc_loader *loader, struct target_code_srcs s
     else
     {
         loader->xlen = 64;
-        init_reg_param(&reg_params[0], "x0", loader->xlen, PARAM_IN_OUT);
-        init_reg_param(&reg_params[1], "x1", loader->xlen, PARAM_OUT);
-        init_reg_param(&reg_params[2], "x2", loader->xlen, PARAM_OUT);
-        init_reg_param(&reg_params[3], "x3", loader->xlen, PARAM_OUT);
-        if(loader->async == ASYNC_TRANS)
+        init_reg_param(&loader->reg_params[0], "x0", loader->xlen, PARAM_IN_OUT);
+        init_reg_param(&loader->reg_params[1], "x1", loader->xlen, PARAM_OUT);
+        init_reg_param(&loader->reg_params[2], "x2", loader->xlen, PARAM_OUT);
+        init_reg_param(&loader->reg_params[3], "x3", loader->xlen, PARAM_OUT);
+        if(async == ASYNC_TRANS)
         {
-            init_reg_param(&reg_params[4], "x4", loader->xlen, PARAM_OUT);
+            init_reg_param(&loader->reg_params[4], "x4", loader->xlen, PARAM_OUT);
         }
 
         loader->code_src = srcs.aarch64_bin;
         code_size = srcs.aarch64_size;
     }
-
-    loader->code_area = (code_size/block_size +1) * block_size;
+    loader->code_area = DIV_ROUND_UP(code_size, loader->block_size) * loader->block_size;
+    // loader->code_area = (code_size/loader->block_size +1) * loader->block_size;
     loader->code_size = code_size;
 
     // LOG_INFO("code size %x padded size %x", code_size, loader->code_area);
@@ -191,6 +201,29 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint32_t block
     return ERROR_OK;
 }
 
+struct target* target_emmc_init_trans(char* trans_name)
+{
+    struct target* trans_target;
+    int retval = ERROR_OK;
+    trans_target = get_target(trans_name);
+    if(trans_target == NULL)
+    {
+        LOG_ERROR("get transtarget fail");
+    }
+    else{
+        if(trans_target->state != TARGET_HALTED)
+        {
+            LOG_DEBUG("halt trans target");
+            target_halt(trans_target);
+            retval = target_wait_state(trans_target, TARGET_HALTED, 500);
+        }
+        if(retval == ERROR_OK)
+            return trans_target;
+    }
+
+    return NULL;
+}
+
 int target_emmc_write_async(struct target* trans_target, struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr)
 {
     struct target *exec_target = loader->target;
@@ -202,8 +235,17 @@ int target_emmc_write_async(struct target* trans_target, struct target_emmc_load
         5, loader->reg_params, 
         loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
+    destroy_reg_param(&loader->reg_params[0]);
+	destroy_reg_param(&loader->reg_params[1]);
+	destroy_reg_param(&loader->reg_params[2]);
+    destroy_reg_param(&loader->reg_params[3]);
+    destroy_reg_param(&loader->reg_params[4]);
+
+    target_free_working_area_restore(loader->target, loader->copy_area, 1);
+
     if(retval != ERROR_OK){
         LOG_ERROR("error executing target hosted async EMMC write");
     }
+
     return retval;
 }
