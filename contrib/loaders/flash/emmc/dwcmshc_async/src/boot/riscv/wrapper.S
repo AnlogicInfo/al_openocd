@@ -11,7 +11,6 @@
 		.section .text.entry
 		.global _start
 _start:
-		jal     _start
 		lla		sp, stack_end
 		jal 	emmc_dwcmshc_async
 		ebreak

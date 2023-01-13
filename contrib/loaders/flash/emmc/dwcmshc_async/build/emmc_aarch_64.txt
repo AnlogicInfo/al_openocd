@@ -731,15 +731,15 @@ Disassembly of section .debug_line:
  22c:	23061406 	.inst	0x23061406 ; undefined
  230:	14130505 	b	4c1644 <_start-0x60b3e9bc>
  234:	0f060105 	.inst	0x0f060105 ; undefined
- 238:	0f031005 	fmla	v5.4h, v0.4h, v3.h[0]
+ 238:	0e031005 	tbx	v5.8b, {v0.16b}, v3.8b
  23c:	060a05ac 	.inst	0x060a05ac ; undefined
- 240:	05207403 	trn2	z3.b, z0.b, z0.b
- 244:	13030601 	sbfiz	w1, w16, #29, #2
+ 240:	05207503 	trn2	z3.b, z8.b, z0.b
+ 244:	12030601 	and	w1, w16, #0x60000000
  248:	2020202e 	.inst	0x2020202e ; undefined
  24c:	06090520 	.inst	0x06090520 ; undefined
- 250:	052e6f03 	uzp2	z3.b, z24.b, z14.b
+ 250:	052e7003 	trn1	z3.b, z0.b, z14.b
  254:	0501061a 	orr	z26.b, z26.b, #0x1
- 258:	4c400609 	ld4	{v9.8h-v12.8h}, [x16]
+ 258:	4c3f0609 	.inst	0x4c3f0609 ; undefined
  25c:	01061005 	.inst	0x01061005 ; undefined
  260:	21060905 	.inst	0x21060905 ; undefined
  264:	01060c05 	.inst	0x01060c05 ; undefined
