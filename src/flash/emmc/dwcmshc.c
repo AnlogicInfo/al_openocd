@@ -77,14 +77,14 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
     return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
 
-static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, uint32_t addr, int size, int sync)
+static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, uint32_t addr, int size)
 {
-    int retval;
-    if(sync == ASYNC_TRANS)
+    int retval = ERROR_OK;
+
+    retval = async_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
+    if(retval != ERROR_OK)
     {
-        retval = async_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
-    }
-    else {
+        LOG_ERROR("async write fail, try sync write");
         retval = fast_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
     }
 

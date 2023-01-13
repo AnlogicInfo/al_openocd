@@ -233,11 +233,14 @@ struct target *target_emmc_init_trans(char* trans_name)
 
 int target_emmc_write_async(struct target* trans_target, struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr)
 {
+
     struct target *exec_target = loader->target;
     int retval = ERROR_OK;
     retval = target_set_wa_async(loader, loader->block_size, addr);
+    if(retval != ERROR_OK)
+        return ERROR_FAIL;
 
-    retval = target_run_async_algorithm(trans_target, exec_target, data, loader->image_block_cnt, 512, 
+    retval = target_run_async_algorithm(trans_target, exec_target, data, loader->image_block_cnt, loader->block_size, 
         0, NULL,
         5, loader->reg_params, 
         loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
@@ -253,6 +256,5 @@ int target_emmc_write_async(struct target* trans_target, struct target_emmc_load
     if(retval != ERROR_OK){
         LOG_ERROR("error executing target hosted async EMMC write");
     }
-
-    return retval;
+    return ERROR_FAIL;
 }
