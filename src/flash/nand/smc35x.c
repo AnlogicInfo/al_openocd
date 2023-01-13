@@ -22,6 +22,7 @@ struct smc35x_nand_controller{
 	uint32_t cmd_phase_data;
 	uint64_t data_phase_addr;
 	nand_size_type nand_size;
+	bool nand_init;
 };
 
 static const uint8_t riscv32_bin[] = {
@@ -264,7 +265,7 @@ int smc35x_read_parameter(struct nand_device *nand, nand_size_type *nand_size)
 	smc35x_reset(nand);
 
 	smc35x_command(nand, ONFI_CMD_READ_PARAMETER1);
-	target_write_u32(target, NAND_BASE, 0x00);
+	// target_write_u32(target, NAND_BASE, 0x00);
 
 	for (index = 0; index < 256; index++) {
 		target_read_u8(target, smc35x_info->data_phase_addr, &temp[index]);
@@ -382,6 +383,9 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 		return ERROR_NAND_OPERATION_FAILED;
 	}
 
+	if (smc35x_info->nand_init) {
+		return SmcSuccess;
+	}
 	smc35x_command(nand, NAND_CMD_RESET);
 	smc35x_reset(nand);
 	smc35x_command(nand, NAND_CMD_READID);
@@ -474,6 +478,7 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 			}
 		}
 	}
+	smc35x_info->nand_init = true;
 
 	return SmcSuccess;
 }
@@ -495,17 +500,12 @@ uint8_t *smc35x_oob_init(struct nand_device *nand, uint8_t *oob, uint32_t *size,
 
 	return oob;
 }
-int smc35x_ecc_calculate(struct nand_device *nand, uint8_t *ecc_data, uint8_t ecc_data_nums)
+uint8_t smc35x_ecc_calculate(struct nand_device *nand, uint8_t *ecc_data, uint8_t ecc_data_nums)
 {
 	uint8_t count = 0, status = 0;
 	volatile uint8_t ecc_reg = 0;
 	uint32_t ecc_value = 0;
 	struct target *target = nand->target;
-
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
-		return ERROR_NAND_OPERATION_FAILED;
-	}
 
 	/* Check busy signal if it is busy to poll*/
 	do {
@@ -672,7 +672,11 @@ int smc35x_read_page_ecc1(struct nand_device *nand, uint32_t page, uint8_t *data
 			/* Page size 256 bytes & 4096 bytes not supported by ECC block */
 			return SmcHwReadSizeOver;
 	}
-	smc35x_ecc_calculate(nand, eccData, eccDataNums);
+	status = smc35x_ecc_calculate(nand, eccData, eccDataNums);
+	if(status != ERROR_OK) {
+		return status;
+	}
+
 	for (index = 0; index < eccDataNums; ++index) {
 		LOG_INFO("calculate ecc: %d ", eccData[index]);
 	}
@@ -1410,7 +1414,7 @@ static int smc35x_init(struct nand_device *nand)
 	smc35x_nand_init(nand);
 	// retval = smc35x_nand_init(nand);
 	// if (retval != ERROR_OK) {
-	//  LOG_INFO(err code: retval);
+	//  LOG_INFO(unsupported nand, err code: retval);
 	// 	return retval;
 	// }
 	
