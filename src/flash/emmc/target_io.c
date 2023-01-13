@@ -10,7 +10,7 @@ int target_set_arch_info(struct target_emmc_loader *loader, struct aarch64_algor
     {
         arch_type = TARGET_RISCV;
         loader->arch_info = riscv_info;
-        strcpy(loader->trans_name, "al9000.rpu");
+        strcpy(loader->trans_name, "riscv.cpu");
     }
     else{
         arm_info->common_magic = AARCH64_COMMON_MAGIC;
@@ -193,19 +193,26 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint32_t block
     buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, fifo_end);
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, addr);
 
-    // LOG_INFO("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
-    // LOG_INFO("target set reg parm img block cnt %x" , loader->image_block_cnt);
-    // LOG_INFO("target set reg parm buf start %x", loader->buf_start);
-    // LOG_INFO("target set reg parm buf end %llx", fifo_end);
-    // LOG_INFO("target set reg parm addr %llx", addr);
+    LOG_DEBUG("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
+    LOG_DEBUG("target set reg parm img block cnt %x" , loader->image_block_cnt);
+    LOG_DEBUG("target set reg parm buf start %x", loader->buf_start);
+    LOG_DEBUG("target set reg parm buf end %llx", fifo_end);
+    LOG_DEBUG("target set reg parm addr %llx", addr);
     return ERROR_OK;
 }
 
-struct target* target_emmc_init_trans(char* trans_name)
+struct target *target_emmc_init_trans(char* trans_name)
 {
-    struct target* trans_target;
+    struct target *trans_target;
     int retval = ERROR_OK;
     trans_target = get_target(trans_name);
+
+    // if(strcmp(trans_name, "riscv.cpu") == 0)
+    // {
+    //     RISCV_INFO(r);
+
+    // }
+
     if(trans_target == NULL)
     {
         LOG_ERROR("get transtarget fail");

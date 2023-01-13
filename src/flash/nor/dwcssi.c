@@ -857,6 +857,34 @@ err:
     return ERROR_OK;
 }
 
+
+
+// static int dwcssic_init_loader(struct flash_bank *bank, struct reg_param *reg_params)
+// {
+//     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+//     struct target_loader *loader = &dwcssi_info->loader;
+
+//     loader->reg_params = reg_params
+
+//     target_int_arch(loader);
+// }
+
+// static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+// {
+//     struct target_loader *loader;
+//     struct reg_param reg_params[5];
+
+
+//     count = flash_write_boundary_check(bank, offset, count);
+
+//     dwcssi_init_loader();
+
+//     target_flash_write_async(loader, buffer, offset);
+
+//     free(loader->arch_info);
+//     return ERROR_OK;
+// }
+
 static int dwcssi_reset_flash(struct flash_bank *bank)
 {
     int flash_err;

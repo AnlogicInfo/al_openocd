@@ -974,8 +974,8 @@ static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32
 	fifo->wp = fifo->fifo_start_addr;
 	fifo->rp = fifo->fifo_start_addr;
 
-	// LOG_INFO("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
-	// LOG_INFO("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
+	LOG_DEBUG("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
+	LOG_DEBUG("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
 
 	retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 	if(retval != ERROR_OK)

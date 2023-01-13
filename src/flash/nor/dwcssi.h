@@ -14,9 +14,7 @@
 #include "imp.h"
 #include "spi.h"
 #include <jtag/jtag.h>
-#include <helper/time_support.h>
-#include <target/algorithm.h>
-#include "target/riscv/riscv.h"
+#include <flash/target_io.h>
 
 
 /*Register offsets*/

@@ -60,8 +60,8 @@ READELF   = $(CROSS_COMPILE)readelf
 INC_PATH += $(WORK_DIR)/src/boot/$(ISA)
 INCFLAGS += $(addprefix -I, $(INC_PATH))
 
-CFLAGS   += -nostdlib -fno-builtin  -nostartfiles -Wall -Werror  -Os -fPIC -Wunused-result -g $(INCFLAGS)
-ASFLAGS  += -MMD $(INCFLAGS)
+CFLAGS   += $(COMMON_FLAGS) -nostdlib -fno-builtin  -nostartfiles -Wall -Werror  -Os -fPIC -Wunused-result -g $(INCFLAGS)
+ASFLAGS  += $(COMMON_FLAGS) -MMD $(INCFLAGS)
 
 $(info # Compiler $(CROSS_COMPILE))
 
@@ -74,7 +74,7 @@ $(DST_DIR)/%.o: %.S
 	@$(CC) $(CFLAGS) -c -o $@ $(realpath $<)
 
 $(IMAGE).elf: $(OBJS)
-	$(LD) -T $(LD_SCRIPT) -o $(IMAGE).elf $(OBJS)
+	$(CC) -T $(LD_SCRIPT) $(CFLAGS) -o $(IMAGE).elf $(OBJS)
 
 
 $(IMAGE).bin: $(IMAGE).elf

@@ -31,10 +31,10 @@ struct target_emmc_loader {
     // loader targets setting
     struct target *target;
     char trans_name[32];
-    void* arch_info;
+    void *arch_info;
 
     //loader param setting
-    struct reg_param* reg_params;
+    struct reg_param *reg_params;
     target_addr_t ctrl_base;
     uint8_t xlen;
     enum target_emmc_op op;
@@ -62,11 +62,11 @@ struct target_code_srcs
     int aarch64_size;
 };
 
-int target_set_arch_info(struct target_emmc_loader *loader, struct aarch64_algorithm* arm_info, struct riscv_algorithm* riscv_info);
+int target_set_arch_info(struct target_emmc_loader *loader, struct aarch64_algorithm *arm_info, struct riscv_algorithm *riscv_info);
 int target_set_code(int arch_type, struct target_emmc_loader *loader, struct target_code_srcs sync_srcs, struct target_code_srcs async_srcs, uint8_t async);
-struct target* target_emmc_init_trans(char* trans_name);
+struct target *target_emmc_init_trans(char *trans_name);
 int target_emmc_write(struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
-int target_emmc_write_async(struct target* trans_target, struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
+int target_emmc_write_async(struct target *trans_target, struct target_emmc_loader *loader, uint8_t *data, target_addr_t addr);
 
 
 #endif

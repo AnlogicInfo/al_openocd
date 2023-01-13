@@ -691,6 +691,14 @@ static const uint8_t aarch64_bin[] = {
 #include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_aarch_64.inc"
 };
 
+static const uint8_t riscv32_async_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_riscv_32.inc"
+};
+
+static const uint8_t riscv64_async_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_riscv_64.inc"
+};
+
 static const uint8_t aarch64_async_bin[] = {
 #include "../../../contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_aarch_64.inc"
 };
@@ -707,10 +715,10 @@ static const struct target_code_srcs srcs =
 
 static const struct target_code_srcs async_srcs = 
 {
-    .riscv32_bin = riscv32_bin,
-    .riscv32_size = sizeof(riscv32_bin),
-    .riscv64_bin = riscv64_bin,
-    .riscv64_size = sizeof(riscv64_bin),
+    .riscv32_bin = riscv32_async_bin,
+    .riscv32_size = sizeof(riscv32_async_bin),
+    .riscv64_bin = riscv64_async_bin,
+    .riscv64_size = sizeof(riscv64_async_bin),
     .aarch64_bin = aarch64_async_bin,
     .aarch64_size = sizeof(aarch64_async_bin),
 
@@ -748,10 +756,11 @@ int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, t
 
     dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, &riscv_info, ASYNC_TRANS);
     trans_target = target_emmc_init_trans(loader->trans_name);
-    if(retval != ERROR_OK)
-        return retval;
+    if(trans_target == NULL)
+        return ERROR_FAIL;
 
-    return target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, addr);
+    retval = target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, addr);
+    return retval;
 }
 
 int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
