@@ -14,7 +14,7 @@
 #include "imp.h"
 #include "spi.h"
 #include <jtag/jtag.h>
-#include <flash/target_io.h>
+#include <flash/loader_io.h>
 
 
 /*Register offsets*/

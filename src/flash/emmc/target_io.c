@@ -48,7 +48,7 @@ int target_set_code(int arch_type, struct target_emmc_loader *loader, struct tar
 
         if(loader->xlen == 32)
         {
-        loader->code_src = srcs.riscv32_bin;
+            loader->code_src = srcs.riscv32_bin;
             code_size = srcs.riscv32_size;
         }
         else
