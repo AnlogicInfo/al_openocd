@@ -41,10 +41,10 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
     bank->driver_priv = dwcssi_info;
     dwcssi_info->probed = false;
     dwcssi_info->ctrl_base = base;
+    dwcssi_info->loader.params_set_priv = NULL;
     dwcssi_info->loader.exec_target = bank->target;
     dwcssi_info->loader.copy_area  = NULL;
     dwcssi_info->loader.ctrl_base = base;
-
     return ERROR_OK;
 }
 
@@ -665,15 +665,15 @@ static const uint8_t aarch64_bin[] = {
 };
 
 static const uint8_t riscv32_async_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_32.inc"
+#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_32.inc"
 };
 
 static const uint8_t riscv64_async_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_64.inc"
+#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_64.inc"
 };
 
 static const uint8_t aarch64_async_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_aarch_64.inc"
+#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_aarch_64.inc"
 };
 
 static struct code_src async_srcs[3] = 
@@ -881,6 +881,15 @@ err:
     return ERROR_OK;
 }
 
+static void dwcssi_write_cmd(struct flash_bank *bank, uint32_t offset, uint32_t count)
+{
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    
+    dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
+    dwcssi_config_tx(bank, SPI_FRF_X4_MODE, count, 0x4);
+    dwcssi_tx(bank, dwcssi_info->dev->qprog_cmd);
+    dwcssi_tx(bank, offset);
+}
 
 static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
@@ -888,16 +897,25 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
     struct flash_loader *loader = &dwcssi_info->loader;
     int retval;
 
-    count = flash_write_boundary_check(bank, offset, count);
+    loader->work_mode = ASYNC_TRANS;
+    loader->block_size = dwcssi_info->dev->pagesize;
+    loader->image_block_cnt = count/loader->block_size;
+    loader->param_cnt = 5;
 
-    retval = loader_flash_write_async(loader, async_srcs, buffer, offset, count);
+    dwcssi_write_cmd(bank, offset, count);
+    retval = loader_flash_write_async(loader, async_srcs, NULL, 
+        buffer, offset, count);
     return retval;
 }
 
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
-    int retval;
+    int retval = ERROR_FAIL;
+    count = flash_write_boundary_check(bank, offset, count);
+    if(0)
+    {
     retval = dwcssi_write_async(bank, buffer, offset, count);
+    }
     if(retval != ERROR_OK)
         retval = dwcssi_write_sync(bank, buffer, offset, count);
     

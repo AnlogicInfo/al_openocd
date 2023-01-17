@@ -44,7 +44,6 @@ struct code_src {
     int size;
 };
 
-
 struct flash_loader {
     // targets setting
     struct target *exec_target;
@@ -55,6 +54,8 @@ struct flash_loader {
     // param setting
     struct reg_param  *reg_params;
     int               param_cnt;
+    int (*params_set_priv) (struct flash_loader *loader, target_addr_t *priv_reg);
+
     target_addr_t     ctrl_base;
     uint8_t           xlen;
     int               block_size;
@@ -72,7 +73,7 @@ struct flash_loader {
 
 
 
-int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size);
+int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, target_addr_t *priv_prams, const uint8_t *data, target_addr_t addr, int image_size);
 
 #endif
 

@@ -256,5 +256,5 @@ int target_emmc_write_async(struct target* trans_target, struct target_emmc_load
     if(retval != ERROR_OK){
         LOG_ERROR("error executing target hosted async EMMC write");
     }
-    return ERROR_FAIL;
+    return ERROR_OK;
 }

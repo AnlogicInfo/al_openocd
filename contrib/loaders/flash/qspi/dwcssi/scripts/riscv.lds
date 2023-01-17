@@ -1,12 +1,12 @@
-OUTPUT_ARCH(aarch64)
+OUTPUT_ARCH( "riscv" )
 
 SECTIONS
 {
   . = 0x61000000;
-  .text : {
+  .text :
+  {
     *(.text.entry)
     *(.text)
-    }
-
+  }
   .data : { *(.data) }
 }
