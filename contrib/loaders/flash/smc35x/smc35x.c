@@ -540,7 +540,7 @@ int flash_smc35x_re(uint8_t *work_area_p, uint8_t *fifo_end, uint32_t offset, ui
 	return retval;
 }
 
-uint8_t smc35x_ecc_correct(uint8_t *eccCode, uint8_t *eccCalc, uint8_t *buf)
+static uint8_t smc35x_ecc_correct(uint8_t *eccCode, uint8_t *eccCalc, uint8_t *buf)
 {
 	uint8_t bitPos = 0;
 	uint32_t bytePos = 0;
@@ -575,7 +575,7 @@ uint8_t smc35x_ecc_correct(uint8_t *eccCode, uint8_t *eccCalc, uint8_t *buf)
 
 	/* Two bits Error */
 	if (OneHot((eccOdd | eccEven)) == SmcSuccess)
-		return SmcTwoBitsErr;
+		return SmcSuccess;
 
 	/* Multiple bits error */
 	return SmcMultipleBitsErr;
@@ -584,12 +584,19 @@ uint8_t smc35x_ecc_correct(uint8_t *eccCode, uint8_t *eccCalc, uint8_t *buf)
 int flash_smc35x_read(uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint32_t device_id, uint32_t ecc_num)
 {
 	int retval = ERROR_OK;
-	uint8_t state, nums = 0;
-    uint32_t index, status;
-	
+	uint8_t state, eccDataNums = 0, nums = 0, eccOffset = 0, count = 0;
+    uint32_t status;
+	volatile uint32_t index = 0;
+
+	uint8_t *ecc_data = buffer + page_size;
+	uint8_t *read_ecc_data = ecc_data + 12;
+
+	// uint8_t ecc_data[12] = {0};
+	// uint8_t read_ecc_data[12] = {0};
+
 	volatile uint32_t *temp_buffer;
 	uint32_t temp_length = 0;
-	uint32_t eccDataNums = 0, eccOffset = 0, *dataOffsetPtr = NULL;
+	uint32_t *dataOffsetPtr = NULL;
 	uint8_t *page_data = buffer, *pecc_data = ecc_data, *poob_data = oob_data;
 	volatile uint8_t ecc_reg = 0;
 	uint32_t ecc_value = 0;
@@ -661,14 +668,13 @@ int flash_smc35x_read(uint32_t page_size, uint8_t *buffer, uint32_t offset, uint
 				ecc_value = SMC_ReadReg(SMC_BASE + SMC_REG_ECC1_BLOCK0 + ecc_reg*4);
 				
 				if ((ecc_value) & (1 << SMC_EccBlock_ISCheakValueValid_FIELD)) {
-					for (index = 0; index < 3; ++index) {
+					for (count = 0; count < 3; ++count) {
 						*pecc_data = ecc_value & 0xFF;
 						ecc_value = ecc_value >> 8;
 						++pecc_data;
 					}
 				} else {
-					retval = SmcEccDataInvalidErr;
-					break;
+					return SmcEccDataInvalidErr;
 				}
 			}
 		}
@@ -691,11 +697,12 @@ int flash_smc35x_read(uint32_t page_size, uint8_t *buffer, uint32_t offset, uint
 		for (index = 0; index < eccDataNums; ++index)
 			read_ecc_data[index] = ~oob_data[dataOffsetPtr[index]];
 		
-		index = page_size >> 9;
+		index = page_size / NAND_ECC_BLOCK_SIZE;
 		for (; index; --index) {
-			status = smc35x_ecc_correct(&read_ecc_data[eccOffset], &ecc_data[eccOffset], page_data);
-			if (status != SUCCESS_FLAG)
-				return status;
+			state = smc35x_ecc_correct(&read_ecc_data[eccOffset], &ecc_data[eccOffset], page_data);
+			
+			if (state != SmcSuccess)
+				return state;
 
 			eccOffset += NAND_ECC_BYTES;
 			page_data += NAND_ECC_BLOCK_SIZE;
