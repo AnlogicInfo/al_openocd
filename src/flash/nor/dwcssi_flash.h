@@ -1,7 +1,7 @@
 #ifndef DWCSSI_FLASH_H
 #define DWCSSI_FALSH_H
 
-#include <flash/target_io.h>
+#include <flash/loader_io.h>
 
 // qspi flash mio defines
 #define   MIO_BASE                             0xF8803000
@@ -14,7 +14,7 @@ struct dwcssi_flash_bank {
     bool probed;
     target_addr_t ctrl_base;
     const struct flash_device *dev;
-    struct target_loader loader;
+    struct flash_loader loader;
 };
 
 typedef union sp_flash_sr1_t

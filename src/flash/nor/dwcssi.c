@@ -20,7 +20,7 @@ static const struct dwcssi_target target_devices[] = {
 FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 {
     struct dwcssi_flash_bank *dwcssi_info;
-
+    target_addr_t base;
     LOG_DEBUG("%s", __func__);
 
     if (CMD_ARGC < 6)
@@ -32,14 +32,19 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
         return ERROR_FAIL;
     }
 
+    if (CMD_ARGC >= 7) {
+        COMMAND_PARSE_ADDRESS(CMD_ARGV[6], base);
+        LOG_DEBUG("ASSUMING DWCSSI device at ctrl_base = " TARGET_ADDR_FMT,
+                base);
+    }
+
     bank->driver_priv = dwcssi_info;
     dwcssi_info->probed = false;
-    dwcssi_info->ctrl_base = 0;
-    if (CMD_ARGC >= 7) {
-        COMMAND_PARSE_ADDRESS(CMD_ARGV[6], dwcssi_info->ctrl_base);
-        LOG_DEBUG("ASSUMING DWCSSI device at ctrl_base = " TARGET_ADDR_FMT,
-                dwcssi_info->ctrl_base);
-    }
+    dwcssi_info->ctrl_base = base;
+    dwcssi_info->loader.params_set_priv = NULL;
+    dwcssi_info->loader.exec_target = bank->target;
+    dwcssi_info->loader.copy_area  = NULL;
+    dwcssi_info->loader.ctrl_base = base;
     return ERROR_OK;
 }
 
@@ -659,7 +664,26 @@ static const uint8_t aarch64_bin[] = {
 #include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_aarch_64.inc"
 };
 
-static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+static const uint8_t riscv32_async_bin[] = {
+#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_32.inc"
+};
+
+static const uint8_t riscv64_async_bin[] = {
+#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_64.inc"
+};
+
+static const uint8_t aarch64_async_bin[] = {
+#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_aarch_64.inc"
+};
+
+static struct code_src async_srcs[3] = 
+{
+    [RV64_SRC] = {riscv64_async_bin, sizeof(riscv64_async_bin)},
+    [RV32_SRC] = {riscv32_async_bin, sizeof(riscv32_async_bin)},
+    [AARCH64_SRC] = {aarch64_async_bin, sizeof(aarch64_async_bin)},
+} ;
+
+static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	struct target *target = bank->target;
     uint32_t cur_count, page_size;
@@ -857,33 +881,47 @@ err:
     return ERROR_OK;
 }
 
+static void dwcssi_write_cmd(struct flash_bank *bank, uint32_t offset, uint32_t count)
+{
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    
+    dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
+    dwcssi_config_tx(bank, SPI_FRF_X4_MODE, count, 0x4);
+    dwcssi_tx(bank, dwcssi_info->dev->qprog_cmd);
+    dwcssi_tx(bank, offset);
+}
 
+static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+{
+    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct flash_loader *loader = &dwcssi_info->loader;
+    int retval;
 
-// static int dwcssic_init_loader(struct flash_bank *bank, struct reg_param *reg_params)
-// {
-//     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-//     struct target_loader *loader = &dwcssi_info->loader;
+    loader->work_mode = ASYNC_TRANS;
+    loader->block_size = dwcssi_info->dev->pagesize;
+    loader->image_block_cnt = count/loader->block_size;
+    loader->param_cnt = 5;
 
-//     loader->reg_params = reg_params
+    dwcssi_write_cmd(bank, offset, count);
+    retval = loader_flash_write_async(loader, async_srcs, NULL, 
+        buffer, offset, count);
+    return retval;
+}
 
-//     target_int_arch(loader);
-// }
+static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+{
+    int retval = ERROR_FAIL;
+    count = flash_write_boundary_check(bank, offset, count);
+    if(0)
+    {
+    retval = dwcssi_write_async(bank, buffer, offset, count);
+    }
+    if(retval != ERROR_OK)
+        retval = dwcssi_write_sync(bank, buffer, offset, count);
+    
+    return retval;
+}
 
-// static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
-// {
-//     struct target_loader *loader;
-//     struct reg_param reg_params[5];
-
-
-//     count = flash_write_boundary_check(bank, offset, count);
-
-//     dwcssi_init_loader();
-
-//     target_flash_write_async(loader, buffer, offset);
-
-//     free(loader->arch_info);
-//     return ERROR_OK;
-// }
 
 static int dwcssi_reset_flash(struct flash_bank *bank)
 {

@@ -1,20 +1,15 @@
-/*
- * Author: Tianyi Wang (tywang@anlogic.com)
- * Date:  2022-04-27
- * Modified By: Tianyi Wang (tywang@anlogic.com>)
- * Last Modified: 2022-04-27
- */
-#ifndef OPENOCD_FLASH_NOR_DWCSSI_H
-#define OPENOCD_FLASH_NOR_DWCSSI_H
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+#ifndef LOADER_DWCSSI_H
+#define LOADER_DWCSSI_H
 
-#include "imp.h"
-#include "spi.h"
-#include <jtag/jtag.h>
-#include <flash/loader_io.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#define	SPIFLASH_BSY		0
+#define SPIFLASH_BSY_BIT	(1 << SPIFLASH_BSY)	/* WIP Bit of SPI SR */
+#define SPIFLASH_WRITE_ENABLE	0x06 /* Write Enable */
+#define SPIFLASH_READ_STATUS	0x05 /* Read Status Register */
 
 
 /*Register offsets*/
@@ -76,36 +71,6 @@
 #define     DWCSSI_SPI_CTRLR0_INST_L                  (((x) & 0x3) << 8)
 #define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES             (((x) & 0x1F) << 11)
 #define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN          (((x) & 0x1) << 30)
-
-typedef union dwcssi_spi_ctrlr0_t
-{
-    uint32_t reg_val;
-    struct
-    {
-        uint32_t TRANS_TYPE         :2;   /*[1:0]-Address and instruction transfer format.*/
-        uint32_t ADDR_L             :4;   /*[5:2]-This bit defines Length of Address to be transmitted.*/
-        uint32_t RSVD_6             :1;   /*[6]-RSVD*/
-        uint32_t XIP_MD_BIT_EN      :1;   /*[7]-Mode bits enable in XIP mode.*/
-        uint32_t INST_L             :2;   /*[9:8]-Dual/Quad/Octal mode instruction length in bits.*/
-        uint32_t RSVD_10            :1;   /*[10]-RSVD*/
-        uint32_t WAIT_CYCLES        :5;   /*[15:11]-Wait cycles in Dual/Quad/Octal mode between control frames transmit and data reception.*/
-        uint32_t SPI_DDR_EN         :1;   /*[16]-SPI DDR Enable bit.*/
-        uint32_t INST_DDR_EN        :1;   /*[17]-Instruction DDR Enable bit.*/
-        uint32_t SPI_RXDS_EN        :1;   /*[18]-Read data strobe enable bit.*/
-        uint32_t XIP_DFS_HC         :1;   /*[19]-Fix DFS for XIP transfers.*/
-        uint32_t XIP_INST_EN        :1;   /*[20]-XIP instruction enable bit.*/
-        uint32_t SSIC_XIP_CONT_XFER_EN  :1; /*[21]-Enable continuous transfer in XIP mode.*/
-        uint32_t RSVD_23_22         :2;   /*[23:22]-RSVD*/
-        uint32_t SPI_DM_EN          :1;   /*[24]-SPI data mask enable bit.*/
-        uint32_t SPI_RXDS_SIG_EN    :1;   /*[25]-Enable rxds signaling during address and command phase of Hypebus transfer.*/
-        uint32_t XIP_MBL            :2;   /*[27:26]-XIP Mode bits length.*/
-        uint32_t RSVD_28            :1;   /*[28]-RSVD*/
-        uint32_t XIP_PREFETCH_EN    :1;   /*[29]-Enables XIP pre-fetch functionality in DWC_ssi. */
-        uint32_t CLK_STRETCH_EN     :1;   /*[30]-Enables clock stretching capability in SPI transfers.*/
-        uint32_t RSVD_31            :1;   /*[31]-RSVD*/
-    } reg_fields;
-} dwcssi_spi_ctrlr0_t;
-
 /*Masks*/
 #define     DWCSSI_CTRLR0_DFS_MASK                     DWCSSI_CTRLR0_DFS(0xFFFFFFFF)     
 #define     DWCSSI_CTRLR0_TMOD_MASK                    DWCSSI_CTRLR0_TMOD(0xFFFFFFFF)    
@@ -129,59 +94,46 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES_MASK          DWCSSI_SPI_CTRLR0_WAIT_CYCLES(0xFFFFFFFF)
 #define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN_MASK       DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN(0xFFFFFFFF)
 
-#define     DISABLE                                   0
-#define     ENABLE                                    1
-
 /*DFS define*/
 #define     DFS_BYTE                                  (7)    // 7+1=8 bits=byte
+
 /*TMOD define*/
 #define     TX_AND_RX                                 0
 #define     TX_ONLY                                   1
 #define     RX_ONLY                                   2
 #define     EEPROM_READ                               3
+
 /*SPI_FRF define*/
 #define     SPI_FRF_X1_MODE                           0
 #define     SPI_FRF_X2_MODE                           1
 #define     SPI_FRF_X4_MODE                           2
 #define     SPI_FRF_X8_MODE                           3
 
-/*SPI_CTRLR0 define*/
-#define     TRANS_TYPE_TT0                            0
-#define     TRANS_TYPE_TT1                            1
-#define     TRANS_TYPE_TT2                            2
-#define     TRANS_TYPE_TT3                            3
+#define TIMEOUT   1000
 
-#define     ADDR_L24                                  6
-#define     ADDR_L28                                  7
-#define     ADDR_L32                                  8
+#define DEBUG
+#ifdef DEBUG
+#define ERROR_STACK(x)		    (x)
+#define ERROR_DWCSSI_TXWM_WAIT	0x200000
+#define ERROR_DWCSSI_TX		    0x100000
+#define ERROR_DWCSSI_RX		    0x100000
+#define ERROR_DWCSSI_WIP		0x500000
+#else
+#define ERROR_STACK(x)		    0
+#define ERROR_DWCSSI_TXWM_WAIT	1
+#define ERROR_DWCSSI_TX		    1
+#define ERROR_DWCSSI_RX		    1
+#define ERROR_DWCSSI_WIP		1
+#endif
+#define ERROR_OK                0
 
-#define     INST_L8                                   2
-
-#define     MBL_2                                     0
-#define     MBL_4                                     1
-#define     MBL_8                                     2
-#define     MBL_16                                    3
-
-/* Timeout in ms */
-#define     DWCSSI_CMD_TIMEOUT                        (100)
-#define     DWCSSI_PROBE_TIMEOUT                      (100)
-#define     DWCSSI_MAX_TIMEOUT                        (3000)
-
-
-struct dwcssi_target {
-    char *name;
-    uint32_t tap_idcode;
-    uint32_t ctrl_base;
-};
-
-#define RISCV     0
-#define ARM       1
-
-int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr);
-void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv);
-int dwcssi_tx(struct flash_bank *bank, uint32_t in);
-int dwcssi_txwm_wait(struct flash_bank* bank);
-int dwcssi_read_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, uint32_t len);
-int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t cmd, uint8_t sr1, uint8_t cr1);
+// void dwcssi_config_eeprom(volatile uint32_t *ctrl_base, uint32_t len);
+// void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv);
+// int dwcssi_txwm_wait(volatile uint32_t *ctrl_base);
+// int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base);
+uint32_t wait_fifo(uint32_t *buf_start);
+int dwcssi_txwm_wait(volatile uint32_t *ctrl_base);
+void dwcssi_tx_block(volatile uint32_t *ctrl_base, const uint8_t* in_buf, uint32_t block_size);
+int dwcssi_tx_buf(volatile uint32_t *ctrl_base, const uint8_t* in_buf, uint32_t in_cnt);
 
 #endif
