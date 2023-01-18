@@ -33,11 +33,11 @@ enum code_src_index{
     AARCH64_SRC,
 };
 
-// enum loader_op {
-//     LOADER_NONE,
-//     LOADER_READ,
-//     LOADER_WRITE,
-// };
+enum loader_op {
+    LOADER_NONE,
+    LOADER_READ,
+    LOADER_WRITE,
+};
 
 struct code_src {
     const uint8_t *bin;
@@ -50,16 +50,17 @@ struct flash_loader {
     struct target *trans_target;
     void *arch_info;
     enum work_mode work_mode;
+    enum loader_op op;
 
     // param setting
     struct reg_param  *reg_params;
     int               param_cnt;
-    int (*params_set_priv) (struct flash_loader *loader, target_addr_t *priv_reg);
+    void (*set_params_priv) (struct flash_loader *loader, target_addr_t *priv_param);
 
     target_addr_t     ctrl_base;
     uint8_t           xlen;
     int               block_size;
-    int               image_block_cnt;
+    int               image_size;
 
     // code wa setting
     struct working_area *copy_area;

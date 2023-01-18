@@ -974,8 +974,8 @@ static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32
 	fifo->wp = fifo->fifo_start_addr;
 	fifo->rp = fifo->fifo_start_addr;
 
-	LOG_DEBUG("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
-	LOG_DEBUG("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
+	LOG_INFO("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
+	LOG_INFO("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
 
 	retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 	if(retval != ERROR_OK)
@@ -1001,7 +1001,8 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 	int timeout = 0;
 	const uint8_t *buffer_orig = buffer;
 
-	while(count >0)
+	// while(count >0)
+	for(int i=0; i<1; i++)
 	{
 		retval = target_read_u32(trans_target, fifo->rp_addr, &fifo->rp);
 		if (retval != ERROR_OK) {
@@ -1009,7 +1010,7 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 			break;
 		}
 
-		LOG_DEBUG("offs 0x%zx count 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
+		LOG_INFO("offs 0x%zx remain block count 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
 			(size_t) (buffer - buffer_orig), count, fifo->wp, fifo->rp);
 
 		if (fifo->rp == 0) {
@@ -1478,6 +1479,9 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 		return retval;
 	}	
 	retval = target_async_algorithm_trans_data(trans_target, buffer, (int) count, block_size, fifo);
+
+	if(0)
+	{
 	int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
 			num_reg_params, reg_params,
 			exit_point,
@@ -1495,6 +1499,7 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 			LOG_ERROR("flash write algorithm aborted by target");
 			retval = ERROR_FLASH_OPERATION_FAILED;
 		}
+	}
 	}
 
 	free(fifo);

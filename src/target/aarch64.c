@@ -2902,9 +2902,13 @@ static int aarch64_start_algorithm(struct target *target,
 	int retval = ERROR_OK;
 
 	if(aarch64_algorithm_info->common_magic != AARCH64_COMMON_MAGIC)
+	{
+		LOG_ERROR("target invalid");
 		return ERROR_TARGET_INVALID;
+	}
 
 	if(target->state != TARGET_HALTED) {
+		LOG_ERROR("target not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 	// store context
@@ -2934,6 +2938,7 @@ static int aarch64_start_algorithm(struct target *target,
 
 	aarch64_algorithm_info->core_mode = core_mode;
 	retval = target_resume(target, 0, entry_point, 1, 1);
+	LOG_INFO("aarch64 start algorithm retval %x", retval);
 	return retval;
 }
 

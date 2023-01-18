@@ -51,9 +51,12 @@ static int loader_init_arch(struct flash_loader *loader)
         loader->trans_target = loader_init_trans_target("al9000.a35.0");
         loader->xlen = 64;
         loader->arch_info = (struct aarch64_algorithm *) malloc(sizeof(struct aarch64_algorithm));
+        ((struct aarch64_algorithm *) loader->arch_info)->common_magic = AARCH64_COMMON_MAGIC;
+        ((struct aarch64_algorithm *) loader->arch_info)->core_mode = ARMV8_64_EL0T;
     }
 
     return retval;
+
 }
 
 
@@ -61,6 +64,9 @@ static int loader_init_reg_params(struct flash_loader *loader, char **params_nam
 {
     int i;
     enum param_direction direction;
+
+    loader->reg_params = (struct reg_param *) malloc(sizeof(struct reg_param)*(loader->param_cnt));
+
     for(i=0; i<loader->param_cnt; i++)
     {
         if(i ==0)
@@ -94,6 +100,7 @@ static void loader_init_aarch64_code(struct flash_loader *loader, struct code_sr
 static int loader_init_code(struct flash_loader *loader, struct code_src *srcs)
 {
     struct target *trans_target = loader->trans_target;
+
     if(strncmp(target_name(trans_target), "riscv", 4) == 0)
     {
         loader_init_rv_code(loader, srcs);
@@ -110,7 +117,7 @@ static int loader_init_code(struct flash_loader *loader, struct code_src *srcs)
 }
 
 
-static int loader_init(struct flash_loader *loader, struct code_src *srcs, struct reg_param* reg_params, int image_size)
+static int loader_init(struct flash_loader *loader, struct code_src *srcs)
 {
 
     loader_init_arch(loader);
@@ -139,12 +146,10 @@ static int loader_code_to_wa(struct flash_loader *loader)
 			return ERROR_BUF_TOO_SMALL;
 		}
 	}
-    // LOG_INFO("workarea addr " TARGET_ADDR_FMT, (*area)->address);
+    LOG_INFO("workarea addr " TARGET_ADDR_FMT, (*area)->address);
     target_write_buffer(target, (*area)->address, loader->code_src->size, loader->code_src->bin);
 
-	return retval;
-
-
+	return wa_size;
 }
 
 static int loader_data_to_wa(struct flash_loader *loader, const uint8_t *data)
@@ -159,9 +164,10 @@ static int loader_data_to_wa(struct flash_loader *loader, const uint8_t *data)
     return ERROR_OK;
 }
 
-static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
+static int loader_set_params(struct flash_loader *loader, target_addr_t addr, target_addr_t* priv_param)
 {
-    target_addr_t buf_end;
+    target_addr_t buf_end = 0;
+
     if(loader->work_mode == SYNC_TRANS)
     {    
         buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
@@ -171,36 +177,58 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 
     }
     else{
-        loader->buf_start = loader->copy_area->address + loader->code_area;
-        loader->data_size = ((loader->data_size/loader->block_size) - 1) * loader->block_size + 8 ; //update data size for async write
         buf_end = loader->buf_start + loader->data_size;
         buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
-        buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->image_block_cnt);
-        buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, loader->buf_start);
-        buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, buf_end);
-        buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, addr);
+        buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->block_size);
+        buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, loader->image_size);
+        buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, loader->buf_start);
+        buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, buf_end);
+        buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, addr);
     }
 
+    LOG_INFO("target set %s ctrl base " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
+    LOG_INFO("target set %s block size %x" , loader->reg_params[1].reg_name, loader->block_size);
+    LOG_INFO("target set %s img block cnt %x" , loader->reg_params[2].reg_name, loader->image_size);
+    LOG_INFO("target set %s buf start %x", loader->reg_params[3].reg_name, loader->buf_start);
+    LOG_INFO("target set %s buf end %llx", loader->reg_params[4].reg_name, buf_end);
+    LOG_INFO("target set %s addr %llx", loader->reg_params[5].reg_name, addr);
+
+    if((loader->set_params_priv != NULL) && (priv_param != NULL))
+    {
+        loader->set_params_priv(loader, priv_param);
+    }
     return ERROR_OK;
 }
 
 static int loader_set_wa(struct flash_loader *loader, target_addr_t *priv_param, target_addr_t addr, const uint8_t *data)
 {
-    int retval = ERROR_OK;
-    if(!loader->code_area)
-    {
-        retval = loader_code_to_wa(loader);
+    int wa_size = -1;
 
-        if(retval != ERROR_OK)
-            return retval;
+    if(loader->op != LOADER_WRITE|| !loader->copy_area)
+    {
+        wa_size = loader_code_to_wa(loader);
     }
 
-    loader_set_params(loader, addr);
-    if((loader->params_set_priv != NULL) && (priv_param != NULL))
-        loader->params_set_priv(loader, priv_param);
+    if(wa_size < 0)
+    {
+        return ERROR_FAIL;
+    }
+    else
+    {
+        loader->op = LOADER_WRITE;
+
+        loader->buf_start = loader->copy_area->address + loader->code_area;
+        loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ; //update data size for async write
+    }
+
+    loader_set_params(loader, addr, priv_param);
 
     if(loader->work_mode == SYNC_TRANS)
+    {
+        LOG_INFO("trans data to wa");
         loader_data_to_wa(loader, data);
+    }
+
     return ERROR_OK;
 }
 
@@ -222,16 +250,18 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs, 
 
 int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, target_addr_t* priv_prams, const uint8_t *data, target_addr_t addr, int image_size)
 {
-    struct reg_param reg_params[5];
-    
-    loader_init(loader, srcs, reg_params, image_size);
+    uint32_t image_block_cnt;
+
+    image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
+
+    loader_init(loader, srcs);
     loader_set_wa(loader, priv_prams, addr, data);
-    target_run_async_algorithm(loader->trans_target, loader->exec_target, data, loader->image_block_cnt, loader->block_size,
+    target_run_async_algorithm(loader->trans_target, loader->exec_target, data, image_block_cnt, loader->block_size,
     0, NULL,
     5, loader->reg_params,
     loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
-    loader_exit(loader, 1);
+    loader_exit(loader, 0);
     return ERROR_OK;
 };
 
