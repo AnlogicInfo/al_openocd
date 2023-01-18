@@ -2938,7 +2938,6 @@ static int aarch64_start_algorithm(struct target *target,
 
 	aarch64_algorithm_info->core_mode = core_mode;
 	retval = target_resume(target, 0, entry_point, 1, 1);
-	LOG_INFO("aarch64 start algorithm retval %x", retval);
 	return retval;
 }
 

@@ -10,8 +10,8 @@
 
 #include "loader_io.h"
 
-char *rv_reg_params[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6"};
-char *aarch_reg_params[] = {"x0", "x1", "x2", "x3", "x4", "x5", "x6"};
+char *rv_reg_params[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"};
+char *aarch_reg_params[] = {"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"};
 
 struct target *loader_init_trans_target(char* name)
 {
@@ -72,7 +72,9 @@ static int loader_init_reg_params(struct flash_loader *loader, char **params_nam
         if(i ==0)
             direction = PARAM_IN_OUT;
         else
-            direction = PARAM_IN;
+            direction = PARAM_OUT;
+
+        LOG_DEBUG("init parm %x dir %x", i, direction);
         init_reg_param(&loader->reg_params[i],  params_name[i], loader->xlen, direction);
     }
     return ERROR_OK;
@@ -146,7 +148,6 @@ static int loader_code_to_wa(struct flash_loader *loader)
 			return ERROR_BUF_TOO_SMALL;
 		}
 	}
-    LOG_INFO("workarea addr " TARGET_ADDR_FMT, (*area)->address);
     target_write_buffer(target, (*area)->address, loader->code_src->size, loader->code_src->bin);
 
 	return wa_size;
@@ -186,12 +187,12 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr, ta
         buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, addr);
     }
 
-    LOG_INFO("target set %s ctrl base " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
-    LOG_INFO("target set %s block size %x" , loader->reg_params[1].reg_name, loader->block_size);
-    LOG_INFO("target set %s img block cnt %x" , loader->reg_params[2].reg_name, loader->image_size);
-    LOG_INFO("target set %s buf start %x", loader->reg_params[3].reg_name, loader->buf_start);
-    LOG_INFO("target set %s buf end %llx", loader->reg_params[4].reg_name, buf_end);
-    LOG_INFO("target set %s addr %llx", loader->reg_params[5].reg_name, addr);
+    LOG_DEBUG("target set %s ctrl base " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
+    LOG_DEBUG("target set %s block size %x" , loader->reg_params[1].reg_name, loader->block_size);
+    LOG_DEBUG("target set %s img block cnt %x" , loader->reg_params[2].reg_name, loader->image_size);
+    LOG_DEBUG("target set %s buf start %x", loader->reg_params[3].reg_name, loader->buf_start);
+    LOG_DEBUG("target set %s buf end %llx", loader->reg_params[4].reg_name, buf_end);
+    LOG_DEBUG("target set %s addr %llx", loader->reg_params[5].reg_name, addr);
 
     if((loader->set_params_priv != NULL) && (priv_param != NULL))
     {
@@ -258,7 +259,7 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
     loader_set_wa(loader, priv_prams, addr, data);
     target_run_async_algorithm(loader->trans_target, loader->exec_target, data, image_block_cnt, loader->block_size,
     0, NULL,
-    5, loader->reg_params,
+    loader->param_cnt, loader->reg_params,
     loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
     loader_exit(loader, 0);

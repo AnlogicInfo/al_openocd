@@ -890,8 +890,7 @@ err:
 static void dwcssi_set_params_priv(struct flash_loader *loader, target_addr_t *priv_param)
 {
     buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, *priv_param);
-    LOG_INFO("set priv reg param %s value %llx", loader->reg_params[6].reg_name, *priv_param);
-
+    LOG_DEBUG("set priv reg param %s value %llx", loader->reg_params[6].reg_name, *priv_param);
 }
 
 
@@ -908,7 +907,7 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
     loader->image_size = count;
     loader->param_cnt = 7;
     loader->set_params_priv = dwcssi_set_params_priv;
-    LOG_INFO("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
+    LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
 
     retval = loader_flash_write_async(loader, async_srcs, &priv_param, 
         buffer, offset, count);
@@ -919,7 +918,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 {
     int retval = ERROR_FAIL;
 
-    LOG_INFO("DWCSSI WRITE");
+    LOG_INFO("dwcssi async write");
 
     count = flash_write_boundary_check(bank, offset, count);
     retval = dwcssi_write_async(bank, buffer, offset, count);

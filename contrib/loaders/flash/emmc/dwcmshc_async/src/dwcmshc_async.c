@@ -74,7 +74,6 @@ void emmc_write_block(volatile uint32_t *ctrl_base, uint32_t offset, const uint3
 void emmc_dwcmshc_async(volatile uint32_t *ctrl_base, int block_cnt, uint32_t *work_area_start, uint32_t *work_area_end, uint32_t offset)
 {
     uint32_t* rp;
-    
     while(block_cnt > 0)
     {
         rp = (uint32_t*) emmc_wait_fifo(work_area_start);

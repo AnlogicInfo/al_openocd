@@ -193,11 +193,11 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint32_t block
     buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, fifo_end);
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, addr);
 
-    LOG_DEBUG("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
-    LOG_DEBUG("target set reg parm img block cnt %x" , loader->image_block_cnt);
-    LOG_DEBUG("target set reg parm buf start %x", loader->buf_start);
-    LOG_DEBUG("target set reg parm buf end %llx", fifo_end);
-    LOG_DEBUG("target set reg parm addr %llx", addr);
+    LOG_INFO("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
+    LOG_INFO("target set reg parm img block cnt %x" , loader->image_block_cnt);
+    LOG_INFO("target set reg parm buf start %x", loader->buf_start);
+    LOG_INFO("target set reg parm buf end %llx", fifo_end);
+    LOG_INFO("target set reg parm addr %llx", addr);
     return ERROR_OK;
 }
 

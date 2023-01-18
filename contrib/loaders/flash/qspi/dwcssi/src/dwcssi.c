@@ -16,36 +16,36 @@
 
 
 /*Register offsets*/
-#define     DWCSSI_REG_CTRLR0                         0x0
-#define     DWCSSI_REG_CTRLR1                         0x4
-#define     DWCSSI_REG_SSIENR                         0x8
-#define     DWCSSI_REG_MWCR                           0xC
-#define     DWCSSI_REG_SER                            0x10
-#define     DWCSSI_REG_BAUDR                          0x14
-#define     DWCSSI_REG_TXFTLR                         0x18
-#define     DWCSSI_REG_RXFTLR                         0x1c
-#define     DWCSSI_REG_TXFLR                          0x20
-#define     DWCSSI_REG_RXFLR                          0x24
-#define     DWCSSI_REG_SR                             0x28
-#define     DWCSSI_REG_IMR                            0x2C
-#define     DWCSSI_REG_ISR                            0x30
-#define     DWCSSI_REG_RISR                           0x34
-#define     DWCSSI_REG_TXOICR                         0x38
-#define     DWCSSI_REG_RXOICR                         0x3c
-#define     DWCSSI_REG_RXUICR                         0x40
-#define     DWCSSI_REG_MSTICR                         0x44
-#define     DWCSSI_REG_ICR                            0x48
-#define     DWCSSI_REG_DMACR                          0x4c
-#define     DWCSSI_REG_DMATDLR                        0x50
-#define     DWCSSI_REG_DMARDLR                        0x54
-#define     DWCSSI_REG_IDR                            0x58
-#define     DWCSSI_REG_SSIC_VERSION_ID                0x5c
-#define     DWCSSI_REG_DRx_START                      0x60
+#define     DWCSSI_REG_CTRLR0                         (0x0 >> 2)
+#define     DWCSSI_REG_CTRLR1                         (0x4 >> 2)
+#define     DWCSSI_REG_SSIENR                         (0x8 >> 2)
+#define     DWCSSI_REG_MWCR                           (0xC >> 2)
+#define     DWCSSI_REG_SER                            (0x10 >> 2)
+#define     DWCSSI_REG_BAUDR                          (0x14 >> 2)
+#define     DWCSSI_REG_TXFTLR                         (0x18 >> 2)
+#define     DWCSSI_REG_RXFTLR                         (0x1c >> 2)
+#define     DWCSSI_REG_TXFLR                          (0x20 >> 2)
+#define     DWCSSI_REG_RXFLR                          (0x24 >> 2)
+#define     DWCSSI_REG_SR                             (0x28 >> 2)
+#define     DWCSSI_REG_IMR                            (0x2C >> 2)
+#define     DWCSSI_REG_ISR                            (0x30 >> 2)
+#define     DWCSSI_REG_RISR                           (0x34 >> 2)
+#define     DWCSSI_REG_TXOICR                         (0x38 >> 2)
+#define     DWCSSI_REG_RXOICR                         (0x3c >> 2)
+#define     DWCSSI_REG_RXUICR                         (0x40 >> 2)
+#define     DWCSSI_REG_MSTICR                         (0x44 >> 2)
+#define     DWCSSI_REG_ICR                            (0x48 >> 2)
+#define     DWCSSI_REG_DMACR                          (0x4c >> 2)
+#define     DWCSSI_REG_DMATDLR                        (0x50 >> 2)
+#define     DWCSSI_REG_DMARDLR                        (0x54 >> 2)
+#define     DWCSSI_REG_IDR                            (0x58 >> 2)
+#define     DWCSSI_REG_SSIC_VERSION_ID                (0x5c >> 2)
+#define     DWCSSI_REG_DRx_START                      (0x60 >> 2)
 // #define     DWCSSI_REG_DRx[36]                        0x60+i*0x4, i=[0..35]
-#define     DWCSSI_REG_RX_SAMPLE_DELAY                0xf0
-#define     DWCSSI_REG_SPI_CTRLR0                     0xf4
-#define     DWCSSI_REG_DDR_DRIVE_EDGE                 0xf8
-#define     DWCSSI_REG_XIP_MODE_BITS                  0xfc
+#define     DWCSSI_REG_RX_SAMPLE_DELAY                (0xf0 >> 2)
+#define     DWCSSI_REG_SPI_CTRLR0                     (0xf4 >> 2)
+#define     DWCSSI_REG_DDR_DRIVE_EDGE                 (0xf8 >> 2)
+#define     DWCSSI_REG_XIP_MODE_BITS                  (0xfc >> 2)
 
 /*Fields*/
 #define     DWCSSI_CTRLR0_DFS(x)                      (((x) & 0xF) << 0)
@@ -345,7 +345,6 @@ int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 int dwcssi_flash_wr_en(volatile uint32_t *ctrl_base, uint8_t frf)
 {
     uint8_t tx_start_lv = 0;
-
     dwcssi_config_tx(ctrl_base, frf, 0, tx_start_lv);
     dwcssi_tx(ctrl_base, SPIFLASH_WRITE_ENABLE);
     dwcssi_txwm_wait(ctrl_base);
@@ -354,13 +353,12 @@ int dwcssi_flash_wr_en(volatile uint32_t *ctrl_base, uint8_t frf)
 
 int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info)
 {
-
-    // printf("dwcssi slow write offset %x len %x\n", offset, len);
     dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
     dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x4);
     dwcssi_tx(ctrl_base, flash_info);
     dwcssi_tx(ctrl_base, offset);
     dwcssi_tx_buf(ctrl_base, buffer, len);
+
     return dwcssi_wait_flash_idle(ctrl_base);
 }
 
