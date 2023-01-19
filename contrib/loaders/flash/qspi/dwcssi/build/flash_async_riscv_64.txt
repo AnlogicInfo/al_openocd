@@ -5,8 +5,8 @@ D:/work/2022/al9000/sw/debugger/al_openocd/contrib/loaders/flash/qspi/dwcssi/bui
 Disassembly of section .text:
 
 0000000061000000 <_start>:
-    61000000:	00000117          	auipc	sp,0x0
-    61000004:	6a810113          	addi	sp,sp,1704 # 610006a8 <stack_end>
+    61000000:	00001117          	auipc	sp,0x1
+    61000004:	82810113          	addi	sp,sp,-2008 # 61000828 <stack_end>
     61000008:	51c000ef          	jal	ra,61000524 <flash_dwcssi>
     6100000c:	00100073          	ebreak
 
@@ -487,6 +487,150 @@ Disassembly of section .data:
     6100069e:	0000                	unimp
     610006a0:	5309                	li	t1,-30
     610006a2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006a6:	0000                	unimp
+    610006a8:	5309                	li	t1,-30
+    610006aa:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006ae:	0000                	unimp
+    610006b0:	5309                	li	t1,-30
+    610006b2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006b6:	0000                	unimp
+    610006b8:	5309                	li	t1,-30
+    610006ba:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006be:	0000                	unimp
+    610006c0:	5309                	li	t1,-30
+    610006c2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006c6:	0000                	unimp
+    610006c8:	5309                	li	t1,-30
+    610006ca:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006ce:	0000                	unimp
+    610006d0:	5309                	li	t1,-30
+    610006d2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006d6:	0000                	unimp
+    610006d8:	5309                	li	t1,-30
+    610006da:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006de:	0000                	unimp
+    610006e0:	5309                	li	t1,-30
+    610006e2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006e6:	0000                	unimp
+    610006e8:	5309                	li	t1,-30
+    610006ea:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006ee:	0000                	unimp
+    610006f0:	5309                	li	t1,-30
+    610006f2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006f6:	0000                	unimp
+    610006f8:	5309                	li	t1,-30
+    610006fa:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610006fe:	0000                	unimp
+    61000700:	5309                	li	t1,-30
+    61000702:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000706:	0000                	unimp
+    61000708:	5309                	li	t1,-30
+    6100070a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100070e:	0000                	unimp
+    61000710:	5309                	li	t1,-30
+    61000712:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000716:	0000                	unimp
+    61000718:	5309                	li	t1,-30
+    6100071a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100071e:	0000                	unimp
+    61000720:	5309                	li	t1,-30
+    61000722:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000726:	0000                	unimp
+    61000728:	5309                	li	t1,-30
+    6100072a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100072e:	0000                	unimp
+    61000730:	5309                	li	t1,-30
+    61000732:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000736:	0000                	unimp
+    61000738:	5309                	li	t1,-30
+    6100073a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100073e:	0000                	unimp
+    61000740:	5309                	li	t1,-30
+    61000742:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000746:	0000                	unimp
+    61000748:	5309                	li	t1,-30
+    6100074a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100074e:	0000                	unimp
+    61000750:	5309                	li	t1,-30
+    61000752:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000756:	0000                	unimp
+    61000758:	5309                	li	t1,-30
+    6100075a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100075e:	0000                	unimp
+    61000760:	5309                	li	t1,-30
+    61000762:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000766:	0000                	unimp
+    61000768:	5309                	li	t1,-30
+    6100076a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100076e:	0000                	unimp
+    61000770:	5309                	li	t1,-30
+    61000772:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000776:	0000                	unimp
+    61000778:	5309                	li	t1,-30
+    6100077a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100077e:	0000                	unimp
+    61000780:	5309                	li	t1,-30
+    61000782:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000786:	0000                	unimp
+    61000788:	5309                	li	t1,-30
+    6100078a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100078e:	0000                	unimp
+    61000790:	5309                	li	t1,-30
+    61000792:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000796:	0000                	unimp
+    61000798:	5309                	li	t1,-30
+    6100079a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100079e:	0000                	unimp
+    610007a0:	5309                	li	t1,-30
+    610007a2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007a6:	0000                	unimp
+    610007a8:	5309                	li	t1,-30
+    610007aa:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007ae:	0000                	unimp
+    610007b0:	5309                	li	t1,-30
+    610007b2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007b6:	0000                	unimp
+    610007b8:	5309                	li	t1,-30
+    610007ba:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007be:	0000                	unimp
+    610007c0:	5309                	li	t1,-30
+    610007c2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007c6:	0000                	unimp
+    610007c8:	5309                	li	t1,-30
+    610007ca:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007ce:	0000                	unimp
+    610007d0:	5309                	li	t1,-30
+    610007d2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007d6:	0000                	unimp
+    610007d8:	5309                	li	t1,-30
+    610007da:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007de:	0000                	unimp
+    610007e0:	5309                	li	t1,-30
+    610007e2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007e6:	0000                	unimp
+    610007e8:	5309                	li	t1,-30
+    610007ea:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007ee:	0000                	unimp
+    610007f0:	5309                	li	t1,-30
+    610007f2:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007f6:	0000                	unimp
+    610007f8:	5309                	li	t1,-30
+    610007fa:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    610007fe:	0000                	unimp
+    61000800:	5309                	li	t1,-30
+    61000802:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000806:	0000                	unimp
+    61000808:	5309                	li	t1,-30
+    6100080a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100080e:	0000                	unimp
+    61000810:	5309                	li	t1,-30
+    61000812:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    61000816:	0000                	unimp
+    61000818:	5309                	li	t1,-30
+    6100081a:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
+    6100081e:	0000                	unimp
+    61000820:	5309                	li	t1,-30
+    61000822:	00000867          	jalr	a6,zero # 0 <_start-0x61000000>
 	...
 
 Disassembly of section .riscv.attributes:
@@ -1460,24 +1604,26 @@ Disassembly of section .debug_line:
  8c4:	14090303          	lb	t1,320(s2)
  8c8:	0100                	addi	s0,sp,128
  8ca:	0505                	addi	a0,a0,1
- 8cc:	00090103          	lb	sp,0(s2)
+ 8cc:	00090603          	lb	a2,0(s2)
  8d0:	0100                	addi	s0,sp,128
  8d2:	0105                	addi	sp,sp,1
  8d4:	0306                	slli	t1,t1,0x1
- 8d6:	0000097f          	radd16	s2,zero,zero
+ 8d6:	097a                	slli	s2,s2,0x1e
+ 8d8:	0000                	unimp
  8da:	0501                	addi	a0,a0,0
  8dc:	0305                	addi	t1,t1,1
- 8de:	0901                	addi	s2,s2,0
+ 8de:	0906                	slli	s2,s2,0x1
  8e0:	000c                	0xc
  8e2:	0501                	addi	a0,a0,0
  8e4:	0301                	addi	t1,t1,0
- 8e6:	0004097f          	radd16	s2,s0,zero
+ 8e6:	097a                	slli	s2,s2,0x1e
+ 8e8:	0004                	0x4
  8ea:	0301                	addi	t1,t1,0
  8ec:	0900                	addi	s0,sp,144
  8ee:	0014                	0x14
  8f0:	0501                	addi	a0,a0,0
  8f2:	0305                	addi	t1,t1,1
- 8f4:	0901                	addi	s2,s2,0
+ 8f4:	0906                	slli	s2,s2,0x1
  8f6:	0010                	0x10
  8f8:	0601                	addi	a2,a2,0
  8fa:	04090103          	lb	sp,64(s2)
@@ -2217,7 +2363,7 @@ Disassembly of section .debug_info:
  3d6:	0100                	addi	s0,sp,128
  3d8:	012a                	slli	sp,sp,0xa
  3da:	fc36                	sd	a3,56(sp)
- 3dc:	cf000003          	lb	zero,-784(zero) # fffffffffffffcf0 <stack_end+0xffffffff9efff648>
+ 3dc:	cf000003          	lb	zero,-784(zero) # fffffffffffffcf0 <stack_end+0xffffffff9efff4c8>
  3e0:	0002                	c.slli64	zero
  3e2:	1100                	addi	s0,sp,160
  3e4:	00c4                	addi	s1,sp,68
@@ -2279,7 +2425,7 @@ Disassembly of section .debug_info:
  464:	c708                	sw	a0,8(a4)
  466:	0001                	nop
  468:	0100                	addi	s0,sp,128
- 46a:	f4400123          	sb	tp,-190(zero) # ffffffffffffff42 <stack_end+0xffffffff9efff89a>
+ 46a:	f4400123          	sb	tp,-190(zero) # ffffffffffffff42 <stack_end+0xffffffff9efff71a>
  46e:	0001                	nop
  470:	d300                	sw	s0,32(a4)
  472:	08000003          	lb	zero,128(zero) # 80 <_start-0x60ffff80>
@@ -3231,12 +3377,12 @@ Disassembly of section .debug_info:
  cb6:	0000                	unimp
  cb8:	00038507          	vle8.v	v10,(t2),v0.t
  cbc:	0100                	addi	s0,sp,128
- cbe:	01d22503          	lw	a0,29(tp) # fffffffffffe601d <stack_end+0xffffffff9efe5975>
+ cbe:	01d22503          	lw	a0,29(tp) # fffffffffffe601d <stack_end+0xffffffff9efe57f5>
  cc2:	0000                	unimp
  cc4:	0e9f 0000 8407      	0x840700000e9f
  cca:	0004                	0x4
  ccc:	0100                	addi	s0,sp,128
- cce:	00953803          	ld	a6,9(a0) # fffffffffffe1009 <stack_end+0xffffffff9efe0961>
+ cce:	00953803          	ld	a6,9(a0) # fffffffffffe1009 <stack_end+0xffffffff9efe07e1>
  cd2:	0000                	unimp
  cd4:	0efe                	slli	t4,t4,0x1f
  cd6:	0000                	unimp
@@ -4216,7 +4362,7 @@ Disassembly of section .debug_loc:
       f0:	0000                	unimp
       f2:	0000                	unimp
       f4:	0001                	nop
-      f6:	b35d                	j	fffffffffffffe9c <stack_end+0xffffffff9efff7f4>
+      f6:	b35d                	j	fffffffffffffe9c <stack_end+0xffffffff9efff674>
       f8:	0004                	0x4
       fa:	0000                	unimp
       fc:	0000                	unimp

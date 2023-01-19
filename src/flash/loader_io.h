@@ -21,6 +21,9 @@
 #include <target/riscv/riscv.h>
 #include <target/algorithm.h>
 
+#define RESTORE        1
+#define NO_RESTORE     0
+
 enum work_mode 
 {
     SYNC_TRANS,

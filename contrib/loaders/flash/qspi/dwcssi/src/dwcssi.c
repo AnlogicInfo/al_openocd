@@ -353,6 +353,11 @@ int dwcssi_flash_wr_en(volatile uint32_t *ctrl_base, uint8_t frf)
 
 int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info)
 {
+    // int retval;
+    // asm volatile("ebreak");
+    // retval = reg_read(ctrl_base, DWCSSI_REG_SSIENR);
+    // return retval;
+
     dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
     dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x4);
     dwcssi_tx(ctrl_base, flash_info);

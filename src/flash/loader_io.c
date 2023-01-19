@@ -262,7 +262,7 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
     loader->param_cnt, loader->reg_params,
     loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
-    loader_exit(loader, 0);
+    loader_exit(loader, RESTORE);
     return ERROR_OK;
 };
 
