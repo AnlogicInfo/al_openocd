@@ -93,7 +93,6 @@ COMMAND_HANDLER(handle_emmc_read_block_command)
 	int retval;
 	uint32_t block_cnt = 1, byte_cnt;
 	uint8_t *buffer = NULL;
-	uint8_t failflag =0;
 
 	struct target *target = get_current_target(CMD_CTX);
 	struct emmc_device *emmc;
@@ -121,7 +120,15 @@ COMMAND_HANDLER(handle_emmc_read_block_command)
 	if (!emmc)
 	{
 		LOG_INFO("emmc get device error");
-		failflag |= 1;
+		retval = ERROR_FAIL;
+		goto fail;
+	}
+
+	if(!emmc->device)
+	{
+		LOG_INFO("emmc not probed");
+		retval = ERROR_FAIL;
+		goto fail;
 	}
 
 	retval = emmc_read_data_block(emmc, (uint32_t*) buffer, address);
@@ -129,11 +136,9 @@ COMMAND_HANDLER(handle_emmc_read_block_command)
 	if(retval == ERROR_OK)
 		target_handle_md_output(CMD, target, address, 1, byte_cnt, (uint8_t*) buffer);
 
+fail:
 	free(buffer);
-	if(failflag != 0)
-		return ERROR_FAIL;
-	else
-		return retval;
+	return retval;
 }
 
 COMMAND_HANDLER(handle_emmc_verify_command)
