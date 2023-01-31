@@ -14,6 +14,7 @@
 #include "imp.h"
 #include "spi.h"
 #include <jtag/jtag.h>
+#include <target/image.h>
 #include <flash/loader_io.h>
 
 

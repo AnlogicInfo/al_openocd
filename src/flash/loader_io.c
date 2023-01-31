@@ -165,19 +165,21 @@ static int loader_data_to_wa(struct flash_loader *loader, const uint8_t *data)
     return ERROR_OK;
 }
 
-static int loader_set_params(struct flash_loader *loader, target_addr_t addr, target_addr_t* priv_param)
+static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 {
     target_addr_t buf_end = 0;
 
     if(loader->work_mode == SYNC_TRANS)
     {    
         buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
-        buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, addr);
-        buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, loader->buf_start);
-        buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, loader->data_size);        
+        buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->block_size);
+        buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, addr);
+        buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, loader->buf_start);
+        buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, loader->data_size);        
 
     }
-    else{
+    else if(loader->work_mode == ASYNC_TRANS)
+    {
         buf_end = loader->buf_start + loader->data_size;
         buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
         buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->block_size);
@@ -186,22 +188,36 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr, ta
         buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, buf_end);
         buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, addr);
     }
-
-    LOG_DEBUG("target set %s ctrl base " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
-    LOG_DEBUG("target set %s block size %x" , loader->reg_params[1].reg_name, loader->block_size);
-    LOG_DEBUG("target set %s img block cnt %x" , loader->reg_params[2].reg_name, loader->image_size);
-    LOG_DEBUG("target set %s buf start %x", loader->reg_params[3].reg_name, loader->buf_start);
-    LOG_DEBUG("target set %s buf end %llx", loader->reg_params[4].reg_name, buf_end);
-    LOG_DEBUG("target set %s addr %llx", loader->reg_params[5].reg_name, addr);
-
-    if((loader->set_params_priv != NULL) && (priv_param != NULL))
+    else if(loader->work_mode == CRC_CHECK)
     {
-        loader->set_params_priv(loader, priv_param);
+        buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
+        buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->block_size);
+        buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, loader->data_size);        
+        buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, addr);
     }
+
+    if(loader->set_params_priv != NULL)
+    {
+        loader->set_params_priv(loader);
+    }
+
+    for(int i=0; i<loader->param_cnt; i++)
+    {
+        LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
+    }
+
+    // LOG_DEBUG("target set %s ctrl base " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
+    // LOG_DEBUG("target set %s block size %x" , loader->reg_params[1].reg_name, loader->block_size);
+    // LOG_DEBUG("target set %s img block cnt %x" , loader->reg_params[2].reg_name, loader->image_size);
+    // LOG_DEBUG("target set %s buf start %x", loader->reg_params[3].reg_name, loader->buf_start);
+    // LOG_DEBUG("target set %s buf end %llx", loader->reg_params[4].reg_name, buf_end);
+    // LOG_DEBUG("target set %s addr %llx", loader->reg_params[5].reg_name, addr);
+
     return ERROR_OK;
 }
 
-static int loader_set_wa(struct flash_loader *loader, target_addr_t *priv_param, target_addr_t addr, const uint8_t *data)
+
+static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const uint8_t *data)
 {
     int wa_size = -1;
 
@@ -222,7 +238,7 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t *priv_param,
         loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ; //update data size for async write
     }
 
-    loader_set_params(loader, addr, priv_param);
+    loader_set_params(loader, addr);
 
     if(loader->work_mode == SYNC_TRANS)
     {
@@ -249,14 +265,14 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs, 
     return ERROR_OK;
 }
 
-int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, target_addr_t* priv_prams, const uint8_t *data, target_addr_t addr, int image_size)
+int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size)
 {
     uint32_t image_block_cnt;
 
     image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
 
     loader_init(loader, srcs);
-    loader_set_wa(loader, priv_prams, addr, data);
+    loader_set_wa(loader, addr, data);
     target_run_async_algorithm(loader->trans_target, loader->exec_target, data, image_block_cnt, loader->block_size,
     0, NULL,
     loader->param_cnt, loader->reg_params,
@@ -265,5 +281,28 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
     loader_exit(loader, RESTORE);
     return ERROR_OK;
 };
+
+int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int image_size, uint32_t* target_crc)
+{
+    int retval = ERROR_OK;
+
+    loader_init(loader, srcs);
+    loader_set_wa(loader, addr, NULL);
+
+    retval = target_run_algorithm(loader->exec_target, 
+        0, NULL, loader->param_cnt, loader->reg_params, 
+        loader->copy_area->address, 
+        0, 10000,
+        loader->arch_info);
+
+    if(retval == ERROR_OK)
+    {
+        *target_crc = buf_get_u32(loader->reg_params[0].value, 0, 32);
+    }
+
+    loader_exit(loader, RESTORE);
+
+    return retval;
+}
 
 

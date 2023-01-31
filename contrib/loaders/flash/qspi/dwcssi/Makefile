@@ -27,8 +27,12 @@ SRCS     +=  $(WORK_DIR)/src/boot/$(ISA)/wrapper.S \
 			 $(WORK_DIR)/src/dwcssi.c
 ifeq ($(MODE),async)
 	SRCS += $(WORK_DIR)/src/dwcssi_async.c
-else
+else ifeq ($(MODE),sync)
 	SRCS += $(WORK_DIR)/src/dwcssi_sync.c
+else ifeq ($(MODE),crc)
+	SRCS += $(WORK_DIR)/src/dwcssi_crc.c
+else
+	$(info invalid mode input)
 endif
 				
 OBJS 		   	= $(addprefix $(DST_DIR)/, $(addsuffix .o, $(basename $(SRCS))))

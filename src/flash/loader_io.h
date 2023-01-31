@@ -28,6 +28,7 @@ enum work_mode
 {
     SYNC_TRANS,
     ASYNC_TRANS,
+    CRC_CHECK,
 };
 
 enum code_src_index{
@@ -48,6 +49,8 @@ struct code_src {
 };
 
 struct flash_loader {
+    // dev info
+    void *dev_info;
     // targets setting
     struct target *exec_target;
     struct target *trans_target;
@@ -58,7 +61,7 @@ struct flash_loader {
     // param setting
     struct reg_param  *reg_params;
     int               param_cnt;
-    void (*set_params_priv) (struct flash_loader *loader, target_addr_t *priv_param);
+    void (*set_params_priv) (struct flash_loader *loader);
 
     target_addr_t     ctrl_base;
     uint8_t           xlen;
@@ -77,7 +80,7 @@ struct flash_loader {
 
 
 
-int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, target_addr_t *priv_prams, const uint8_t *data, target_addr_t addr, int image_size);
-
+int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size);
+int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int image_size, uint32_t* target_crc);
 #endif
 

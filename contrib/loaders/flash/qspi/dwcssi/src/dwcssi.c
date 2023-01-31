@@ -198,6 +198,14 @@ void dwcssi_config_CTRLR1(volatile uint32_t *ctrl_base, uint32_t ndf)
     dwcssi_set_bits(ctrl_base, DWCSSI_REG_CTRLR1, DWCSSI_CTRLR1_NDF(ndf), DWCSSI_CTRLR1_NDF_MASK);   
 }
 
+void dwcssi_config_RXFTLR(volatile uint32_t *ctrl_base, uint32_t rft)
+{
+    uint32_t val, mask;
+    val = DWCSSI_RXFTLR_RFT(rft);
+    mask = DWCSSI_RXFTLR_RFT_MASK;
+    dwcssi_set_bits(ctrl_base, DWCSSI_REG_RXFTLR, val, mask);
+
+}
 
 void dwcssi_config_TXFTLR(volatile uint32_t *ctrl_base, uint32_t tft, uint32_t txfthr)
 {
@@ -229,6 +237,18 @@ void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint32_t tx_tot
         dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40000220, 0xFFFFFFFF);
     }
 
+    dwcssi_enable(ctrl_base);
+}
+
+void dwcssi_config_rx(volatile uint32_t *ctrl_base, uint8_t frf, uint8_t rx_ip_lv)
+{
+    dwcssi_disable(ctrl_base);
+    dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, frf, RX_ONLY);
+    dwcssi_config_RXFTLR(ctrl_base, rx_ip_lv);
+    if(frf == SPI_FRF_X4_MODE)
+    {
+        dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40004220, 0xFFFFFFFF); // wait 8 cycles for x4 read
+    }
     dwcssi_enable(ctrl_base);
 }
 
@@ -314,6 +334,16 @@ int dwcssi_rx(volatile uint32_t *ctrl_base, uint8_t *out)
     return ERROR_DWCSSI_RX;
 }
 
+int dwcssi_rx_buf(volatile uint32_t *ctrl_base, uint8_t *out_buf, uint32_t out_cnt)
+{
+    uint32_t i;
+    for(i=0; i<out_cnt; i++)
+    {
+        dwcssi_rx(ctrl_base, out_buf+i);
+    }
+    return ERROR_OK;
+}
+
 int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 {
     uint8_t rx;
@@ -367,3 +397,14 @@ int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uin
     return dwcssi_wait_flash_idle(ctrl_base);
 }
 
+int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t qread_cmd)
+{
+    dwcssi_disable(ctrl_base);
+    dwcssi_config_CTRLR1(ctrl_base, len);
+    dwcssi_enable(ctrl_base);
+    dwcssi_tx(ctrl_base, qread_cmd);
+    dwcssi_tx(ctrl_base, offset);
+    dwcssi_rx_buf(ctrl_base, buffer, len);
+
+    return ERROR_OK;
+}
