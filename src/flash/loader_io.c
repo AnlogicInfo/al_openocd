@@ -192,7 +192,7 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
     {
         buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
         buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->block_size);
-        buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, loader->data_size);        
+        buf_set_u64(loader->reg_params[2].value, 0, loader->xlen, loader->image_size);        
         buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, addr);
     }
 
@@ -203,7 +203,7 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 
     for(int i=0; i<loader->param_cnt; i++)
     {
-        LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
+        LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name , *(target_addr_t *)loader->reg_params[i].value);
     }
 
     // LOG_DEBUG("target set %s ctrl base " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);
@@ -282,7 +282,7 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
     return ERROR_OK;
 };
 
-int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int image_size, uint32_t* target_crc)
+int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, uint32_t* target_crc)
 {
     int retval = ERROR_OK;
 
@@ -300,8 +300,8 @@ int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_
         *target_crc = buf_get_u32(loader->reg_params[0].value, 0, 32);
     }
 
-    loader_exit(loader, RESTORE);
 
+    loader_exit(loader, RESTORE);
     return retval;
 }
 

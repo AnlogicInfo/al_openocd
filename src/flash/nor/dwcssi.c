@@ -374,11 +374,11 @@ static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
 
 static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out_cnt)
 {
-    uint32_t i;
-
-    for(i = 0; i < out_cnt; i++)
+    uint32_t i=0;
+    while(i < out_cnt)
     {
-        dwcssi_rx(bank, out_buf+i);
+        if(dwcssi_rx(bank, out_buf+i) == ERROR_OK)
+            i++;
         // LOG_INFO("read buf %x data %x", i, *(out_buf+i));
     }
     return ERROR_OK;
@@ -598,7 +598,7 @@ static int dwcssi_read_page(struct flash_bank *bank, uint8_t *buffer, uint32_t o
 {
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
 
-    LOG_INFO("dwcssi read x4 cmd %x", dwcssi_info->dev->qread_cmd);
+    LOG_DEBUG("dwcssi read page offset %x len %x", offset, len);
     dwcssi_disable(bank);
     dwcssi_config_CTRLR1(bank, len);
     dwcssi_enable(bank);
@@ -619,7 +619,7 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 
     page_offset = offset % page_size;
 
-    // dwcssi_flash_quad_en(bank);
+    LOG_DEBUG("read addr %x count %x", offset, count);
     dwcssi_info->dev->quad_en(bank);
     dwcssi_config_rx(bank, SPI_FRF_X4_MODE, 0x3F);
     while(count > 0)
@@ -629,7 +629,6 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
         else
             cur_count = count;
         dwcssi_read_page(bank, buffer, offset, cur_count);
-        LOG_INFO("read addr %x count %x", offset, count);
 
         page_offset = 0;
         buffer        += cur_count;
@@ -663,6 +662,7 @@ static void dwcssi_checksum_params_priv(struct flash_loader *loader)
 {
     struct dwcssi_flash_bank  *dwcssi_info = loader->dev_info;
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, dwcssi_info->dev->qread_cmd);
+    // LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, );
 }
 
 static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint32_t count, uint32_t *crc)
@@ -677,7 +677,9 @@ static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint3
     loader->param_cnt = 5;
     loader->set_params_priv = dwcssi_checksum_params_priv;
 
-    retval = loader_flash_crc(loader, crc_srcs, address, count, crc);
+    dwcssi_info->dev->quad_en(bank);
+    dwcssi_config_rx(bank, SPI_FRF_X4_MODE, 0x3F);
+    retval = loader_flash_crc(loader, crc_srcs, address, crc);
     return retval;
 }
 
@@ -685,17 +687,21 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 {
     int retval = ERROR_OK;
     uint32_t target_crc, image_crc;
+
     retval = image_calculate_checksum(buffer, count, &image_crc);
     if(retval != ERROR_OK)
         return retval;
     
     retval = dwcssi_checksum(bank, offset, count, &target_crc);
-    
+
     if(retval != ERROR_OK)
         return retval;
 
     if(~image_crc != ~target_crc)
+    {
+        LOG_DEBUG("checksum image %x target %x", , image_crc, target_crc);
         retval = ERROR_FAIL;
+    }
 
     return retval;
 }

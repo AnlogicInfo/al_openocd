@@ -933,7 +933,7 @@ int armv8_dpm_write_dirty_registers(struct arm_dpm *dpm, bool bpwp)
 		/* skip non-dirty */
 		if (!cache->reg_list[i].dirty)
 			continue;
-		// LOG_INFO("restore reg num %x name %s", i, cache->reg_list[i].name);
+		LOG_DEBUG("restore reg num %x name %s value %llx", i, cache->reg_list[i].name, *(uint64_t *)cache->reg_list[i].value);
 		/* skip all registers not on the current EL */
 		r = cache->reg_list[i].arch_info;
 		if (r->mode != ARM_MODE_ANY &&

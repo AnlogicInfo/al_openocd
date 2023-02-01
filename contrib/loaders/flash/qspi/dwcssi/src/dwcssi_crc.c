@@ -84,7 +84,9 @@ int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uin
             cur_count = count;
         crc_count = cur_count;
         i = 0;
+
         dwcssi_read_page(ctrl_base, out_buf, offset, cur_count, qread_cmd);
+		// asm volatile("hlt #0x0B");
 
         while(crc_count--)
         {
@@ -92,6 +94,8 @@ int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uin
             i++;
         }
 
+		// asm volatile("hlt #0x0B");
+		
         page_offset = 0;
         offset += cur_count;
         count -= cur_count;

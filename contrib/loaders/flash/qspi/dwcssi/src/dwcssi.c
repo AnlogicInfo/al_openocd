@@ -318,11 +318,9 @@ int dwcssi_tx_buf(volatile uint32_t *ctrl_base, const uint8_t* in_buf, uint32_t 
 int dwcssi_rx(volatile uint32_t *ctrl_base, uint8_t *out)
 {
     uint32_t value;
-    uint32_t dwcssi_sr;
 
-    dwcssi_sr = dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, 0xFFFFFFFF, 0);
     // if(dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, DWCSSI_SR_RFNE_MASK, 3))
-    if((dwcssi_sr >> 3) & 0x1) //rx fifo not empty
+    if(dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, 0xFFFFFFFF, 3)) //rx fifo not empty
     {
         value = reg_read(ctrl_base, DWCSSI_REG_DRx_START);
         // printf("rx value %x\n", value);
@@ -336,10 +334,13 @@ int dwcssi_rx(volatile uint32_t *ctrl_base, uint8_t *out)
 
 int dwcssi_rx_buf(volatile uint32_t *ctrl_base, uint8_t *out_buf, uint32_t out_cnt)
 {
-    uint32_t i;
-    for(i=0; i<out_cnt; i++)
+    uint32_t i=0;
+    int retval;
+    while(i < out_cnt)
     {
-        dwcssi_rx(ctrl_base, out_buf+i);
+        retval = dwcssi_rx(ctrl_base, out_buf+i);
+        if(retval == ERROR_OK)
+            i++;
     }
     return ERROR_OK;
 }
@@ -404,7 +405,8 @@ int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t off
     dwcssi_enable(ctrl_base);
     dwcssi_tx(ctrl_base, qread_cmd);
     dwcssi_tx(ctrl_base, offset);
-    dwcssi_rx_buf(ctrl_base, buffer, len);
+    dwcssi_txwm_wait(ctrl_base);
 
+    dwcssi_rx_buf(ctrl_base, buffer, len);
     return ERROR_OK;
 }
