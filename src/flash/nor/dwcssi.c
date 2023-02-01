@@ -699,7 +699,7 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 
     if(~image_crc != ~target_crc)
     {
-        LOG_DEBUG("checksum image %x target %x", , image_crc, target_crc);
+        LOG_DEBUG("checksum image %x target %x", image_crc, target_crc);
         retval = ERROR_FAIL;
     }
 
@@ -985,8 +985,6 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
     int retval = ERROR_FAIL;
-
-    LOG_INFO("dwcssi async write");
 
     count = flash_write_boundary_check(bank, offset, count);
     
