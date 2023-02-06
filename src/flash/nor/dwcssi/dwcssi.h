@@ -16,6 +16,7 @@
 #include <jtag/jtag.h>
 #include <target/image.h>
 #include <flash/loader_io.h>
+#include <flash/nor/dwcssi/dwcssi_flash.h>
 
 
 /*Register offsets*/

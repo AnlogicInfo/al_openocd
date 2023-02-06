@@ -28,7 +28,7 @@
 
 #include "imp.h"
 #include "spi.h"
-#include "dwcssi_flash.h"
+#include "devs.h"
 #include <jtag/jtag.h>
 
  /* Shared table of known SPI flash devices for SPI-based flash drivers. Taken

@@ -485,29 +485,6 @@ int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t cmd, uint8_t sr1, uint8
     return ERROR_OK;
 }
 
-/*flash basic functions */
-
-// static void dwcssi_flash_quad_en(struct flash_bank *bank)
-// {
-//     uint32_t flash_cr = 0, quad_en;
-//     dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-//     quad_en = (flash_cr >> 0x1) & 0x1;
-//     // LOG_INFO("flash cr %x bit %x", flash_cr, quad_en);
-//     if(quad_en == 0)
-//     {
-//         // LOG_INFO("dwcssi flash en quad");
-//         dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr | 0x2);
-//     }
-
-// }
-
-// static void dwcssi_flash_quad_disable(struct flash_bank *bank)
-// {
-//     uint32_t flash_cr;
-//     dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-//     dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr & (0x3C));
-// }
-
 static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 {
     struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;

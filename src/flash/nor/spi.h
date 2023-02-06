@@ -29,6 +29,15 @@
 
 #ifndef __ASSEMBLER__
 
+typedef struct enhance_mode_t
+{
+	uint8_t qread_cmd;
+	uint8_t qprog_cmd;
+	int (*reset) (struct flash_bank *bank);
+	int (*quad_en) (struct flash_bank *bank);
+	int (*quad_dis) (struct flash_bank *bank);
+} enhance_mode_t;
+
 /* data structure to maintain flash ids from different vendors */
 struct flash_device {
 	const char *name;
@@ -47,6 +56,7 @@ struct flash_device {
 	int (*reset) (struct flash_bank *bank);
 	int (*quad_en) (struct flash_bank *bank);
 	int (*quad_dis) (struct flash_bank *bank);
+	enhance_mode_t enhance_mode;
 };
 
 // struct flash_device_op 
@@ -55,6 +65,16 @@ struct flash_device {
 // 	int (*quad_en) (struct flash_bank* bank);
 // 	int (*quad_dis) (struct flash_bank* bank);
 // };
+
+
+#define FLASH_ENHANCE(qr, qp, flash_reset, flash_quad_en, flash_quad_dis) \
+{
+	.qread_cmd = qr, \
+	.qprog_cmd = qp, \
+	.reset = flash_reset, \
+	.quad_en = flash_quad_en, \
+	.quad_dis = flash_quad_dis, \
+}
 
 #define FLASH_ID(n, re, qr, pp, qp, es, ces, id, psize, ssize, size, flash_reset, flash_quad_en, flash_quad_dis) \
 {	                                \
