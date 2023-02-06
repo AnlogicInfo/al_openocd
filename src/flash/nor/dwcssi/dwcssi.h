@@ -11,13 +11,15 @@
 #include "config.h"
 #endif
 
-#include <nor/imp.h>
-#include <nor/spi.h>
+#include <flash/nor/imp.h>
+#include <flash/nor/spi.h>
 #include <jtag/jtag.h>
 #include <target/image.h>
 #include <flash/loader_io.h>
-#include <flash/nor/dwcssi/dwcssi_flash.h>
+#include "dwcssi_flash.h"
 
+// qspi flash mio defines
+#define     MIO_BASE                                  0xF8803000
 
 /*Register offsets*/
 #define     DWCSSI_REG_CTRLR0                         0x0

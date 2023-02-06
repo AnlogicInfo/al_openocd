@@ -19,15 +19,15 @@ static const struct dwcssi_target target_devices[] = {
 
 FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 {
-    struct dwcssi_flash_bank *dwcssi_info;
+    struct dwcssi_flash_bank *driver_priv;
     target_addr_t base;
     LOG_DEBUG("%s", __func__);
 
     if (CMD_ARGC < 6)
         return ERROR_COMMAND_SYNTAX_ERROR;
 
-    dwcssi_info = malloc(sizeof(struct dwcssi_flash_bank));
-    if(!dwcssi_info) {
+    driver_priv = malloc(sizeof(struct dwcssi_flash_bank));
+    if(!driver_priv) {
         LOG_ERROR("not enough memory");
         return ERROR_FAIL;
     }
@@ -38,15 +38,15 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
                 base);
     }
 
-    bank->driver_priv = dwcssi_info;
+    bank->driver_priv = driver_priv;
 
-    dwcssi_info->probed = false;
-    dwcssi_info->loader.dev_info = (struct dwcssi_flash_bank *) dwcssi_info;
-    dwcssi_info->ctrl_base = base;
-    dwcssi_info->loader.set_params_priv = NULL;
-    dwcssi_info->loader.exec_target = bank->target;
-    dwcssi_info->loader.copy_area  = NULL;
-    dwcssi_info->loader.ctrl_base = base;
+    driver_priv->probed = false;
+    driver_priv->loader.dev_info = (struct dwcssi_flash_bank *) driver_priv;
+    driver_priv->ctrl_base = base;
+    driver_priv->loader.set_params_priv = NULL;
+    driver_priv->loader.exec_target = bank->target;
+    driver_priv->loader.copy_area  = NULL;
+    driver_priv->loader.ctrl_base = base;
     return ERROR_OK;
 }
 
@@ -70,33 +70,33 @@ static void qspi_mio_init(struct flash_bank *bank)
 static int dwcssi_read_reg(struct flash_bank *bank, uint32_t *value, target_addr_t address)
 {
     struct target *target = bank->target;
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 
-    int result = target_read_u32(target, dwcssi_info->ctrl_base + address, value);
+    int result = target_read_u32(target, driver_priv->ctrl_base + address, value);
     if (result != ERROR_OK) {
         LOG_ERROR("dwcssi_read_reg() error at " TARGET_ADDR_FMT,
-                dwcssi_info->ctrl_base + address);
+                driver_priv->ctrl_base + address);
         return result;
     }
 
     // LOG_INFO("dwcssi_read_reg() get 0x%" PRIx32 " at " TARGET_ADDR_FMT,
-    //             *value, dwcssi_info->ctrl_base + address);
+    //             *value, driver_priv->ctrl_base + address);
     return ERROR_OK;
 }
 
 static int dwcssi_write_reg(struct flash_bank *bank, target_addr_t address, uint32_t value)
 {
     struct target *target = bank->target;
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
     int result;
 
     // LOG_INFO("dwcssi_write_reg() writing 0x%" PRIx32 " to " TARGET_ADDR_FMT,
-    //         value, dwcssi_info->ctrl_base + address);
+    //         value, driver_priv->ctrl_base + address);
 
-    result = target_write_u32(target, dwcssi_info->ctrl_base + address, value);
+    result = target_write_u32(target, driver_priv->ctrl_base + address, value);
     if (result != ERROR_OK) {
         LOG_ERROR("dwcssi_write_reg() error writing 0x%" PRIx32 " to " TARGET_ADDR_FMT,
-                value, dwcssi_info->ctrl_base + address);
+                value, driver_priv->ctrl_base + address);
         return result;
     }
     return ERROR_OK;
@@ -388,6 +388,9 @@ static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out
 
 int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
 {
+    struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+
     int64_t endtime;
     uint8_t rx = ERROR_FAIL;
     // uint32_t rx_len = 0x1000;
@@ -413,7 +416,7 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
                 // LOG_INFO("flash status %x idle", rx);
                 return ERROR_OK;
             }
-            else if(flash_check_status(rx))
+            else if(flash_ops->check_sr_err(rx))
                 return ERROR_FAIL;
         }    
     }
@@ -487,7 +490,7 @@ int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t cmd, uint8_t sr1, uint8
 
 static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 {
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
     uint8_t flash_sr;
     uint32_t offset;
     int retval;
@@ -499,9 +502,9 @@ static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
     // dwcssi_enable(bank);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
     dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 0xFF, 4);
-    // LOG_INFO("dwcssi erase cmd %x sector %x", dwcssi_info->dev->erase_cmd, offset);
+    // LOG_INFO("dwcssi erase cmd %x sector %x", driver_priv->dev->erase_cmd, offset);
 
-    dwcssi_tx(bank, dwcssi_info->dev->erase_cmd);
+    dwcssi_tx(bank, driver_priv->dev->erase_cmd);
     dwcssi_tx(bank, offset >> 24);
     dwcssi_tx(bank, offset >> 16);
     dwcssi_tx(bank, offset >> 8);
@@ -518,8 +521,10 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 {
 
     struct target *target = bank->target;
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-    // struct flash_device_op *flash_op = dwcssi_info->dev->flash_op;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+
+    // struct flash_device_op *flash_op = driver_priv->dev->flash_op;
     unsigned int sector;
     int retval = ERROR_OK;
 
@@ -534,7 +539,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
         return ERROR_FLASH_SECTOR_INVALID;
     }
 
-    if (!(dwcssi_info->probed)) {
+    if (!(driver_priv->probed)) {
         LOG_ERROR("Flash bank not probed");
         return ERROR_FLASH_BANK_NOT_PROBED;
     }
@@ -546,11 +551,11 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
         }
     }
 
-    if (dwcssi_info->dev->erase_cmd == 0x00)
+    if (driver_priv->dev->erase_cmd == 0x00)
         return ERROR_FLASH_OPER_UNSUPPORTED;
 
     // dwcssi_flash_quad_disable(bank);
-    dwcssi_info->dev->quad_dis(bank);
+    flash_ops->quad_dis(bank);
     for (sector = first; sector <= last; sector++)
     {
         retval = dwcssi_erase_sector(bank, sector);
@@ -573,13 +578,14 @@ static int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, 
 
 static int dwcssi_read_page(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t len)
 {
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
     LOG_DEBUG("dwcssi read page offset %x len %x", offset, len);
     dwcssi_disable(bank);
     dwcssi_config_CTRLR1(bank, len);
     dwcssi_enable(bank);
-    dwcssi_tx(bank, dwcssi_info->dev->qread_cmd);
+    dwcssi_tx(bank, flash_ops->qread_cmd);
     dwcssi_tx(bank, offset);
     dwcssi_rx_buf(bank, buffer, len);
     return ERROR_OK;
@@ -589,15 +595,16 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 {
     uint32_t cur_count, page_size;
     uint32_t page_offset;
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
-    page_size = dwcssi_info->dev->pagesize ? 
-                dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
+    page_size = driver_priv->dev->pagesize ? 
+                driver_priv->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
     page_offset = offset % page_size;
 
     LOG_DEBUG("read addr %x count %x", offset, count);
-    dwcssi_info->dev->quad_en(bank);
+    flash_ops->quad_en(bank);
     dwcssi_config_rx(bank, SPI_FRF_X4_MODE, 0x3F);
     while(count > 0)
     {
@@ -617,15 +624,15 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 }
 
 static const uint8_t riscv32_crc_bin[] = {
-#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_riscv_32.inc"
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_riscv_32.inc"
 };
 
 static const uint8_t riscv64_crc_bin[] = {
-#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_riscv_64.inc"
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_riscv_64.inc"
 };
 
 static const uint8_t aarch64_crc_bin[] = {
-#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_aarch_64.inc"
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_aarch_64.inc"
 };
 
 static struct code_src crc_srcs[3] = 
@@ -637,24 +644,27 @@ static struct code_src crc_srcs[3] =
 
 static void dwcssi_checksum_params_priv(struct flash_loader *loader)
 {
-    struct dwcssi_flash_bank  *dwcssi_info = loader->dev_info;
-    buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, dwcssi_info->dev->qread_cmd);
+    struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    
+    buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, flash_ops->qread_cmd);
     // LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, );
 }
 
 static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint32_t count, uint32_t *crc)
 {
     int retval = ERROR_OK;
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-    struct flash_loader *loader = &dwcssi_info->loader;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    struct flash_loader *loader = &driver_priv->loader;
 
     loader->work_mode = CRC_CHECK;
-    loader->block_size = dwcssi_info->dev->pagesize;
+    loader->block_size = driver_priv->dev->pagesize;
     loader->image_size = count;
     loader->param_cnt = 5;
     loader->set_params_priv = dwcssi_checksum_params_priv;
 
-    dwcssi_info->dev->quad_en(bank);
+    flash_ops->quad_en(bank);
     dwcssi_config_rx(bank, SPI_FRF_X4_MODE, 0x3F);
     retval = loader_flash_crc(loader, crc_srcs, address, crc);
     return retval;
@@ -685,40 +695,41 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 
 static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
 {
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     uint8_t flash_sr;
 
     // LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
     dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x4);
-    dwcssi_tx(bank, dwcssi_info->dev->qprog_cmd);
+    dwcssi_tx(bank, flash_ops->qprog_cmd);
     dwcssi_tx(bank, offset);
     dwcssi_tx_buf(bank, buffer, len);
     return dwcssi_wait_flash_idle(bank, 9000, &flash_sr);
 }
 
 static const uint8_t riscv32_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_32.inc"
+#include "../../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_32.inc"
 };
 
 static const uint8_t riscv64_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_64.inc"
+#include "../../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_64.inc"
 };
 
 static const uint8_t aarch64_bin[] = {
-#include "../../../contrib/loaders/flash/dwcssi/build/dwcssi_aarch_64.inc"
+#include "../../../../contrib/loaders/flash/dwcssi/build/dwcssi_aarch_64.inc"
 };
 
 static const uint8_t riscv32_async_bin[] = {
-#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_32.inc"
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_32.inc"
 };
 
 static const uint8_t riscv64_async_bin[] = {
-#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_64.inc"
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_riscv_64.inc"
 };
 
 static const uint8_t aarch64_async_bin[] = {
-#include "../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_aarch_64.inc"
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_aarch_64.inc"
 };
 
 static struct code_src async_srcs[3] = 
@@ -733,8 +744,9 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
 	struct target *target = bank->target;
     uint32_t cur_count, page_size;
     uint32_t page_offset;
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-    // struct flash_device_op *flash_op = dwcssi_info->dev->flash_op;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    // struct flash_device_op *flash_op = driver_priv->dev->flash_op;
 	int retval = ERROR_OK;
 
     LOG_INFO("dwcssi write");
@@ -812,8 +824,8 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
 	}
     }
 
-    page_size = dwcssi_info->dev->pagesize ? 
-                dwcssi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
+    page_size = driver_priv->dev->pagesize ? 
+                driver_priv->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
     page_offset = offset % page_size;
     now = timeval_ms();
@@ -821,7 +833,7 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
     LOG_DEBUG("loader init time %llx", used_time);
     // dwcssi_flash_quad_en(bank);
     // flash_op->quad_en(bank);
-    dwcssi_info->dev->quad_en(bank);
+    flash_ops->quad_en(bank);
 
     if (algorithm_wa)
     {
@@ -851,12 +863,12 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
         {
             start = timeval_ms();
             cur_count = MIN(count, data_wa_size);
-			buf_set_u64(reg_params[0].value, 0, xlen, dwcssi_info->ctrl_base);
+			buf_set_u64(reg_params[0].value, 0, xlen, driver_priv->ctrl_base);
 			buf_set_u64(reg_params[1].value, 0, xlen, page_size);
 			buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
 			buf_set_u64(reg_params[3].value, 0, xlen, offset);
 			buf_set_u64(reg_params[4].value, 0, xlen, cur_count);
-			buf_set_u64(reg_params[5].value, 0, xlen, dwcssi_info->dev->qprog_cmd);
+			buf_set_u64(reg_params[5].value, 0, xlen, flash_ops->qprog_cmd);
 
             retval = target_write_buffer(target, data_wa->address, cur_count, buffer);
 			if (retval != ERROR_OK) {
@@ -871,7 +883,7 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
             LOG_DEBUG("write(ctrl_base=0x%" TARGET_PRIxADDR ", page_size=0x%x, "
 					"data_address=0x%" TARGET_PRIxADDR ", offset=0x%" PRIx32
 					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
-					dwcssi_info->ctrl_base, page_size, data_wa->address, offset, cur_count,
+					driver_priv->ctrl_base, page_size, data_wa->address, offset, cur_count,
 					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
 
             start = timeval_ms();
@@ -934,26 +946,29 @@ err:
 
 static void dwcssi_write_async_params_priv(struct flash_loader *loader)
 {
-    struct dwcssi_flash_bank  *dwcssi_info = loader->dev_info;
-    buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, dwcssi_info->dev->qprog_cmd);
+    struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+        
+    buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, flash_ops->qprog_cmd);
 }
 
 
 static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-    struct flash_loader *loader = &dwcssi_info->loader;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    struct flash_loader *loader = &driver_priv->loader;
 
     int retval;
 
     loader->work_mode = ASYNC_TRANS;
-    loader->block_size = dwcssi_info->dev->pagesize; 
+    loader->block_size = driver_priv->dev->pagesize; 
     loader->image_size = count;
     loader->param_cnt = 7;
     loader->set_params_priv = dwcssi_write_async_params_priv;
     LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
 
-    dwcssi_info->dev->quad_en(bank);
+    flash_ops->quad_en(bank);
     retval = loader_flash_write_async(loader, async_srcs, 
         buffer, offset, count);
     return retval;
@@ -1001,17 +1016,17 @@ static int dwcssi_reset_flash(struct flash_bank *bank)
 }
 
 
-int dwcssi_info_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwcssi_info)
+int driver_priv_init(struct flash_bank* bank, struct dwcssi_flash_bank *driver_priv)
 {
     const struct dwcssi_target *target_device;
     struct target *target = bank->target;
     // reset probe state
-    if(dwcssi_info->probed)
+    if(driver_priv->probed)
         free(bank->sectors);
-    dwcssi_info->probed = false;
+    driver_priv->probed = false;
 
     // init ctrl_base
-    if(dwcssi_info->ctrl_base == 0)
+    if(driver_priv->ctrl_base == 0)
     {
         for(target_device = target_devices; target_device->name; ++target_device)
         {
@@ -1024,25 +1039,25 @@ int dwcssi_info_init(struct flash_bank* bank, struct dwcssi_flash_bank *dwcssi_i
             return ERROR_FAIL;
         }
 
-        dwcssi_info->ctrl_base = target_device->ctrl_base;
+        driver_priv->ctrl_base = target_device->ctrl_base;
         LOG_DEBUG("Valid DWCSSI on device %s at address" TARGET_ADDR_FMT, target_device->name, bank->base);
     }
     else
     {
         LOG_DEBUG("Assuming DWCSSI as specified at address " TARGET_ADDR_FMT "with ctrl at" TARGET_ADDR_FMT,
-         dwcssi_info->ctrl_base, bank->base);
+         driver_priv->ctrl_base, bank->base);
     }
     return ERROR_OK;
 }
 
 static int dwcssi_probe(struct flash_bank *bank)
 {
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     uint32_t id = 0;
 
-
     LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
-    dwcssi_info_init(bank, dwcssi_info);
+    driver_priv_init(bank, driver_priv);
     
     qspi_mio_init(bank);
     dwcssi_config_init(bank);
@@ -1052,13 +1067,13 @@ static int dwcssi_probe(struct flash_bank *bank)
         // read flash ID
         dwcssi_read_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
         LOG_INFO("read id: 0x%08x", id);
-        if(flash_bank_init(bank, dwcssi_info, id) != ERROR_OK)
+        if(flash_bank_init(bank, driver_priv, id) != ERROR_OK)
             return ERROR_FAIL;
     }
     else
         return ERROR_FAIL;
 
-    dwcssi_info->dev->quad_dis(bank);
+    flash_ops->quad_dis(bank);
 
     return ERROR_OK;
 }
@@ -1066,8 +1081,8 @@ static int dwcssi_probe(struct flash_bank *bank)
 
 static int dwcssi_auto_probe(struct flash_bank *bank)
 {
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
-    if(dwcssi_info->probed)
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    if(driver_priv->probed)
         return ERROR_OK;
     return dwcssi_probe(bank);
 }
@@ -1079,18 +1094,18 @@ static int dwcssi_protect_check(struct flash_bank *bank)
     return ERROR_OK;
 }
 
-static int get_dwcssi_info(struct flash_bank *bank, struct command_invocation *cmd)
+static int get_driver_priv(struct flash_bank *bank, struct command_invocation *cmd)
 {
-    struct dwcssi_flash_bank *dwcssi_info = bank->driver_priv;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 
-    if (!(dwcssi_info->probed)) {
+    if (!(driver_priv->probed)) {
         command_print_sameline(cmd, "\ndwcssi flash bank not probed yet\n");
         return ERROR_OK;
     }
 
     command_print_sameline(cmd, "\ndwcssi flash information:\n"
             "  Device \'%s\' (ID 0x%08" PRIx32 ")\n",
-            dwcssi_info->dev->name, dwcssi_info->dev->device_id);
+            driver_priv->dev->name, driver_priv->dev->device_id);
 
     return ERROR_OK;
 }
@@ -1108,6 +1123,6 @@ const struct flash_driver dwcssi_flash = {
     .auto_probe = dwcssi_auto_probe,
     .erase_check = default_flash_blank_check,
     .protect_check = dwcssi_protect_check,
-    .info = get_dwcssi_info,
+    .info = get_driver_priv,
     .free_driver_priv = default_flash_free_driver_priv
 };

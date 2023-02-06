@@ -2,9 +2,13 @@ noinst_LTLIBRARIES += %D%/libocdflashnor.la
 %C%_libocdflashnor_la_SOURCES = \
 	%D%/core.c \
 	%D%/tcl.c \
+	$(NOR_DEVS) \
 	$(NOR_DRIVERS) \
 	%D%/drivers.c \
 	$(NORHEADERS)
+
+NOR_DEVS = \
+	%D%/devs/sp_s25fl.c
 
 NOR_DRIVERS = \
 	%D%/aduc702x.c \
@@ -29,8 +33,8 @@ NOR_DRIVERS = \
 	%D%/esirisc_flash.c \
 	%D%/faux.c \
 	%D%/fespi.c \
-	%D%/dwcssi_flash.c \
-	%D%/dwcssi.c \
+	%D%/dwcssi/dwcssi_flash.c \
+	%D%/dwcssi/dwcssi.c \
 	%D%/fm3.c \
 	%D%/fm4.c \
 	%D%/jtagspi.c \
@@ -91,8 +95,9 @@ NORHEADERS = \
 	%D%/ocl.h \
 	%D%/sfdp.h \
 	%D%/spi.h \
+	%D%/devs/devs.h \
 	%D%/stm32l4x.h \
 	%D%/stmqspi.h \
 	%D%/msp432.h \
-	%D%/dwcssi.h \
-	%D%/dwcssi_flash.h
+	%D%/dwcssi/dwcssi.h \
+	%D%/dwcssi/dwcssi_flash.h
