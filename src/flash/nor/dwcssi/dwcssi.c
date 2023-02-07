@@ -388,8 +388,8 @@ static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out
 
 int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
 {
-    struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    // struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
+    // flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
     int64_t endtime;
     uint8_t rx = ERROR_FAIL;
@@ -416,7 +416,7 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
                 // LOG_INFO("flash status %x idle", rx);
                 return ERROR_OK;
             }
-            else if(flash_ops->check_sr_err(rx))
+            else if(flash_status_err(rx))
                 return ERROR_FAIL;
         }    
     }
@@ -524,7 +524,6 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
     flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
-    // struct flash_device_op *flash_op = driver_priv->dev->flash_op;
     unsigned int sector;
     int retval = ERROR_OK;
 
@@ -554,7 +553,6 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
     if (driver_priv->dev->erase_cmd == 0x00)
         return ERROR_FLASH_OPER_UNSUPPORTED;
 
-    // dwcssi_flash_quad_disable(bank);
     flash_ops->quad_dis(bank);
     for (sector = first; sector <= last; sector++)
     {
@@ -1053,12 +1051,11 @@ int driver_priv_init(struct flash_bank* bank, struct dwcssi_flash_bank *driver_p
 static int dwcssi_probe(struct flash_bank *bank)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    flash_ops_t *flash_ops = NULL;
     uint32_t id = 0;
 
     LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
     driver_priv_init(bank, driver_priv);
-    
     qspi_mio_init(bank);
     dwcssi_config_init(bank);
 
@@ -1068,13 +1065,16 @@ static int dwcssi_probe(struct flash_bank *bank)
         dwcssi_read_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
         LOG_INFO("read id: 0x%08x", id);
         if(flash_bank_init(bank, driver_priv, id) != ERROR_OK)
+        {
             return ERROR_FAIL;
+        }
+        else{
+            flash_ops = driver_priv->dev->flash_ops;
+            flash_ops->quad_dis(bank);
+        }
     }
     else
         return ERROR_FAIL;
-
-    flash_ops->quad_dis(bank);
-
     return ERROR_OK;
 }
 

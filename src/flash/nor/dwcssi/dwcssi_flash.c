@@ -9,6 +9,7 @@ static int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t id)
     for(const struct flash_device *p = flash_devices; p->name; p++)
     {
         if(p->device_id == id) {
+            LOG_INFO("flash finded name %s qread cmd %x", p->name, p->flash_ops->qread_cmd);
             dwcssi_info->dev = p;
             break;
         }
@@ -113,3 +114,14 @@ uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, ui
     return actual_count;
 }
 
+int flash_status_err(uint8_t status)
+{
+    uint8_t err_bits = 0;
+    int fail_flag = 0;
+
+    err_bits = FLASH_STATUS_ERR(status);
+
+    fail_flag = (err_bits != 0); 
+
+    return fail_flag;
+}
