@@ -11,12 +11,14 @@ AARCH_CC=$(CROSS_COMPILE_AARCH)gcc
 AARCH_OBJCOPY=$(CROSS_COMPILE_AARCH)objcopy
 AARCH_OBJDUMP=$(CROSS_COMPILE_AARCH)objdump
 
-CFLAGS = -static -nostdlib -nostartfiles -Os -fPIC -g
+CFLAGS = -static -nostdlib -nostartfiles -Wall -Werror -Os -fPIC -Wunused-result -g
 RISCV32_CFLAGS = -march=rv32e -mabi=ilp32e $(CFLAGS)
 RISCV64_CFLAGS = -march=rv64i -mabi=lp64 $(CFLAGS)
 AARCH64_CFLAGS = -mabi=lp64 $(CFLAGS)
 
-all: riscv32_smc35x.inc riscv64_smc35x.inc aarch64_smc35x.inc
+all: riscv32_smc35x.inc riscv64_smc35x.inc aarch64_smc35x.inc \
+	 riscv32_smc35x_read.inc riscv64_smc35x_read.inc aarch64_smc35x_read.inc
+# all: aarch64_smc35x_read.inc aarch64_smc35x_read.lst
 
 .PHONY: clean
 
@@ -55,7 +57,7 @@ riscv%.lst: riscv%.elf
 	$(RISCV_OBJDUMP) -S $< > $@
 
 aarch%.lst: aarch%.elf
-	$(AARCH_OBJDUMP) -S $< > $@
+	$(AARCH_OBJDUMP) -D $< > $@
 
 # .elf -> .bin
 riscv%.bin: riscv%.elf
