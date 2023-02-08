@@ -16,6 +16,11 @@ static const struct dwcssi_target target_devices[] = {
     { NULL, 0, 0 }
 };
 
+static int (*reset_methods[3])(struct flash_bank*) = {
+    NULL,
+    flash_reset_e0,
+    flash_reset_66_99
+};
 
 FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 {
@@ -392,8 +397,8 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
     // flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
     int64_t endtime;
+    int retval = ERROR_FAIL;
     uint8_t rx = ERROR_FAIL;
-    // uint32_t rx_len = 0x1000;
     uint32_t rx_len = 1;
 
     // LOG_INFO("check flash status");
@@ -402,27 +407,34 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
 
     endtime = timeval_ms() + timeout;
 
-    
     while(timeval_ms() < endtime)
     {
         dwcssi_tx(bank, SPIFLASH_READ_STATUS);
         if(dwcssi_txwm_wait(bank)!= ERROR_OK)
-            return ERROR_FAIL;        
+        {
+            retval = ERROR_FAIL;
+            break;
+        }        
 
         if(dwcssi_rx(bank, &rx) == ERROR_OK)
         {
             *sr = rx;
             if((rx & SPIFLASH_BSY_BIT) == 0) {
+
+                retval = ERROR_OK;
                 // LOG_INFO("flash status %x idle", rx);
-                return ERROR_OK;
+                break;
             }
             else if(flash_status_err(rx))
-                return ERROR_FAIL;
+            {
+                retval = ERROR_FAIL;
+                break;
+            }        
         }    
     }
 
-    LOG_ERROR("flash timeout");
-    return ERROR_FAIL;
+    LOG_INFO("flash status %x", rx);
+    return retval;
 }
 
 static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
@@ -990,35 +1002,35 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 }
 
 
-static int dwcssi_reset_flash(struct flash_bank *bank)
-{
-    int flash_err;
-    uint8_t flash_sr;
-    // uint32_t flash_cr;
+// static int dwcssi_reset_flash(struct flash_bank *bank)
+// {
+//     int flash_err;
+//     uint8_t flash_sr;
+//     // uint32_t flash_cr;
 
-    flash_err = dwcssi_wait_flash_idle(bank, 100, &flash_sr);
-    // dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-    if(flash_err != 0)
-    {
-        // LOG_INFO("Flash Status Error %x", flash_sr);
-        dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
+//     flash_err = dwcssi_wait_flash_idle(bank, 100, &flash_sr);
+//     // dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
+//     if(flash_err != 0)
+//     {
+//         // LOG_INFO("Flash Status Error %x", flash_sr);
+//         dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
 
-        dwcssi_tx(bank, 0xF0);
-        if(dwcssi_txwm_wait(bank) != 0)
-            return ERROR_TARGET_TIMEOUT;
-        dwcssi_wait_flash_idle(bank, 100, &flash_sr);
-    }
+//         dwcssi_tx(bank, 0xF0);
+//         if(dwcssi_txwm_wait(bank) != 0)
+//             return ERROR_TARGET_TIMEOUT;
+//         dwcssi_wait_flash_idle(bank, 100, &flash_sr);
+//     }
 
-    // dwcssi_flash_quad_disable(bank);
-    return ERROR_OK;
-}
+//     // dwcssi_flash_quad_disable(bank);
+//     return ERROR_OK;
+// }
 
 
 int driver_priv_init(struct flash_bank* bank, struct dwcssi_flash_bank *driver_priv)
 {
     const struct dwcssi_target *target_device;
     struct target *target = bank->target;
-    // reset probe state
+// reset probe state
     if(driver_priv->probed)
         free(bank->sectors);
     driver_priv->probed = false;
@@ -1048,34 +1060,53 @@ int driver_priv_init(struct flash_bank* bank, struct dwcssi_flash_bank *driver_p
     return ERROR_OK;
 }
 
-static int dwcssi_probe(struct flash_bank *bank)
+static int dwcssi_read_id_reset(struct flash_bank * bank, int (*reset)(struct flash_bank*))
+{
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    uint32_t id = 0;
+
+    if(reset != NULL)
+        reset(bank);
+    dwcssi_read_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
+    return flash_id_parse(driver_priv, id);
+}
+
+static int dwcssi_read_id(struct flash_bank *bank)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
     flash_ops_t *flash_ops = NULL;
-    uint32_t id = 0;
+
+    
+
+    for(int i=0; i<3; i++)
+    {
+        if(dwcssi_read_id_reset(bank, reset_methods[i]) == ERROR_OK)
+            break;
+    }
+
+    if(driver_priv->probed == true)
+    {
+        flash_sector_init(bank, driver_priv);
+        flash_ops = driver_priv->dev->flash_ops;
+        flash_ops->quad_dis(bank);
+        return ERROR_OK;
+    }
+    else
+        return ERROR_FAIL;
+
+}
+
+
+static int dwcssi_probe(struct flash_bank *bank)
+{
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 
     LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
     driver_priv_init(bank, driver_priv);
     qspi_mio_init(bank);
     dwcssi_config_init(bank);
 
-    if(dwcssi_reset_flash(bank) == ERROR_OK)
-    {
-        // read flash ID
-        dwcssi_read_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
-        LOG_INFO("read id: 0x%08x", id);
-        if(flash_bank_init(bank, driver_priv, id) != ERROR_OK)
-        {
-            return ERROR_FAIL;
-        }
-        else{
-            flash_ops = driver_priv->dev->flash_ops;
-            flash_ops->quad_dis(bank);
-        }
-    }
-    else
-        return ERROR_FAIL;
-    return ERROR_OK;
+    return dwcssi_read_id(bank);
 }
 
 
