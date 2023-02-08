@@ -393,8 +393,8 @@ static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out
 
 int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
 {
-    // struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
-    // flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
     int64_t endtime;
     int retval = ERROR_FAIL;
@@ -425,15 +425,15 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
                 // LOG_INFO("flash status %x idle", rx);
                 break;
             }
-            else if(flash_status_err(rx))
-            {
-                retval = ERROR_FAIL;
-                break;
-            }        
         }    
     }
 
-    LOG_INFO("flash status %x", rx);
+    if(retval == ERROR_OK)
+    {
+        retval = flash_ops->err_chk(bank);
+    }   
+
+    LOG_DEBUG("flash status %x", rx);
     return retval;
 }
 
@@ -534,7 +534,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 
     struct target *target = bank->target;
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
     unsigned int sector;
     int retval = ERROR_OK;
@@ -589,7 +589,7 @@ static int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, 
 static int dwcssi_read_page(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t len)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
     LOG_DEBUG("dwcssi read page offset %x len %x", offset, len);
     dwcssi_disable(bank);
@@ -606,7 +606,7 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
     uint32_t cur_count, page_size;
     uint32_t page_offset;
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
     page_size = driver_priv->dev->pagesize ? 
                 driver_priv->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
@@ -655,7 +655,7 @@ static struct code_src crc_srcs[3] =
 static void dwcssi_checksum_params_priv(struct flash_loader *loader)
 {
     struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, flash_ops->qread_cmd);
     // LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, );
@@ -665,7 +665,7 @@ static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint3
 {
     int retval = ERROR_OK;
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     struct flash_loader *loader = &driver_priv->loader;
 
     loader->work_mode = CRC_CHECK;
@@ -706,7 +706,7 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     uint8_t flash_sr;
 
     // LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
@@ -755,7 +755,7 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
     uint32_t cur_count, page_size;
     uint32_t page_offset;
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     // struct flash_device_op *flash_op = driver_priv->dev->flash_op;
 	int retval = ERROR_OK;
 
@@ -957,7 +957,7 @@ err:
 static void dwcssi_write_async_params_priv(struct flash_loader *loader)
 {
     struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
         
     buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, flash_ops->qprog_cmd);
 }
@@ -966,7 +966,7 @@ static void dwcssi_write_async_params_priv(struct flash_loader *loader)
 static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     struct flash_loader *loader = &driver_priv->loader;
 
     int retval;
@@ -1074,7 +1074,7 @@ static int dwcssi_read_id_reset(struct flash_bank * bank, int (*reset)(struct fl
 static int dwcssi_read_id(struct flash_bank *bank)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    flash_ops_t *flash_ops = NULL;
+    const flash_ops_t *flash_ops = NULL;
 
     
 

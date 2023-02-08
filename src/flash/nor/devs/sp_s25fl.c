@@ -36,7 +36,7 @@ typedef union sp_s25fl_cr1_t
 } sp_s25fl_cr1_t;
 
 
-
+#define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
 #define   FLASH_STATUS_WP(x)                   ((x >> 2) & 0x7)
 #define   FLASH_CONFIG_QUAD(x)                 ((x >> 1) & 0x1)
 
@@ -64,18 +64,15 @@ int sp_s25fl_reset(struct flash_bank *bank)
     return ERROR_OK;
 }
 
-// int sp_s25fl_status_err(uint8_t status)
-// {
-//     uint8_t err_bits = 0;
-//     int fail_flag = 0;
+int sp_s25fl_err_chk(struct flash_bank* bank)
+{
+    uint32_t sr;
 
-//     LOG_INFO("check sp status err");
-//     err_bits = FLASH_STATUS_ERR(status);
-
-//     fail_flag = (err_bits != 0); 
-
-//     return fail_flag;
-// }
+    dwcssi_read_flash_reg(bank, &sr, SPIFLASH_READ_STATUS, 1);
+    if(FLASH_STATUS_ERR(sr) != 0)
+        return ERROR_FAIL;
+    return ERROR_OK;
+}
 
 int sp_s25fl_quad_dis(struct flash_bank* bank)
 {
@@ -100,21 +97,13 @@ int sp_s25fl_quad_en(struct flash_bank* bank)
     return ERROR_OK;
 }
 
-// uint8_t sp_s25fl_check_wp(uint8_t status)
-// {
-//     uint8_t wp_bits, wp_flag = 0;
-//     wp_bits = FLASH_STATUS_WP(status);
-//     if(wp_bits != 0)
-//         wp_flag = 1;
-
-//     return wp_flag;
-// }
-
-// uint8_t sp_s25fl_quad_mode(uint8_t config_reg)
-// {
-//     uint8_t quad_bit;
-//     quad_bit = FLASH_CONFIG_QUAD(config_reg);
-//     return quad_bit;
-// }
+const flash_ops_t sp_s25fl_ops = {
+    .qread_cmd = 0x6C,
+    .qprog_cmd = 0x34,
+    .reset     = sp_s25fl_reset,
+    .err_chk   = sp_s25fl_err_chk,
+    .quad_en   = sp_s25fl_quad_en,
+    .quad_dis  = sp_s25fl_quad_dis
+};
 
 

@@ -8,7 +8,7 @@ struct dwcssi_flash_bank {
     struct flash_loader loader;
 };
 
-#define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
+// #define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
 
 // flash model 
 int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t id);

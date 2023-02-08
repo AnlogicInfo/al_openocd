@@ -8,7 +8,8 @@ noinst_LTLIBRARIES += %D%/libocdflashnor.la
 	$(NORHEADERS)
 
 NOR_DEVS = \
-	%D%/devs/sp_s25fl.c
+	%D%/devs/sp_s25fl.c \
+	%D%/devs/zetta_zd25q.c
 
 NOR_DRIVERS = \
 	%D%/aduc702x.c \
@@ -95,7 +96,6 @@ NORHEADERS = \
 	%D%/ocl.h \
 	%D%/sfdp.h \
 	%D%/spi.h \
-	%D%/devs/devs.h \
 	%D%/stm32l4x.h \
 	%D%/stmqspi.h \
 	%D%/msp432.h \

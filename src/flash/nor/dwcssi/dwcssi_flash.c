@@ -115,17 +115,17 @@ uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, ui
     return actual_count;
 }
 
-int flash_status_err(uint8_t status)
-{
-    uint8_t err_bits = 0;
-    int fail_flag = 0;
+// int flash_status_err(uint8_t status)
+// {
+//     uint8_t err_bits = 0;
+//     int fail_flag = 0;
 
-    err_bits = FLASH_STATUS_ERR(status);
+//     err_bits = FLASH_STATUS_ERR(status);
 
-    fail_flag = (err_bits != 0); 
+//     fail_flag = (err_bits != 0); 
 
-    return fail_flag;
-}
+//     return fail_flag;
+// }
 
 int flash_reset_e0(struct flash_bank *bank)
 {
