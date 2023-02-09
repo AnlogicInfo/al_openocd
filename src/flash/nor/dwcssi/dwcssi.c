@@ -350,17 +350,17 @@ int dwcssi_tx(struct flash_bank *bank, uint32_t in)
     return ERROR_OK;
 }
 
-static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32_t in_cnt)
-{
-    uint32_t i;
-    for(i = 0; i < in_cnt; i++)
-    {
-        // LOG_INFO("tx buf %x data %x", i, *(in_buf+i));
-        dwcssi_tx(bank, *(in_buf+i));
-    }
+// static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32_t in_cnt)
+// {
+//     uint32_t i;
+//     for(i = 0; i < in_cnt; i++)
+//     {
+//         // LOG_INFO("tx buf %x data %x", i, *(in_buf+i));
+//         dwcssi_tx(bank, *(in_buf+i));
+//     }
 
-    return (dwcssi_txwm_wait(bank));
-}
+//     return (dwcssi_txwm_wait(bank));
+// }
 
 static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
 {
@@ -714,20 +714,20 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
     return retval;
 }
 
-static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
-{
-    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-    uint8_t flash_sr;
+// static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
+// {
+//     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+//     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+//     uint8_t flash_sr;
 
-    // LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
-    dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
-    dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x4);
-    dwcssi_tx(bank, flash_ops->qprog_cmd);
-    dwcssi_tx(bank, offset);
-    dwcssi_tx_buf(bank, buffer, len);
-    return dwcssi_wait_flash_idle(bank, 9000, &flash_sr);
-}
+//     // LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
+//     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
+//     dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x4);
+//     dwcssi_tx(bank, flash_ops->qprog_cmd);
+//     dwcssi_tx(bank, offset);
+//     dwcssi_tx_buf(bank, buffer, len);
+//     return dwcssi_wait_flash_idle(bank, 9000, &flash_sr);
+// }
 
 static const uint8_t riscv32_sync_bin[] = {
 #include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_sync_riscv_32.inc"
@@ -837,14 +837,6 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     if(retval != ERROR_OK)
     {
         retval = dwcssi_write_sync(bank, buffer, offset, count);
-    }
-
-    if(0)
-    {
-    if(retval != ERROR_OK)
-    {
-        slow_dwcssi_write(bank, buffer, offset, count);
-    }
     }
 
     return retval;
