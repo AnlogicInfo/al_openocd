@@ -844,7 +844,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 			target_free_working_area(target, algorithm_wa);
 			algorithm_wa = NULL;
 		} else {
-			if (target_alloc_working_area(target, count, &data_wa) != ERROR_OK) {
+			if (target_alloc_working_area(target, count + 24, &data_wa) != ERROR_OK) {
 				LOG_WARNING("Couldn't allocate data working area.");
 				target_free_working_area(target, algorithm_wa);
 				algorithm_wa = NULL;
