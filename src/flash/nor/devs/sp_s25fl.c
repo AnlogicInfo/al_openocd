@@ -66,20 +66,13 @@ int sp_s25fl_reset(struct flash_bank *bank)
 
 int sp_s25fl_err_chk(struct flash_bank* bank)
 {
-    uint32_t sr;
+    struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
+    uint8_t sr = driver_priv->flash_sr1;
 
-    dwcssi_read_flash_reg(bank, &sr, SPIFLASH_READ_STATUS, 1);
     if(FLASH_STATUS_ERR(sr) != 0)
         return ERROR_FAIL;
-    return ERROR_OK;
-}
-
-int sp_s25fl_quad_dis(struct flash_bank* bank)
-{
-    uint32_t flash_cr;
-    dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-    dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr & (0x3C));
-    return ERROR_OK;
+    else
+        return ERROR_OK;
 }
 
 int sp_s25fl_quad_en(struct flash_bank* bank)
@@ -94,6 +87,14 @@ int sp_s25fl_quad_en(struct flash_bank* bank)
         dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr | 0x2);
     }
 
+    return ERROR_OK;
+}
+
+int sp_s25fl_quad_dis(struct flash_bank* bank)
+{
+    uint32_t flash_cr;
+    dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
+    dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr & (0x3C));
     return ERROR_OK;
 }
 

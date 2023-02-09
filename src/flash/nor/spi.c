@@ -28,7 +28,7 @@
 
 #include "imp.h"
 #include "spi.h"
-#include <flash/nor/devs/devs.h>
+// #include <flash/nor/devs/devs.h>
 #include <jtag/jtag.h>
 
 extern const flash_ops_t sp_s25fl_ops;

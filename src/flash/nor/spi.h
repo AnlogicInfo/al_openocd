@@ -54,11 +54,8 @@ struct flash_device {
 	uint32_t pagesize;
 	uint32_t sectorsize;
 	uint32_t size_in_bytes;
-	// Pointer to model-specific operations for this flash 
-	// struct flash_device_op *flash_op;
-	// int (*reset) (struct flash_bank *bank);
-	// int (*quad_en) (struct flash_bank *bank);
-	// int (*quad_dis) (struct flash_bank *bank);
+
+	// Pointer to model-specific operations for this flash
 	const flash_ops_t *flash_ops;
 };
 

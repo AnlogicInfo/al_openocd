@@ -422,19 +422,29 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
             if((rx & SPIFLASH_BSY_BIT) == 0) {
 
                 retval = ERROR_OK;
-                // LOG_INFO("flash status %x idle", rx);
+                LOG_DEBUG("flash status %x idle", rx);
                 break;
             }
-        }    
+        }
+        else
+            break;
     }
+
 
     if(retval == ERROR_OK)
     {
+        driver_priv->flash_sr1 = rx;
         retval = flash_ops->err_chk(bank);
-    }   
+    }
 
-    LOG_DEBUG("flash status %x", rx);
     return retval;
+}
+
+int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t cmd)
+{
+    dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 0, 0);
+    dwcssi_tx(bank, cmd);
+    return dwcssi_txwm_wait(bank);
 }
 
 static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
@@ -456,6 +466,7 @@ int dwcssi_read_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd
     dwcssi_config_eeprom(bank, len);
     dwcssi_tx(bank, cmd);
 
+    dwcssi_txwm_wait(bank);
     endtime = timeval_ms() + DWCSSI_PROBE_TIMEOUT;
 
     while(timeval_ms() < endtime || i < len)
@@ -718,16 +729,16 @@ static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uin
     return dwcssi_wait_flash_idle(bank, 9000, &flash_sr);
 }
 
-static const uint8_t riscv32_bin[] = {
-#include "../../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_32.inc"
+static const uint8_t riscv32_sync_bin[] = {
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_sync_riscv_32.inc"
 };
 
-static const uint8_t riscv64_bin[] = {
-#include "../../../../contrib/loaders/flash/dwcssi/build/dwcssi_riscv_64.inc"
+static const uint8_t riscv64_sync_bin[] = {
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_sync_riscv_64.inc"
 };
 
-static const uint8_t aarch64_bin[] = {
-#include "../../../../contrib/loaders/flash/dwcssi/build/dwcssi_aarch_64.inc"
+static const uint8_t aarch64_sync_bin[] = {
+#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_sync_aarch_64.inc"
 };
 
 static const uint8_t riscv32_async_bin[] = {
@@ -742,226 +753,58 @@ static const uint8_t aarch64_async_bin[] = {
 #include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_aarch_64.inc"
 };
 
+static struct code_src sync_srcs[3] = 
+{
+    [RV64_SRC] = {riscv64_sync_bin, sizeof(riscv64_sync_bin)},
+    [RV32_SRC] = {riscv32_sync_bin, sizeof(riscv32_sync_bin)},
+    [AARCH64_SRC] = {aarch64_sync_bin, sizeof(aarch64_sync_bin)},
+
+};
+
 static struct code_src async_srcs[3] = 
 {
     [RV64_SRC] = {riscv64_async_bin, sizeof(riscv64_async_bin)},
     [RV32_SRC] = {riscv32_async_bin, sizeof(riscv32_async_bin)},
     [AARCH64_SRC] = {aarch64_async_bin, sizeof(aarch64_async_bin)},
-} ;
+};
 
-static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+static void dwcssi_write_sync_params_priv(struct flash_loader *loader)
 {
-	struct target *target = bank->target;
-    uint32_t cur_count, page_size;
-    uint32_t page_offset;
-    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-    // struct flash_device_op *flash_op = driver_priv->dev->flash_op;
-	int retval = ERROR_OK;
 
-    LOG_INFO("dwcssi write");
-
-    count = flash_write_boundary_check(bank, offset, count);
-    if(flash_sector_check(bank, offset, count)!=ERROR_OK)
-        return ERROR_FAIL;
-
-    if(target->state != TARGET_HALTED)
-    {
-		LOG_ERROR("Target not halted");
-		return ERROR_TARGET_NOT_HALTED;        
-    }
-
-    uint32_t xlen = 0;
-    struct working_area *algorithm_wa = NULL;
-    struct working_area *data_wa      = NULL;
-    const uint8_t *bin;
-    size_t bin_size;
-    uint64_t start, now, used_time;
-    int   loader_target;
-
-    if(strncmp(target_name(target), "riscv", 4) == 0)
-    {
-        // LOG_INFO("loader on riscv");
-        loader_target = RISCV; 
-        xlen = riscv_xlen(target);
-        if(xlen == 32)
-        {
-            // LOG_INFO("rv 32");
-            bin = riscv32_bin;
-            bin_size = sizeof(riscv32_bin);
-        } else {
-            // LOG_INFO("rv 64");
-            bin = riscv64_bin;
-            bin_size = sizeof(riscv64_bin);
-        }
-    }
-    else{
-        loader_target = ARM;
-        xlen = 64;
-        bin = aarch64_bin;
-        bin_size = sizeof(aarch64_bin);
-    }
-
-
-    uint32_t data_wa_size = 0;
-
-    start = timeval_ms();
-    if(0)
-    {
-	if (target_alloc_working_area(target, bin_size, &algorithm_wa) == ERROR_OK) {
-		retval = target_write_buffer(target, algorithm_wa->address,
-				bin_size, bin);
-		if (retval != ERROR_OK) {
-			LOG_ERROR("Failed to write code to " TARGET_ADDR_FMT ": %d",
-					algorithm_wa->address, retval);
-			target_free_working_area(target, algorithm_wa);
-			algorithm_wa = NULL;
-
-		} else {
-			data_wa_size = MIN(target_get_working_area_avail(target), count);
-			if (data_wa_size < 128) {
-				LOG_WARNING("Couldn't allocate data working area.");
-				target_free_working_area(target, algorithm_wa);
-				algorithm_wa = NULL;
-			} else if (target_alloc_working_area(target, data_wa_size, &data_wa) != ERROR_OK) {
-				target_free_working_area(target, algorithm_wa);
-				algorithm_wa = NULL;
-			}
-		}
-	} else {
-		LOG_WARNING("Couldn't allocate %zd-byte working area.", bin_size);
-		algorithm_wa = NULL;
-	}
-    }
-
-    page_size = driver_priv->dev->pagesize ? 
-                driver_priv->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
-
-    page_offset = offset % page_size;
-    now = timeval_ms();
-    used_time = now - start;
-    LOG_DEBUG("loader init time %llx", used_time);
-    // dwcssi_flash_quad_en(bank);
-    // flash_op->quad_en(bank);
-    flash_ops->quad_en(bank);
-
-    if (algorithm_wa)
-    {
-        // LOG_INFO("wa allocate success");
-        struct reg_param reg_params[6];
-	
-        if(loader_target == RISCV)
-        {
-    	    init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
-		    init_reg_param(&reg_params[1], "a1", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[2], "a2", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[3], "a3", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[4], "a4", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[5], "a5", xlen, PARAM_OUT);
-        }
-        else if(loader_target == ARM)
-        {
-    	    init_reg_param(&reg_params[0], "x0", xlen, PARAM_IN_OUT);
-		    init_reg_param(&reg_params[1], "x1", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[2], "x2", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[3], "x3", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[4], "x4", xlen, PARAM_OUT);
-		    init_reg_param(&reg_params[5], "x5", xlen, PARAM_OUT);
-        }
-
-        while(count > 0)
-        {
-            start = timeval_ms();
-            cur_count = MIN(count, data_wa_size);
-			buf_set_u64(reg_params[0].value, 0, xlen, driver_priv->ctrl_base);
-			buf_set_u64(reg_params[1].value, 0, xlen, page_size);
-			buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
-			buf_set_u64(reg_params[3].value, 0, xlen, offset);
-			buf_set_u64(reg_params[4].value, 0, xlen, cur_count);
-			buf_set_u64(reg_params[5].value, 0, xlen, flash_ops->qprog_cmd);
-
-            retval = target_write_buffer(target, data_wa->address, cur_count, buffer);
-			if (retval != ERROR_OK) {
-				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
-						cur_count, data_wa->address, retval);
-				goto err;
-			}
-			now = timeval_ms();
-            used_time = now - start;
-
-            LOG_DEBUG("count %x loader init time %llx", count, used_time);
-            LOG_DEBUG("write(ctrl_base=0x%" TARGET_PRIxADDR ", page_size=0x%x, "
-					"data_address=0x%" TARGET_PRIxADDR ", offset=0x%" PRIx32
-					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
-					driver_priv->ctrl_base, page_size, data_wa->address, offset, cur_count,
-					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-
-            start = timeval_ms();
-			retval = target_run_algorithm(target, 0, NULL,
-					ARRAY_SIZE(reg_params), reg_params,
-					algorithm_wa->address, 0, 10000, NULL);
-			if (retval != ERROR_OK) {
-				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
-						algorithm_wa->address, retval);
-				goto err;
-			}
-
-			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
-            
-			if (algorithm_result != 0) {
-			    LOG_DEBUG("Algorithm returned error %llx", algorithm_result);
-				retval = ERROR_FAIL;
-				goto err;
-			}
-            now = timeval_ms();
-            used_time = now - start;
-
-            LOG_DEBUG("count %x loader execute time %llx", count, used_time);
-
-			buffer += cur_count;
-			offset += cur_count;
-			count -= cur_count;
-        }
-
-    	target_free_working_area(target, data_wa);
-		target_free_working_area(target, algorithm_wa);
-    }
-    else
-    {
-        while(count > 0) 
-        {
-            if(page_offset + count > page_size)
-                cur_count = page_size - page_offset;
-            else
-                cur_count = count;
-
-            if(0)
-            {
-            slow_dwcssi_write(bank, buffer, offset, cur_count);
-            }
-
-            page_offset = 0;
-            buffer      += cur_count;
-            offset      += cur_count;
-            count       -= cur_count;
-        }
-    }
-
-err:
-	target_free_working_area(target, data_wa);
-	target_free_working_area(target, algorithm_wa);
-
-    return ERROR_OK;
+    buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, flash_ops->qprog_cmd);
 }
 
 static void dwcssi_write_async_params_priv(struct flash_loader *loader)
 {
     struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-        
+
     buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, flash_ops->qprog_cmd);
 }
 
+static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+{
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    struct flash_loader *loader = &driver_priv->loader;
+    int retval;
+
+    loader->work_mode = SYNC_TRANS;
+    loader->block_size = driver_priv->dev->pagesize; 
+    loader->image_size = count;
+    loader->param_cnt = 6;
+    loader->set_params_priv = dwcssi_write_sync_params_priv;
+
+    flash_ops->quad_en(bank);
+    retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset, count);
+
+    if(retval != ERROR_OK)
+        LOG_ERROR("dwcssi write sync error");
+
+    return retval;
+}
 
 static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
@@ -989,42 +832,23 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     int retval = ERROR_FAIL;
 
     count = flash_write_boundary_check(bank, offset, count);
-    
     retval = dwcssi_write_async(bank, buffer, offset, count);
+
+    if(retval != ERROR_OK)
+    {
+        retval = dwcssi_write_sync(bank, buffer, offset, count);
+    }
 
     if(0)
     {
     if(retval != ERROR_OK)
-        retval = dwcssi_write_sync(bank, buffer, offset, count);
+    {
+        slow_dwcssi_write(bank, buffer, offset, count);
+    }
     }
 
     return retval;
 }
-
-
-// static int dwcssi_reset_flash(struct flash_bank *bank)
-// {
-//     int flash_err;
-//     uint8_t flash_sr;
-//     // uint32_t flash_cr;
-
-//     flash_err = dwcssi_wait_flash_idle(bank, 100, &flash_sr);
-//     // dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-//     if(flash_err != 0)
-//     {
-//         // LOG_INFO("Flash Status Error %x", flash_sr);
-//         dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
-
-//         dwcssi_tx(bank, 0xF0);
-//         if(dwcssi_txwm_wait(bank) != 0)
-//             return ERROR_TARGET_TIMEOUT;
-//         dwcssi_wait_flash_idle(bank, 100, &flash_sr);
-//     }
-
-//     // dwcssi_flash_quad_disable(bank);
-//     return ERROR_OK;
-// }
-
 
 int driver_priv_init(struct flash_bank* bank, struct dwcssi_flash_bank *driver_priv)
 {

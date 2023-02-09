@@ -224,16 +224,9 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
     if(loader->op != LOADER_WRITE|| !loader->copy_area)
     {
         wa_size = loader_code_to_wa(loader);
-    }
-
-    if(wa_size < 0)
-    {
-        return ERROR_FAIL;
-    }
-    else
-    {
+        if(wa_size < 0)
+            return ERROR_FAIL;
         loader->op = LOADER_WRITE;
-
         loader->buf_start = loader->copy_area->address + loader->code_area;
         loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ; //update data size for async write
     }
@@ -242,7 +235,7 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 
     if(loader->work_mode == SYNC_TRANS)
     {
-        LOG_INFO("trans data to wa");
+        LOG_INFO("trans %x bytes data to wa %x", loader->data_size, loader->buf_start);
         loader_data_to_wa(loader, data);
     }
 
@@ -260,26 +253,50 @@ static void loader_exit(struct flash_loader *loader, int restore)
     free(loader->arch_info);
 }
 
-int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size)
+int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size)
 {
-    return ERROR_OK;
+    int retval = ERROR_OK;
+    LOG_INFO("loader write sync");
+    loader_init(loader, srcs);
+
+    while(image_size > 0)
+    {
+        loader->data_size = MIN(loader->data_size, image_size);
+
+        loader_set_wa(loader, addr, data);
+        retval = target_run_algorithm(loader->exec_target, 
+        0, NULL, loader->param_cnt, loader->reg_params, 
+        loader->copy_area->address, 
+        0, 10000, 
+        loader->arch_info);
+        data += loader->data_size;
+        addr += loader->data_size;
+        image_size -= loader->data_size;
+        if(retval != ERROR_OK)
+            break;
+    }
+
+    loader_exit(loader, NO_RESTORE);
+
+    return retval;
 }
 
 int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size)
 {
     uint32_t image_block_cnt;
+    int retval;
 
     image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
 
     loader_init(loader, srcs);
     loader_set_wa(loader, addr, data);
-    target_run_async_algorithm(loader->trans_target, loader->exec_target, data, image_block_cnt, loader->block_size,
+    retval = target_run_async_algorithm(loader->trans_target, loader->exec_target, data, image_block_cnt, loader->block_size,
     0, NULL,
     loader->param_cnt, loader->reg_params,
     loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
     loader_exit(loader, RESTORE);
-    return ERROR_OK;
+    return retval;
 };
 
 int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, uint32_t* target_crc)

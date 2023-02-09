@@ -4,6 +4,7 @@
 struct dwcssi_flash_bank {
     bool probed;
     target_addr_t ctrl_base;
+	uint8_t flash_sr1;
     const struct flash_device *dev;
     struct flash_loader loader;
 };

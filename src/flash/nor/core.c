@@ -44,7 +44,7 @@ int flash_driver_erase(struct flash_bank *bank, unsigned int first,
 
 	retval = bank->driver->erase(bank, first, last);
 	if (retval != ERROR_OK)
-		LOG_ERROR("failed erasing sectors %u to %u", first, last);
+		LOG_ERROR("retval %x failed erasing sectors %u to %u", retval, first, last);
 
 	return retval;
 }
