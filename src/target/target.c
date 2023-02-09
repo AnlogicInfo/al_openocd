@@ -963,6 +963,146 @@ done:
 	return retval;
 }
 
+static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, struct async_fifo *fifo)
+{
+	int retval;
+	uint32_t wp_result = 0, rp_result = 0;
+	fifo->wp_addr = buffer_start;
+	fifo->rp_addr = buffer_start + 4;
+	fifo->fifo_start_addr = buffer_start + 8;
+	fifo->fifo_end_addr = buffer_start + buffer_size;
+	fifo->wp = fifo->fifo_start_addr;
+	fifo->rp = fifo->fifo_start_addr;
+
+	LOG_DEBUG("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
+	LOG_DEBUG("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
+
+	retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
+	if(retval != ERROR_OK)
+		return retval;
+
+	target_read_u32(trans_target, fifo->wp_addr, &wp_result);
+
+	retval = target_write_u32(trans_target, fifo->rp_addr, fifo->rp);
+	if(retval != ERROR_OK)
+		return retval;
+	target_read_u32(trans_target, fifo->rp_addr, &rp_result);
+
+	// LOG_ERROR("wp init get %x expect %x", wp_result, fifo->wp);
+	// LOG_ERROR("rp init get %x expect %x", rp_result, fifo->rp);
+
+	return retval;
+}
+
+
+static int target_async_algorithm_trans_data(struct target *trans_target, const uint8_t *buffer, int count, uint32_t block_size, struct async_fifo *fifo)
+{
+	int retval = ERROR_OK;
+	int timeout = 0;
+	const uint8_t *buffer_orig = buffer;
+
+	while(count >0)
+	{
+		retval = target_read_u32(trans_target, fifo->rp_addr, &fifo->rp);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("failed to get read pointer");
+			break;
+		}
+
+		if (fifo->rp == 0) {
+			LOG_ERROR("flash write algorithm aborted by target");
+			retval = ERROR_FLASH_OPERATION_FAILED;
+			break;
+		}
+
+		if (!IS_ALIGNED(fifo->rp - fifo->fifo_start_addr, block_size) || fifo->rp < fifo->fifo_start_addr || fifo->rp >= fifo->fifo_end_addr) {
+			LOG_ERROR("corrupted fifo read pointer 0x%" PRIx32, fifo->rp);
+			break;
+		}
+
+		/* Count the number of bytes available in the fifo without
+		 * crossing the wrap around. Make sure to not fill it completely,
+		 * because that would make wp == rp and that's the empty condition. */
+		uint32_t thisrun_bytes, thisrun_block_cnt;
+		if (fifo->rp > fifo->wp)
+			thisrun_bytes = fifo->rp - fifo->wp - block_size;
+		else if (fifo->rp > fifo->fifo_start_addr)
+			thisrun_bytes = fifo->fifo_end_addr - fifo->wp;
+		else
+			thisrun_bytes = fifo->fifo_end_addr - fifo->wp - block_size;
+
+		if (thisrun_bytes == 0) {
+			/* Throttle polling a bit if transfer is (much) faster than flash
+			 * programming. The exact delay shouldn't matter as long as it's
+			 * less than buffer size / flash speed. This is very unlikely to
+			 * run when using high latency connections such as USB. */
+			alive_sleep(2);
+
+			/* to stop an infinite loop on some targets check and increment a timeout
+			 * this issue was observed on a stellaris using the new ICDI interface */
+			if (timeout++ >= 2500) {
+				LOG_ERROR("timeout waiting for algorithm, a target reset is recommended");
+				return ERROR_FLASH_OPERATION_FAILED;
+			}
+			continue;
+		}
+
+		/* reset our timeout */
+		timeout = 0;
+
+		/* Limit to the amount of data we actually want to write */
+		if (thisrun_bytes > count * block_size)
+			thisrun_bytes = count * block_size;
+
+		/* Force end of large blocks to be block aligned */
+		thisrun_block_cnt = thisrun_bytes/block_size;
+		thisrun_bytes = thisrun_block_cnt * block_size;
+
+		LOG_DEBUG("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
+			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
+
+		/* Write data to fifo */
+		// start = timeval_ms();
+		retval = target_write_buffer(trans_target, fifo->wp, thisrun_bytes, buffer);
+		// now = timeval_ms();
+		// used_time = now - start;
+		// LOG_INFO("async trans cnt %x used time %llx", thisrun_block_cnt, used_time);
+
+		if (retval != ERROR_OK)
+			break;
+
+		/* Update counters and wrap write pointer */
+		buffer += thisrun_bytes;
+		count -= thisrun_block_cnt;
+		fifo->wp += thisrun_bytes;
+		if (fifo->wp >= fifo->fifo_end_addr)
+			fifo->wp = fifo->fifo_start_addr;
+
+		/* Store updated write pointer to target */
+		retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
+		if (retval != ERROR_OK)
+			break;
+		// LOG_INFO("transdata wp %x block cnt %x bytes %x remain block %x", fifo->wp, thisrun_block_cnt, thisrun_bytes, count);
+		/* Avoid GDB timeouts */
+		keep_alive();
+
+	}
+
+	if (retval != ERROR_OK) {
+		/* abort flash write algorithm on target */
+		target_write_u32(trans_target, fifo->wp_addr, 0);
+	}
+
+	return retval;
+
+}
+
+// static int target_async_algorithm_wait(struct target* exec_target)
+// {
+// 	return ERROR_OK;
+// }
+
+
 /**
  * Streams data to a circular buffer on target intended for consumption by code
  * running asynchronously on target.
@@ -1018,6 +1158,7 @@ int target_run_flash_async_algorithm(struct target *target,
 
 	const uint8_t *buffer_orig = buffer;
 
+	LOG_INFO("buffer start %x size %x", buffer_start, buffer_size);
 	/* Set up working area. First word is write pointer, second word is read pointer,
 	 * rest is fifo data area. */
 	uint32_t wp_addr = buffer_start;
@@ -1306,6 +1447,62 @@ int target_run_read_async_algorithm(struct target *target,
 		}
 	}
 
+	return retval;
+}
+
+
+
+int target_run_async_algorithm(struct target *trans_target, struct target *exec_target,
+		const uint8_t *buffer, uint32_t count, int block_size,
+		int num_mem_params, struct mem_param *mem_params,
+		int num_reg_params, struct reg_param *reg_params,
+		uint32_t buffer_start, uint32_t buffer_size,
+		uint32_t entry_point, uint32_t exit_point, void *arch_info)
+{
+	int retval;
+	struct async_fifo *fifo;
+
+	fifo = malloc(sizeof(struct async_fifo));
+	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, fifo);
+	if (retval != ERROR_OK)
+		return retval;
+
+	retval = target_start_algorithm(exec_target, num_mem_params, mem_params,
+			num_reg_params, reg_params,
+			entry_point,
+			exit_point,
+			arch_info);
+
+	if (retval != ERROR_OK) {
+		LOG_ERROR("error starting target flash write algorithm");
+		return retval;
+	}	
+	retval = target_async_algorithm_trans_data(trans_target, buffer, (int) count, block_size, fifo);
+
+	if(1)
+	{
+	int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
+			num_reg_params, reg_params,
+			exit_point,
+			10000,
+			arch_info);
+
+	if (retval2 != ERROR_OK) {
+		LOG_ERROR("error waiting for target flash write algorithm");
+		retval = retval2;
+	}
+	if (retval == ERROR_OK) {
+		/* check if algorithm set rp = 0 after fifo writer loop finished */
+		retval = target_read_u32(trans_target, fifo->rp_addr, &fifo->rp);
+		if (retval == ERROR_OK && fifo->rp == 0) {
+			LOG_ERROR("flash write algorithm aborted by target");
+			retval = ERROR_FLASH_OPERATION_FAILED;
+		}
+	}
+
+	}
+
+	free(fifo);
 	return retval;
 }
 
@@ -2161,7 +2358,7 @@ static int target_restore_working_area(struct target *target, struct working_are
 }
 
 /* Restore the area's backup memory, if any, and return the area to the allocation pool */
-static int target_free_working_area_restore(struct target *target, struct working_area *area, int restore)
+int target_free_working_area_restore(struct target *target, struct working_area *area, int restore)
 {
 	if (!area || area->free)
 		return ERROR_OK;

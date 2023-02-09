@@ -921,7 +921,6 @@ int armv8_dpm_write_dirty_registers(struct arm_dpm *dpm, bool bpwp)
 	/* check everything except our scratch register R0 */
 	for (unsigned i = 1; i < cache->num_regs; i++) {
 		struct arm_reg *r;
-
 		/* skip non-existent */
 		if (!cache->reg_list[i].exist)
 			continue;
@@ -934,7 +933,7 @@ int armv8_dpm_write_dirty_registers(struct arm_dpm *dpm, bool bpwp)
 		/* skip non-dirty */
 		if (!cache->reg_list[i].dirty)
 			continue;
-
+		LOG_DEBUG("restore reg num %x name %s value %llx", i, cache->reg_list[i].name, *(uint64_t *)cache->reg_list[i].value);
 		/* skip all registers not on the current EL */
 		r = cache->reg_list[i].arch_info;
 		if (r->mode != ARM_MODE_ANY &&

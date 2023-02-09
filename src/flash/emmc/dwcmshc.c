@@ -79,9 +79,15 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 
 static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, uint32_t addr, int size)
 {
-    int retval;
-    retval = fast_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
-    
+    int retval = ERROR_OK;
+
+    retval = async_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
+    if(retval != ERROR_OK)
+    {
+        LOG_ERROR("async write fail, try sync write");
+        retval = fast_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
+    }
+
     return retval;
 }
 

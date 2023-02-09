@@ -49,7 +49,7 @@ int sp_flash_quad_enable(struct flash_bank* bank)
     // LOG_INFO("flash cr %x bit %x", flash_cr, quad_en);
     if(quad_en == 0)
     {
-        // LOG_INFO("dwcssi flash en quad");
+        LOG_DEBUG("dwcssi flash en quad");
         dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr | 0x2);
     }
 

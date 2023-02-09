@@ -1,6 +1,9 @@
 noinst_LTLIBRARIES += %D%/libflash.la
 %C%_libflash_la_SOURCES = \
-	%D%/common.c %D%/common.h
+	%D%/common.c \
+	%D%/loader_io.c \
+	%D%/common.h \
+	%D%/loader_io.h
 
 %C%_libflash_la_LIBADD = \
 	%D%/nor/libocdflashnor.la \

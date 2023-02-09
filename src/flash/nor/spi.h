@@ -29,13 +29,23 @@
 
 #ifndef __ASSEMBLER__
 
+typedef struct flash_ops_t
+{
+	uint8_t qread_cmd;
+	uint8_t qprog_cmd;
+
+	int (*reset) (struct flash_bank *bank);
+	int (*quad_en) (struct flash_bank *bank);
+	int (*quad_dis) (struct flash_bank *bank);
+} flash_ops_t;
+
 /* data structure to maintain flash ids from different vendors */
 struct flash_device {
 	const char *name;
 	uint8_t read_cmd;
 	uint8_t qread_cmd;
 	uint8_t pprog_cmd;
-	uint8_t qprog_cmd;
+	// uint8_t qprog_cmd;
 	uint8_t erase_cmd;
 	uint8_t chip_erase_cmd;
 	uint32_t device_id;
@@ -44,9 +54,10 @@ struct flash_device {
 	uint32_t size_in_bytes;
 	// Pointer to model-specific operations for this flash 
 	// struct flash_device_op *flash_op;
-	int (*reset) (struct flash_bank *bank);
-	int (*quad_en) (struct flash_bank *bank);
-	int (*quad_dis) (struct flash_bank *bank);
+	// int (*reset) (struct flash_bank *bank);
+	// int (*quad_en) (struct flash_bank *bank);
+	// int (*quad_dis) (struct flash_bank *bank);
+	flash_ops_t *flash_ops;
 };
 
 // struct flash_device_op 
@@ -56,22 +67,29 @@ struct flash_device {
 // 	int (*quad_dis) (struct flash_bank* bank);
 // };
 
-#define FLASH_ID(n, re, qr, pp, qp, es, ces, id, psize, ssize, size, flash_reset, flash_quad_en, flash_quad_dis) \
+
+#define FLASH_OPS(qr, qp, flash_reset, flash_quad_en, flash_quad_dis) \
+{                    \
+	.qread_cmd = qr, \
+	.qprog_cmd = qp, \
+	.reset = flash_reset, \
+	.quad_en = flash_quad_en, \
+	.quad_dis = flash_quad_dis, \
+}
+
+#define FLASH_ID(n, re, qr, pp, es, ces, id, psize, ssize, size, ops) \
 {	                                \
 	.name = n,                      \
 	.read_cmd = re,                 \
 	.qread_cmd = qr,                \
 	.pprog_cmd = pp,                \
-	.qprog_cmd = qp,                \
 	.erase_cmd = es,                \
 	.chip_erase_cmd = ces,          \
 	.device_id = id,                \
 	.pagesize = psize,              \
 	.sectorsize = ssize,            \
 	.size_in_bytes = size,          \
-	.reset = flash_reset,        \
-	.quad_en = flash_quad_en,    \
-	.quad_dis = flash_quad_dis,  \
+	.flash_ops = ops,               \
 }
 
 #define FRAM_ID(n, re, qr, pp, id, size) \

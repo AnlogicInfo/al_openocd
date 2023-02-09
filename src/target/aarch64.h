@@ -83,7 +83,7 @@ struct aarch64_algorithm {
 
 	enum arm_mode core_mode;
 
-	uint32_t context[ARMV8_LAST_REG]; /* ARMV8_NUM_REGS */
+	uint64_t context[ARMV8_LAST_REG]; /* ARMV8_NUM_REGS */
 };
 
 #endif /* OPENOCD_TARGET_AARCH64_H */

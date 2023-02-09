@@ -12,5 +12,5 @@ _start:
 		.section .data
 		.balign REGBYTES
 stack:
-		.fill	64, REGBYTES, 0x8675309
+		.fill	16, REGBYTES, 0x8675309
 stack_end:

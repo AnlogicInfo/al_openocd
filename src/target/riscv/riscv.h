@@ -84,6 +84,14 @@ typedef struct {
 	char *name;
 } range_list_t;
 
+struct riscv_algorithm {
+	/** Registers with numbers below and including this number will be backuped before algo start.
+	 * Set to GDB_REGNO_COUNT-1 to save all existing registers. @see enum gdb_regno. */
+	uint64_t saved_pc;
+	uint64_t mstatus;
+	uint64_t context[32];
+};
+
 typedef struct {
 	unsigned dtm_version;
 
@@ -393,5 +401,8 @@ void riscv_add_bscan_tunneled_scan(struct target *target, struct scan_field *fie
 
 int riscv_read_by_any_size(struct target *target, target_addr_t address, uint32_t size, uint8_t *buffer);
 int riscv_write_by_any_size(struct target *target, target_addr_t address, uint32_t size, uint8_t *buffer);
+
+int riscv_interrupts_disable(struct target *target, uint64_t ie_mask, uint64_t *old_mstatus);
+int riscv_interrupts_restore(struct target *target, uint64_t old_mstatus);
 
 #endif

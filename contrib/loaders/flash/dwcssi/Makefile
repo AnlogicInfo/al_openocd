@@ -74,7 +74,7 @@ $(DST_DIR)/%.o: %.S
 	@$(CC) $(CFLAGS) -c -o $@ $(realpath $<)
 
 $(IMAGE).elf: $(OBJS)
-	$(LD) -T $(LD_SCRIPT) -o $(IMAGE).elf $(OBJS)
+	$(CC) -T $(LD_SCRIPT) $(CFLAGS) -o $(IMAGE).elf $(OBJS)
 
 
 $(IMAGE).bin: $(IMAGE).elf
