@@ -252,6 +252,15 @@ void dwcssi_config_rx(volatile uint32_t *ctrl_base, uint8_t frf, uint8_t rx_ip_l
     dwcssi_enable(ctrl_base);
 }
 
+void dwcssi_tx_empty(volatile uint32_t *ctrl_base)
+{
+    while(1)
+    {
+        if(dwcssi_get_bits(ctrl_base, DWCSSI_REG_SR, DWCSSI_SR_TFE_MASK, 2))
+            break;
+    }
+}
+
 /*dwc base functions*/
 int dwcssi_txwm_wait(volatile uint32_t *ctrl_base)
 {
@@ -405,8 +414,7 @@ int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t off
     dwcssi_enable(ctrl_base);
     dwcssi_tx(ctrl_base, qread_cmd);
     dwcssi_tx(ctrl_base, offset);
-    dwcssi_txwm_wait(ctrl_base);
-
+    dwcssi_tx_empty(ctrl_base);
     dwcssi_rx_buf(ctrl_base, buffer, len);
     return ERROR_OK;
 }

@@ -28,8 +28,11 @@
 
 #include "imp.h"
 #include "spi.h"
-#include <flash/nor/devs/devs.h>
+// #include <flash/nor/devs/devs.h>
 #include <jtag/jtag.h>
+
+extern const flash_ops_t sp_s25fl_ops;
+extern const flash_ops_t zetta_zd25q_ops;
 
  /* Shared table of known SPI flash devices for SPI-based flash drivers. Taken
   * from device datasheets and Linux SPI flash drivers. */
@@ -59,6 +62,7 @@ const struct flash_device flash_devices[] = {
 	FLASH_ID("sp s25fl164k",        0x03, 0x00, 0x02, 0xd8, 0xc7, 0x00174001, 0x100, 0x10000, 0x800000,     NULL),
 	FLASH_ID("sp s25fl128s",        0x03, 0x00, 0x02, 0xd8, 0xc7, 0x00182001, 0x100, 0x10000, 0x1000000,     &sp_s25fl_ops),
 	FLASH_ID("sp s25fl256s",        0x13, 0x00, 0x12, 0xdc, 0xc7, 0x00190201, 0x100, 0x10000, 0x2000000,     &sp_s25fl_ops),
+	FLASH_ID("zetta zd25q16",       0x03, 0x6B, 0x02, 0x20, 0xc7, 0x00ba6015, 0x100, 0x1000,  0x200000,      &zetta_zd25q_ops),
 	FLASH_ID("sp s25fl512s",        0x13, 0x00, 0x12, 0xdc, 0xc7, 0x00200201, 0x200, 0x40000, 0x4000000,     NULL),
 	FLASH_ID("cyp s25fl064l",       0x03, 0x00, 0x02, 0xd8, 0xc7, 0x00176001, 0x100, 0x10000, 0x800000,     NULL),
 	FLASH_ID("cyp s25fl128l",       0x03, 0x00, 0x02, 0xd8, 0xc7, 0x00186001, 0x100, 0x10000, 0x1000000,     NULL),
