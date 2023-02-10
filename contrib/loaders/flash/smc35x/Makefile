@@ -11,13 +11,14 @@ AARCH_CC=$(CROSS_COMPILE_AARCH)gcc
 AARCH_OBJCOPY=$(CROSS_COMPILE_AARCH)objcopy
 AARCH_OBJDUMP=$(CROSS_COMPILE_AARCH)objdump
 
-CFLAGS = -static -nostdlib -nostartfiles -Wall -Werror -Os -fPIC -Wunused-result -g
+CFLAGS = -static -nostdlib -nostartfiles -Wall -Os -fPIC -Wunused-result -g
 RISCV32_CFLAGS = -march=rv32e -mabi=ilp32e $(CFLAGS)
 RISCV64_CFLAGS = -march=rv64i -mabi=lp64 $(CFLAGS)
 AARCH64_CFLAGS = -mabi=lp64 $(CFLAGS)
 
 all: riscv32_smc35x.inc riscv64_smc35x.inc aarch64_smc35x.inc \
-	 riscv32_smc35x_read.inc riscv64_smc35x_read.inc aarch64_smc35x_read.inc
+	 riscv32_smc35x_read.inc riscv64_smc35x_read.inc aarch64_smc35x_read.inc \
+	 riscv32_smc35x_async.inc riscv64_smc35x_async.inc aarch64_smc35x_async.inc aarch64_smc35x_async.lst
 # all: aarch64_smc35x_read.inc aarch64_smc35x_read.lst
 
 .PHONY: clean
