@@ -55,20 +55,23 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
     return ERROR_OK;
 }
 
-static void qspi_mio_init(struct flash_bank *bank)
+static int qspi_mio_init(struct flash_bank *bank)
 {
     struct target *target = bank->target;
     uint8_t mio_num;
     uint32_t value=0;
     for (mio_num = 0; mio_num < 28; mio_num = mio_num + 4)
     {
-        target_read_u32(target, MIO_BASE + mio_num, &value);
+        if(target_read_u32(target, MIO_BASE + mio_num, &value)!=ERROR_OK)
+            return ERROR_FAIL;
         if(value != 1)
         {
             LOG_DEBUG("mio reg %x init ", (MIO_BASE + mio_num));
-            target_write_u32(target,  MIO_BASE + mio_num, 1);
+            if(target_write_u32(target,  MIO_BASE + mio_num, 1)!= ERROR_OK)
+                return ERROR_FAIL;
         }
     }
+    return ERROR_OK;
 }
 
 
@@ -292,11 +295,9 @@ static void dwcssi_config_rx(struct flash_bank *bank, uint8_t frf, uint8_t rx_ip
 }
 
 /*dwc base functions*/
-int dwcssi_txwm_wait(struct flash_bank* bank)
+static int dwcssi_wait_tx_empty(struct flash_bank* bank)
 {
     int64_t start = timeval_ms();
-    uint32_t ir_status;
-    // TX fifo empty
     while(1)
     {
         if(dwcssi_get_bits(bank, DWCSSI_REG_SR, DWCSSI_SR_TFE_MASK, 2))
@@ -307,7 +308,16 @@ int dwcssi_txwm_wait(struct flash_bank* bank)
             return ERROR_TARGET_TIMEOUT;
         }
     }
+    return ERROR_OK;
+}
 
+
+int dwcssi_txwm_wait(struct flash_bank* bank)
+{
+    int64_t start = timeval_ms();
+    uint32_t ir_status;
+    // TX fifo empty
+    dwcssi_wait_tx_empty(bank);
     while (1) {
         uint32_t status;
         if (dwcssi_read_reg(bank, &status, DWCSSI_REG_SR) != ERROR_OK)
@@ -326,6 +336,7 @@ int dwcssi_txwm_wait(struct flash_bank* bank)
 
     return ERROR_OK;
 }
+
 
 int dwcssi_tx(struct flash_bank *bank, uint32_t in)
 {
@@ -444,7 +455,7 @@ int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t cmd)
 {
     dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 0, 0);
     dwcssi_tx(bank, cmd);
-    return dwcssi_txwm_wait(bank);
+    return dwcssi_wait_tx_empty(bank);
 }
 
 static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
@@ -533,7 +544,8 @@ static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
     dwcssi_tx(bank, offset >> 8);
     dwcssi_tx(bank, offset);
 
-    dwcssi_txwm_wait(bank);
+    // dwcssi_txwm_wait(bank);
+    dwcssi_wait_tx_empty(bank);
     retval = dwcssi_wait_flash_idle(bank, DWCSSI_MAX_TIMEOUT, &flash_sr);
 
     return retval;
@@ -608,6 +620,7 @@ static int dwcssi_read_page(struct flash_bank *bank, uint8_t *buffer, uint32_t o
     dwcssi_enable(bank);
     dwcssi_tx(bank, flash_ops->qread_cmd);
     dwcssi_tx(bank, offset);
+    dwcssi_wait_tx_empty(bank);
     dwcssi_rx_buf(bank, buffer, len);
     return ERROR_OK;
 }
@@ -669,7 +682,7 @@ static void dwcssi_checksum_params_priv(struct flash_loader *loader)
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     
     buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, flash_ops->qread_cmd);
-    // LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, );
+    // LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, flash_ops->qread_cmd);
 }
 
 static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint32_t count, uint32_t *crc)
@@ -707,7 +720,7 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 
     if(~image_crc != ~target_crc)
     {
-        LOG_DEBUG("checksum image %x target %x", image_crc, target_crc);
+        LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
         retval = ERROR_FAIL;
     }
 
@@ -919,7 +932,12 @@ static int dwcssi_probe(struct flash_bank *bank)
 
     LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
     driver_priv_init(bank, driver_priv);
-    qspi_mio_init(bank);
+    if(qspi_mio_init(bank) != ERROR_OK)
+    {
+        LOG_ERROR("mio init fail");
+        return ERROR_FAIL;
+    }
+
     dwcssi_config_init(bank);
 
     return dwcssi_read_id(bank);
