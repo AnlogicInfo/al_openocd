@@ -9,7 +9,7 @@ int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t id)
     for(const struct flash_device *p = flash_devices; p->name; p++)
     {
         if(p->device_id == id) {
-            LOG_INFO("flash finded name %s", p->name);
+            LOG_INFO("flash finded id %x name %s", id, p->name);
             dwcssi_info->dev = p;
             dwcssi_info->probed = true;
             break;
@@ -129,6 +129,7 @@ uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, ui
 
 int flash_reset_e0(struct flash_bank *bank)
 {
+    LOG_INFO("flash reset E0");
     dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
     dwcssi_tx(bank, 0xF0);
     if(dwcssi_txwm_wait(bank) != 0)
@@ -139,15 +140,23 @@ int flash_reset_e0(struct flash_bank *bank)
 
 int flash_reset_66_99(struct flash_bank *bank)
 {
-    dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
+    LOG_INFO("flash reset 66 99");
+    dwcssi_config_tx_qpi(bank, SPI_FRF_X4_MODE, 1, 0);
+    
     dwcssi_tx(bank, 0x66);
     if(dwcssi_txwm_wait(bank) != 0)
+    {
+        LOG_INFO("cmd 66 timeout");
         return ERROR_TARGET_TIMEOUT;
+    }
 
-    dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
+    dwcssi_config_tx_qpi(bank, SPI_FRF_X4_MODE, 1, 0);
     dwcssi_tx(bank, 0x99);
     if(dwcssi_txwm_wait(bank) != 0)
+    {
+        LOG_INFO("cmd 99 timeout");
         return ERROR_TARGET_TIMEOUT;
+    }
     
     return ERROR_OK;
 }

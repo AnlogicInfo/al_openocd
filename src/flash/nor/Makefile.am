@@ -9,7 +9,8 @@ noinst_LTLIBRARIES += %D%/libocdflashnor.la
 
 NOR_DEVS = \
 	%D%/devs/sp_s25fl.c \
-	%D%/devs/zetta_zd25q.c
+	%D%/devs/zetta_zd25q.c \
+	%D%/devs/gigadev_gd25q.c 
 
 NOR_DRIVERS = \
 	%D%/aduc702x.c \

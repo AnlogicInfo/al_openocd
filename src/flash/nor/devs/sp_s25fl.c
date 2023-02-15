@@ -49,7 +49,7 @@ int sp_s25fl_reset(struct flash_bank *bank)
 
     LOG_INFO("reset sp flash");
     flash_err = dwcssi_wait_flash_idle(bank, 100, &flash_sr);
-    // dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
+    // dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     if(flash_err != 0)
     {
         // LOG_INFO("Flash Status Error %x", flash_sr);
@@ -78,7 +78,7 @@ int sp_s25fl_err_chk(struct flash_bank* bank)
 int sp_s25fl_quad_en(struct flash_bank* bank)
 {
     uint32_t flash_cr = 0, quad_en;
-    dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
+    dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     quad_en = (flash_cr >> 0x1) & 0x1;
     // LOG_INFO("flash cr %x bit %x", flash_cr, quad_en);
     if(quad_en == 0)
@@ -93,7 +93,7 @@ int sp_s25fl_quad_en(struct flash_bank* bank)
 int sp_s25fl_quad_dis(struct flash_bank* bank)
 {
     uint32_t flash_cr;
-    dwcssi_read_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
+    dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr & (0x3C));
     return ERROR_OK;
 }

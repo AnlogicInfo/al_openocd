@@ -155,6 +155,7 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     TRANS_TYPE_TT2                            2
 #define     TRANS_TYPE_TT3                            3
 
+#define     ADDR_L0                                   0
 #define     ADDR_L24                                  6
 #define     ADDR_L28                                  7
 #define     ADDR_L32                                  8
@@ -165,6 +166,11 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     MBL_4                                     1
 #define     MBL_8                                     2
 #define     MBL_16                                    3
+
+#define     STANDARD_SPI_MODE                         0
+#define     DUAL_SPI_MODE                             1
+#define     QUAD_SPI_MODE                             2
+#define     QPI_MODE                                  3
 
 /* Timeout in ms */
 #define     DWCSSI_CMD_TIMEOUT                        (100)

@@ -1830,6 +1830,12 @@ static int riscv_start_algorithm(struct target *target,
 {
 	struct riscv_algorithm *algorithm_info = arch_info;
 
+	if(arch_info == NULL)
+	{
+		LOG_ERROR("Please allocate area for arch_info");
+		return ERROR_FAIL;
+	}
+
 	if (num_mem_params > 0) {
 		LOG_ERROR("Memory parameters are not supported for RISC-V algorithms.");
 		return ERROR_FAIL;

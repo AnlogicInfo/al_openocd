@@ -2901,6 +2901,12 @@ static int aarch64_start_algorithm(struct target *target,
 	enum arm_mode core_mode = arm->core_mode;
 	int retval = ERROR_OK;
 
+	if(arch_info == NULL)
+	{
+		LOG_ERROR("Please allocate area for arch_info");
+		return ERROR_FAIL;
+	}
+
 	if(aarch64_algorithm_info->common_magic != AARCH64_COMMON_MAGIC)
 	{
 		LOG_ERROR("target invalid");
