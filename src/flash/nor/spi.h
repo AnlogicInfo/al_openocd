@@ -36,8 +36,12 @@ typedef struct flash_ops_t
 
 	int (*reset) (struct flash_bank *bank);
 	int (*err_chk) (struct flash_bank *bank);
+	
 	int (*quad_en) (struct flash_bank *bank);
 	int (*quad_dis) (struct flash_bank *bank);
+	
+	int (*qpi_en) (struct flash_bank *bank);
+	int (*qpi_dis) (struct flash_bank *bank);
 
 } flash_ops_t;
 

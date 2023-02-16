@@ -78,13 +78,18 @@ int sp_s25fl_err_chk(struct flash_bank* bank)
 int sp_s25fl_quad_en(struct flash_bank* bank)
 {
     uint32_t flash_cr = 0, quad_en;
+    uint8_t config_reg[2] = {0};
     dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     quad_en = (flash_cr >> 0x1) & 0x1;
+
+    config_reg[0] = FLASH_WR_CONFIG_REG_CMD;
+    config_reg[1] = flash_cr | 0x2;
+    
     // LOG_INFO("flash cr %x bit %x", flash_cr, quad_en);
     if(quad_en == 0)
     {
         LOG_DEBUG("dwcssi flash en quad");
-        dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr | 0x2);
+        dwcssi_wr_flash_reg(bank, config_reg, 2, STANDARD_SPI_MODE);
     }
 
     return ERROR_OK;
@@ -93,8 +98,13 @@ int sp_s25fl_quad_en(struct flash_bank* bank)
 int sp_s25fl_quad_dis(struct flash_bank* bank)
 {
     uint32_t flash_cr;
+    uint8_t config_reg[2] = {0};
+
     dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
-    dwcssi_wr_flash_reg(bank, FLASH_WR_CONFIG_REG_CMD, 0x00, flash_cr & (0x3C));
+
+    config_reg[0] = FLASH_WR_CONFIG_REG_CMD;
+    config_reg[1] = flash_cr & (0x3C);
+    dwcssi_wr_flash_reg(bank, config_reg, 2, STANDARD_SPI_MODE);
     return ERROR_OK;
 }
 

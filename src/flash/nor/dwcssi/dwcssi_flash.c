@@ -127,31 +127,30 @@ uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, ui
 //     return fail_flag;
 // }
 
-int flash_reset_e0(struct flash_bank *bank)
+int flash_reset_f0(struct flash_bank *bank, uint8_t cmd_mode)
 {
-    LOG_INFO("flash reset E0");
-    dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 1, 0);
-    dwcssi_tx(bank, 0xF0);
+    uint8_t flash_reset[] = {0xF0};
+    LOG_INFO("flash reset F0");
+    dwcssi_flash_tx_cmd(bank, flash_reset, 1, cmd_mode);
     if(dwcssi_txwm_wait(bank) != 0)
         return ERROR_TARGET_TIMEOUT;
 
     return ERROR_OK;
 }
 
-int flash_reset_66_99(struct flash_bank *bank)
+int flash_reset_66_99(struct flash_bank *bank, uint8_t cmd_mode)
 {
+    uint8_t flash_reset[] = {0x66, 0x99};
+
     LOG_INFO("flash reset 66 99");
-    dwcssi_config_tx_qpi(bank, SPI_FRF_X4_MODE, 1, 0);
-    
-    dwcssi_tx(bank, 0x66);
+    dwcssi_flash_tx_cmd(bank, &flash_reset[0], 1, cmd_mode);
     if(dwcssi_txwm_wait(bank) != 0)
     {
         LOG_INFO("cmd 66 timeout");
         return ERROR_TARGET_TIMEOUT;
     }
 
-    dwcssi_config_tx_qpi(bank, SPI_FRF_X4_MODE, 1, 0);
-    dwcssi_tx(bank, 0x99);
+    dwcssi_flash_tx_cmd(bank, &flash_reset[1], 1, cmd_mode);
     if(dwcssi_txwm_wait(bank) != 0)
     {
         LOG_INFO("cmd 99 timeout");

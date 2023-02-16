@@ -28,18 +28,24 @@ int zetta_zd25q_err_chk(struct flash_bank *bank)
 int zetta_zd25q_quad_en(struct flash_bank *bank)
 {
     uint32_t sr_byte1 = 0;
-    dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
-    dwcssi_wr_flash_config_reg(bank, ZETTA_CMD_WRITE_REGISTER_BYTE1, sr_byte1 | 0x2);
+    uint8_t quad_en_seq[2] = {ZETTA_CMD_READ_STATUS_BYTE1, 0};
 
-    dwcssi_flash_tx_cmd(bank, 0, ZETTA_CMD_ENABLE_QPI);
+    dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
+    
+    quad_en_seq[1] = sr_byte1 | 0x2;
+    dwcssi_wr_flash_reg(bank, quad_en_seq, 2, STANDARD_SPI_MODE);
     return ERROR_OK;
 }
 
 int zetta_zd25q_quad_dis(struct flash_bank *bank)
 {
     uint32_t sr_byte1 = 0;
+    uint8_t quad_dis_seq[2] = {ZETTA_CMD_READ_STATUS_BYTE1, 0};
+
     dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
-    dwcssi_wr_flash_config_reg(bank, ZETTA_CMD_WRITE_REGISTER_BYTE1, sr_byte1 & 0xFD);
+
+    quad_dis_seq[1] = sr_byte1 & 0xFD;
+    dwcssi_wr_flash_reg(bank, quad_dis_seq, 2, STANDARD_SPI_MODE);
     return ERROR_OK;
 }
 
