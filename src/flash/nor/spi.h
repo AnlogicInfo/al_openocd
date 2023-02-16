@@ -33,7 +33,7 @@ typedef struct flash_ops_t
 {
 	uint8_t qread_cmd;
 	uint8_t qprog_cmd;
-
+	void (*trans_config) (struct flash_bank *bank, uint8_t dir);
 	int (*reset) (struct flash_bank *bank);
 	int (*err_chk) (struct flash_bank *bank);
 	
@@ -69,17 +69,6 @@ struct flash_device {
 // 	int (*quad_en) (struct flash_bank* bank);
 // 	int (*quad_dis) (struct flash_bank* bank);
 // };
-
-
-#define FLASH_OPS(qr, qp, flash_reset, flash_err_chk, flash_quad_en, flash_quad_dis) \
-{                    \
-	.qread_cmd = qr, \
-	.qprog_cmd = qp, \
-	.reset = flash_reset, \
-	.err_chk = flash_err_chk, \
-	.quad_en = flash_quad_en, \
-	.quad_dis = flash_quad_dis, \
-}
 
 #define FLASH_ID(n, re, qr, pp, es, ces, id, psize, ssize, size, ops) \
 {	                                \

@@ -28,7 +28,7 @@ int zetta_zd25q_err_chk(struct flash_bank *bank)
 int zetta_zd25q_quad_en(struct flash_bank *bank)
 {
     uint32_t sr_byte1 = 0;
-    uint8_t quad_en_seq[2] = {ZETTA_CMD_READ_STATUS_BYTE1, 0};
+    uint8_t quad_en_seq[2] = {ZETTA_CMD_WRITE_REGISTER_BYTE1, 0};
 
     dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
     
@@ -40,7 +40,7 @@ int zetta_zd25q_quad_en(struct flash_bank *bank)
 int zetta_zd25q_quad_dis(struct flash_bank *bank)
 {
     uint32_t sr_byte1 = 0;
-    uint8_t quad_dis_seq[2] = {ZETTA_CMD_READ_STATUS_BYTE1, 0};
+    uint8_t quad_dis_seq[2] = {ZETTA_CMD_WRITE_REGISTER_BYTE1, 0};
 
     dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
 
@@ -55,6 +55,6 @@ const flash_ops_t zetta_zd25q_ops = {
     .qprog_cmd = 0x32,
     .reset     = zetta_zd25q_reset,
     .err_chk   = zetta_zd25q_err_chk,
-    .quad_en   = zetta_zd25q_quad_en,
-    .quad_dis  = zetta_zd25q_quad_dis
+    .quad_en   = general_spi_quad_en,
+    .quad_dis  = general_spi_quad_dis
 };

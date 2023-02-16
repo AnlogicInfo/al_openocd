@@ -8,6 +8,7 @@ noinst_LTLIBRARIES += %D%/libocdflashnor.la
 	$(NORHEADERS)
 
 NOR_DEVS = \
+	%D%/devs/general_spi.c \
 	%D%/devs/sp_s25fl.c \
 	%D%/devs/zetta_zd25q.c \
 	%D%/devs/gigadev_gd25q.c 

@@ -19,6 +19,4 @@ int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count)
 uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
 // int flash_status_err(uint8_t status);
 
-int flash_reset_f0(struct flash_bank *bank, uint8_t cmd_mode);
-int flash_reset_66_99(struct flash_bank *bank, uint8_t cmd_mode);
 #endif

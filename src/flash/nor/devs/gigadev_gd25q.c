@@ -55,7 +55,7 @@ int gigadev_gd25q_qpi_dis(struct flash_bank* bank)
 }
 
 const flash_ops_t gigadev_gd25q_ops = {
-    .qread_cmd = 0xeb,
+    .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,
     .reset     = gigadev_gd25q_reset,
     .err_chk   = gigadev_gd25q_err_chk,

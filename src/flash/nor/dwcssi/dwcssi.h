@@ -202,10 +202,20 @@ struct dwcssi_trans_config {
 
 int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr);
 void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv);
+void dwcssi_config_trans(struct flash_bank *bank, struct dwcssi_trans_config *trans_config);
+
 int dwcssi_tx(struct flash_bank *bank, uint32_t in);
 int dwcssi_txwm_wait(struct flash_bank* bank);
 int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint8_t cmd_mode);
 int dwcssi_rd_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, uint32_t len);
 int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint8_t cmd_mode);
 
+//general spi ops
+int general_reset_f0(struct flash_bank *bank, uint8_t cmd_mode);
+int general_reset_66_99(struct flash_bank *bank, uint8_t cmd_mode);
+int general_spi_err_chk(struct flash_bank* bank);
+int general_spi_quad_en(struct flash_bank* bank);
+int general_spi_quad_dis(struct flash_bank* bank);
+int general_spi_qpi_en(struct flash_bank* bank);
+int general_spi_qpi_dis(struct flash_bank* bank);
 #endif
