@@ -43,6 +43,7 @@ typedef union sp_s25fl_cr1_t
 void sp_s25fl_trans_config(struct flash_bank *bank, uint8_t trans_dir)
 {
     struct dwcssi_trans_config trans_config;
+    LOG_INFO("sp s25fl config trans");
     trans_config.tmod = trans_dir;
     trans_config.spi_frf = SPI_FRF_X4_MODE;
     trans_config.ndf = 0;
@@ -111,24 +112,28 @@ int sp_s25fl_quad_en(struct flash_bank* bank)
     // LOG_INFO("flash cr %x bit %x", flash_cr, quad_en);
     if(quad_en == 0)
     {
-        LOG_INFO("sp s25fl flash en quad");
         dwcssi_wr_flash_reg(bank, config_reg, 3, STANDARD_SPI_MODE);
     }
 
+    dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     return ERROR_OK;
 }
 
 int sp_s25fl_quad_dis(struct flash_bank* bank)
 {
-    uint32_t flash_cr;
+    uint32_t flash_cr, quad_en;
     uint8_t config_reg[3] = {0};
 
     dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
+    quad_en = (flash_cr >> 0x1) & 0x1;
+    if(quad_en)
+    {
+        config_reg[0] = FLASH_WR_CONFIG_REG_CMD;
+        config_reg[1] = 0x00;
+        config_reg[2] = flash_cr & (0x3C);
+        dwcssi_wr_flash_reg(bank, config_reg, 3, STANDARD_SPI_MODE);
+    }
 
-    config_reg[0] = FLASH_WR_CONFIG_REG_CMD;
-    config_reg[1] = 0x00;
-    config_reg[2] = flash_cr & (0x3C);
-    dwcssi_wr_flash_reg(bank, config_reg, 2, STANDARD_SPI_MODE);
     return ERROR_OK;
 }
 

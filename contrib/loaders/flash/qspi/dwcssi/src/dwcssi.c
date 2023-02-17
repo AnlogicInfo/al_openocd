@@ -398,12 +398,9 @@ int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uin
     // retval = reg_read(ctrl_base, DWCSSI_REG_SSIENR);
     // return retval;
 
-    // dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
-    // dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x4);
+    dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
+    dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x4);
 
-    dwcssi_disable(ctrl_base);
-    dwcssi_config_CTRLR1(ctrl_base, len-1);
-    dwcssi_enable(ctrl_base);
     dwcssi_tx(ctrl_base, flash_info);
     dwcssi_tx(ctrl_base, offset);
     dwcssi_tx_buf(ctrl_base, buffer, len);
