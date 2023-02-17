@@ -216,8 +216,7 @@ static int dwcssi_config_RXFTLR(struct flash_bank *bank, uint32_t rft)
     return ERROR_OK;
 }
 
-// ctrl for enhanced spi mode
-static int dwcssi_config_SPICTRLR0(struct flash_bank *bank, uint8_t trans_type, uint8_t addr_len, uint8_t stretch_en, uint8_t wait_cycle)
+static uint32_t dwcssi_set_SPICTRLR0(uint8_t trans_type, uint8_t addr_len, uint8_t stretch_en, uint8_t wait_cycle)
 {
     dwcssi_spi_ctrlr0_t spi_ctrlr0;
 
@@ -228,38 +227,51 @@ static int dwcssi_config_SPICTRLR0(struct flash_bank *bank, uint8_t trans_type, 
     spi_ctrlr0.reg_fields.INST_L                = INST_L8;
     spi_ctrlr0.reg_fields.CLK_STRETCH_EN        = stretch_en; 
     spi_ctrlr0.reg_fields.WAIT_CYCLES           = wait_cycle;
-    dwcssi_set_bits(bank, DWCSSI_REG_SPI_CTRLR0, spi_ctrlr0.reg_val, 0xFFFFFFFF);
+    return spi_ctrlr0.reg_val;
+}
+
+// ctrl for enhanced spi mode
+static int dwcssi_config_SPICTRLR0(struct flash_bank *bank, uint8_t trans_type, uint8_t addr_len, uint8_t stretch_en, uint8_t wait_cycle)
+{
+    uint32_t spictrl;
+    // dwcssi_spi_ctrlr0_t spi_ctrlr0;
+
+    // spi_ctrlr0.reg_val = 0;
+
+    // spi_ctrlr0.reg_fields.TRANS_TYPE            = trans_type;
+    // spi_ctrlr0.reg_fields.ADDR_L                = addr_len;
+    // spi_ctrlr0.reg_fields.INST_L                = INST_L8;
+    // spi_ctrlr0.reg_fields.CLK_STRETCH_EN        = stretch_en; 
+    // spi_ctrlr0.reg_fields.WAIT_CYCLES           = wait_cycle;
+    spictrl = dwcssi_set_SPICTRLR0(trans_type, addr_len, stretch_en, wait_cycle);
+    dwcssi_set_bits(bank, DWCSSI_REG_SPI_CTRLR0, spictrl, 0xFFFFFFFF);
     return ERROR_OK;
 }
 
-static int dwcssi_config_SPICTRLR0_2(struct flash_bank *bank, uint32_t val, uint32_t mask)
-{
-    dwcssi_set_bits(bank, DWCSSI_REG_SPI_CTRLR0, val, mask);
-    return ERROR_OK;
-}
 
-static void dwcssi_x4_mode(struct flash_bank *bank, uint32_t tmod)
-{
-    dwcssi_spi_ctrlr0_t spi_ctrlr0;
 
-    spi_ctrlr0.reg_val = 0;
+// static void dwcssi_x4_mode(struct flash_bank *bank, uint32_t tmod)
+// {
+//     dwcssi_spi_ctrlr0_t spi_ctrlr0;
 
-    spi_ctrlr0.reg_fields.TRANS_TYPE            = TRANS_TYPE_TT0;
-    spi_ctrlr0.reg_fields.ADDR_L                = ADDR_L32;
-    spi_ctrlr0.reg_fields.INST_L                = INST_L8;
-    spi_ctrlr0.reg_fields.CLK_STRETCH_EN        = ENABLE; 
-    if(tmod == TX_ONLY)
-    {
-        spi_ctrlr0.reg_fields.WAIT_CYCLES       = 0;
-    }
-    else
-    {
-        spi_ctrlr0.reg_fields.WAIT_CYCLES       = 8;
-    }
+//     spi_ctrlr0.reg_val = 0;
 
-    dwcssi_config_SPICTRLR0_2(bank, spi_ctrlr0.reg_val, 0xFFFFFFFF);
-    // LOG_INFO("dwcssi config SPICTRLR0 value %x", spi_ctrlr0.reg_val);
-}
+//     spi_ctrlr0.reg_fields.TRANS_TYPE            = TRANS_TYPE_TT0;
+//     spi_ctrlr0.reg_fields.ADDR_L                = ADDR_L32;
+//     spi_ctrlr0.reg_fields.INST_L                = INST_L8;
+//     spi_ctrlr0.reg_fields.CLK_STRETCH_EN        = ENABLE; 
+//     if(tmod == TX_ONLY)
+//     {
+//         spi_ctrlr0.reg_fields.WAIT_CYCLES       = 0;
+//     }
+//     else
+//     {
+//         spi_ctrlr0.reg_fields.WAIT_CYCLES       = 8;
+//     }
+
+//     dwcssi_config_SPICTRLR0_2(bank, spi_ctrlr0.reg_val, 0xFFFFFFFF);
+//     // LOG_INFO("dwcssi config SPICTRLR0 value %x", spi_ctrlr0.reg_val);
+// }
 
 static void dwcssi_config_init(struct flash_bank *bank)
 {
@@ -287,24 +299,8 @@ void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_total_le
     dwcssi_config_SER(bank,1);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, frf, TX_ONLY);
     dwcssi_config_TXFTLR(bank, 0, tx_start_lv);
-    if(frf == SPI_FRF_X4_MODE)
-        dwcssi_config_SPICTRLR0(bank, TRANS_TYPE_TT0, ADDR_L32, ENABLE, 0);
     dwcssi_enable(bank);
 }
-
-// static void dwcssi_config_rx(struct flash_bank *bank, uint8_t frf, uint8_t rx_ip_lv)
-// {
-//     dwcssi_disable(bank);
-//     dwcssi_config_SER(bank,1);
-//     dwcssi_config_CTRLR0(bank, DFS_BYTE, frf, RX_ONLY);
-//     dwcssi_config_RXFTLR(bank, rx_ip_lv);
-//     if(frf == SPI_FRF_X4_MODE)
-//     {
-//         dwcssi_config_SPICTRLR0(bank, TRANS_TYPE_TT0, ADDR_L32, ENABLE, 0);
-//     }
-    
-//     dwcssi_enable(bank);
-// }
 
 static void dwcssi_config_rx(struct flash_bank *bank, uint8_t frf, uint8_t rx_ip_lv)
 {
@@ -312,10 +308,10 @@ static void dwcssi_config_rx(struct flash_bank *bank, uint8_t frf, uint8_t rx_ip
     dwcssi_config_SER(bank,1);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, frf, RX_ONLY);
     dwcssi_config_RXFTLR(bank, rx_ip_lv);
-    if(frf == SPI_FRF_X4_MODE)
-    {
-        dwcssi_x4_mode(bank, RX_ONLY);
-    }
+    // if(frf == SPI_FRF_X4_MODE)
+    // {
+    //     dwcssi_x4_mode(bank, RX_ONLY);
+    // }
     dwcssi_enable(bank);
 }
 
@@ -592,60 +588,27 @@ int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
     return dwcssi_wait_flash_idle(bank, 1000, &sr);
 }
 
-int dwcssi_wr_flash_reg_bak(struct flash_bank *bank, uint8_t cmd, uint8_t sr1, uint8_t cr1)
-{
-    uint8_t flash_sr;
-    // uint32_t flash_cr=0;
-    LOG_INFO("dwcssi wr flash sr %x cr %x", sr1, cr1);
-
-    dwcssi_txwm_wait(bank);
-    dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
-    dwcssi_wait_flash_idle(bank, 1000, &flash_sr);
-
-    dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 2, 2);
-    dwcssi_tx(bank, cmd);
-    dwcssi_tx(bank, sr1);
-    dwcssi_tx(bank, cr1);
-
-    // dwcssi_txwm_wait(bank);
-    dwcssi_wait_tx_empty(bank);
-
-    dwcssi_disable(bank);
-    dwcssi_config_SER(bank, 0);
-    dwcssi_enable(bank);
-
-    dwcssi_disable(bank);
-    dwcssi_config_SER(bank, ENABLE);
-    dwcssi_enable(bank);
-
-    dwcssi_wait_flash_idle(bank, 1000, &flash_sr);
-    // LOG_INFO("cr val %x", cr_val);
-    return ERROR_OK;
-}
-
 static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    uint8_t flash_sr;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    uint8_t flash_sr, offset_shift;
+    int addr_bytes = flash_ops->addr_len >> 1, i;
     uint32_t offset;
     int retval;
 
     offset = bank->sectors[sector].offset;
 
-    // dwcssi_disable(bank);
-    // dwcssi_config_TXFTLR(bank, 0, 1);
-    // dwcssi_enable(bank);
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
-    dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 0xFF, 4);
+    dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 0xFF, addr_bytes);
     // LOG_INFO("dwcssi erase cmd %x sector %x", driver_priv->dev->erase_cmd, offset);
 
     dwcssi_tx(bank, driver_priv->dev->erase_cmd);
-    dwcssi_tx(bank, offset >> 24);
-    dwcssi_tx(bank, offset >> 16);
-    dwcssi_tx(bank, offset >> 8);
-    dwcssi_tx(bank, offset);
-
-    // dwcssi_txwm_wait(bank);
+    for(i = (addr_bytes-1); i >= 0; i--)
+    {
+        offset_shift = i<<3;
+        dwcssi_tx(bank, offset >> offset_shift);
+    }
     dwcssi_wait_tx_empty(bank);
     retval = dwcssi_wait_flash_idle(bank, DWCSSI_MAX_TIMEOUT, &flash_sr);
 
@@ -888,16 +851,23 @@ static void dwcssi_write_sync_params_priv(struct flash_loader *loader)
 {
     struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    uint32_t spictrl;
 
+    spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, flash_ops->addr_len, ENABLE, 0);
     buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, flash_ops->qprog_cmd);
+    buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, spictrl);
 }
 
 static void dwcssi_write_async_params_priv(struct flash_loader *loader)
 {
     struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    uint32_t spictrl;
+
+    spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, flash_ops->addr_len, ENABLE, 0);
 
     buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, flash_ops->qprog_cmd);
+    buf_set_u64(loader->reg_params[7].value, 0, loader->xlen, spictrl);
 }
 
 
@@ -913,7 +883,7 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
     loader->work_mode = ASYNC_TRANS;
     loader->block_size = driver_priv->dev->pagesize; 
     loader->image_size = count;
-    loader->param_cnt = 7;
+    loader->param_cnt = 8;
     loader->set_params_priv = dwcssi_write_async_params_priv;
     LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
 
@@ -934,7 +904,7 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
     loader->work_mode = SYNC_TRANS;
     loader->block_size = driver_priv->dev->pagesize; 
     loader->image_size = count;
-    loader->param_cnt = 6;
+    loader->param_cnt = 7;
     loader->set_params_priv = dwcssi_write_sync_params_priv;
 
     flash_ops->quad_en(bank);

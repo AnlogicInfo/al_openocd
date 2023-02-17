@@ -225,7 +225,7 @@ void dwcssi_config_eeprom(volatile uint32_t *ctrl_base, uint32_t len)
     dwcssi_enable(ctrl_base);
 }
 
-void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv)
+void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv, uint32_t spictrl)
 {
     dwcssi_disable(ctrl_base);
     dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, frf, TX_ONLY);
@@ -234,7 +234,7 @@ void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint32_t tx_tot
     if(frf == SPI_FRF_X4_MODE)
     {
         dwcssi_config_CTRLR1(ctrl_base, tx_total_len - 1);
-        dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40000220, 0xFFFFFFFF);
+        dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, spictrl, 0xFFFFFFFF);
     }
 
     dwcssi_enable(ctrl_base);
@@ -251,6 +251,7 @@ void dwcssi_config_rx(volatile uint32_t *ctrl_base, uint8_t frf, uint8_t rx_ip_l
     }
     dwcssi_enable(ctrl_base);
 }
+
 
 void dwcssi_tx_empty(volatile uint32_t *ctrl_base)
 {
@@ -385,13 +386,13 @@ int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 int dwcssi_flash_wr_en(volatile uint32_t *ctrl_base, uint8_t frf)
 {
     uint8_t tx_start_lv = 0;
-    dwcssi_config_tx(ctrl_base, frf, 0, tx_start_lv);
+    dwcssi_config_tx(ctrl_base, frf, 0, tx_start_lv, 0);
     dwcssi_tx(ctrl_base, SPIFLASH_WRITE_ENABLE);
     dwcssi_txwm_wait(ctrl_base);
     return ERROR_OK;
 }
 
-int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info)
+int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info, uint32_t spictrl)
 {
     // int retval;
     // asm volatile("ebreak");
@@ -399,7 +400,7 @@ int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uin
     // return retval;
 
     dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
-    dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x4);
+    dwcssi_config_tx(ctrl_base, SPI_FRF_X4_MODE, len, 0x4, spictrl);
 
     dwcssi_tx(ctrl_base, flash_info);
     dwcssi_tx(ctrl_base, offset);

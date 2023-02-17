@@ -1,6 +1,6 @@
 #include "dwcssi.h"
 
-int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uint32_t *buf_start, uint32_t *buf_end, uint32_t offset, uint32_t qprog_cmd)
+int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uint32_t *buf_start, uint32_t *buf_end, uint32_t offset, uint32_t qprog_cmd, uint32_t spictrl)
 {
     uint8_t *rp;
     uint32_t retval = 0;
@@ -19,7 +19,7 @@ int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uin
         else
             cur_count = page_size;
 
-        retval = dwcssi_write_buffer(ctrl_base, rp, offset, cur_count, qprog_cmd);
+        retval = dwcssi_write_buffer(ctrl_base, rp, offset, cur_count, qprog_cmd, spictrl);
 
         // page_offset = 0;
         rp += cur_count;

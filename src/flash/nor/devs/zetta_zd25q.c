@@ -9,21 +9,17 @@
 #define ZETTA_CMD_DISABLE_QPI                  0xFF
 
 #define ZETTA_EP_FAIL(x)                   ((x>>2) & 0x1)
-int zetta_zd25q_reset(struct flash_bank *bank)
-{
-    return ERROR_OK;
-}
 
-int zetta_zd25q_err_chk(struct flash_bank *bank)
-{
-    uint32_t sr;
+// int zetta_zd25q_err_chk(struct flash_bank *bank)
+// {
+//     uint32_t sr;
 
-    dwcssi_rd_flash_reg(bank, &sr, ZETTA_CMD_READ_STATUS_BYTE1, 1);
-    if(ZETTA_EP_FAIL(sr))
-        return ERROR_FAIL;
-    else
-        return ERROR_OK;
-}
+//     dwcssi_rd_flash_reg(bank, &sr, ZETTA_CMD_READ_STATUS_BYTE1, 1);
+//     if(ZETTA_EP_FAIL(sr))
+//         return ERROR_FAIL;
+//     else
+//         return ERROR_OK;
+// }
 
 int zetta_zd25q_quad_en(struct flash_bank *bank)
 {
@@ -53,8 +49,11 @@ int zetta_zd25q_quad_dis(struct flash_bank *bank)
 const flash_ops_t zetta_zd25q_ops = {
     .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,
-    .reset     = zetta_zd25q_reset,
-    .err_chk   = zetta_zd25q_err_chk,
+    .addr_len  = ADDR_L24,
+    .wait_cycle = 8,
+
+    .trans_config = general_spi_trans_config,
+    .reset     = general_reset_66_99,
     .quad_en   = general_spi_quad_en,
     .quad_dis  = general_spi_quad_dis
 };

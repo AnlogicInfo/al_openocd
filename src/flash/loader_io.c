@@ -203,7 +203,7 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 
     for(int i=0; i<loader->param_cnt; i++)
     {
-        LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name , *(target_addr_t *)loader->reg_params[i].value);
+        LOG_INFO("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name , *(target_addr_t *)loader->reg_params[i].value);
     }
 
     // LOG_DEBUG("target set %s ctrl base " TARGET_ADDR_FMT, loader->reg_params[0].reg_name ,loader->ctrl_base);

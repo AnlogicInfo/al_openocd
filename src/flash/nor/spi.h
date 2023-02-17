@@ -33,8 +33,10 @@ typedef struct flash_ops_t
 {
 	uint8_t qread_cmd;
 	uint8_t qprog_cmd;
+	uint8_t addr_len;
+	uint8_t wait_cycle;
 	void (*trans_config) (struct flash_bank *bank, uint8_t dir);
-	int (*reset) (struct flash_bank *bank);
+	int (*reset) (struct flash_bank *bank, uint8_t cmd_mode);
 	int (*err_chk) (struct flash_bank *bank);
 	
 	int (*quad_en) (struct flash_bank *bank);

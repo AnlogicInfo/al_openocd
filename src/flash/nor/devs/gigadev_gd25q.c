@@ -5,15 +5,10 @@
 #define GD_CMD_ENABLE_QPI             0x38
 #define GD_CMD_DISABLE_QPI            0xFF
 
-int gigadev_gd25q_reset(struct flash_bank *bank)
-{
-    return ERROR_OK;
-}
-
-int gigadev_gd25q_err_chk(struct flash_bank *bank)
-{
-    return ERROR_OK;
-}
+// int gigadev_gd25q_err_chk(struct flash_bank *bank)
+// {
+//     return ERROR_OK;
+// }
 
 int gigadev_gd25q_quad_en(struct flash_bank *bank)
 {
@@ -42,7 +37,7 @@ int gigadev_gd25q_quad_dis(struct flash_bank *bank)
 int gigadev_gd25q_qpi_en(struct flash_bank *bank)
 {
     uint8_t qpi_en_cmd = GD_CMD_ENABLE_QPI;
-    gigadev_gd25q_quad_en(bank);
+    general_spi_quad_en(bank);
     dwcssi_flash_tx_cmd(bank, &qpi_en_cmd, 1, STANDARD_SPI_MODE);
     return ERROR_OK;
 }
@@ -57,10 +52,14 @@ int gigadev_gd25q_qpi_dis(struct flash_bank* bank)
 const flash_ops_t gigadev_gd25q_ops = {
     .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,
-    .reset     = gigadev_gd25q_reset,
-    .err_chk   = gigadev_gd25q_err_chk,
-    .quad_en   = gigadev_gd25q_quad_en,
-    .quad_dis  = gigadev_gd25q_quad_dis,
-    .qpi_en    = gigadev_gd25q_qpi_en,
-    .qpi_dis   = gigadev_gd25q_qpi_dis
+    .addr_len  = ADDR_L24,
+    .wait_cycle = 8,
+
+    .trans_config = general_spi_trans_config,
+    .reset        = general_reset_66_99,
+    .quad_en      = general_spi_quad_en,
+    .quad_dis     = general_spi_quad_dis,
+
+    .qpi_en       = gigadev_gd25q_qpi_en,
+    .qpi_dis      = gigadev_gd25q_qpi_dis
 };

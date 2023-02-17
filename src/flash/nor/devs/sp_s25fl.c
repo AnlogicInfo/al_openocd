@@ -2,7 +2,6 @@
 // s25f1256s flash defines
 #define   FLASH_RD_CONFIG_REG_CMD              0x35
 #define   FLASH_WR_CONFIG_REG_CMD              0x01
-
 typedef union sp_s25fl_sr1_t
 {
     uint8_t reg_val;
@@ -64,7 +63,7 @@ void sp_s25fl_trans_config(struct flash_bank *bank, uint8_t trans_dir)
     dwcssi_config_trans(bank, &trans_config);
 }
 
-int sp_s25fl_reset(struct flash_bank *bank)
+int sp_s25fl_reset(struct flash_bank *bank, uint8_t cmd_mode)
 {
     int flash_err;
     uint8_t flash_sr;
@@ -89,13 +88,14 @@ int sp_s25fl_reset(struct flash_bank *bank)
 
 int sp_s25fl_err_chk(struct flash_bank* bank)
 {
-    struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
-    uint8_t sr = driver_priv->flash_sr1;
+    return ERROR_OK;
+    // struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
+    // uint8_t sr = driver_priv->flash_sr1;
 
-    if(FLASH_STATUS_ERR(sr) != 0)
-        return ERROR_FAIL;
-    else
-        return ERROR_OK;
+    // if(FLASH_STATUS_ERR(sr) != 0)
+    //     return ERROR_FAIL;
+    // else
+    //     return ERROR_OK;
 }
 
 int sp_s25fl_quad_en(struct flash_bank* bank)
@@ -140,8 +140,10 @@ int sp_s25fl_quad_dis(struct flash_bank* bank)
 const flash_ops_t sp_s25fl_ops = {
     .qread_cmd = 0x6C,
     .qprog_cmd = 0x34,
+    .addr_len  = ADDR_L32,
+    .wait_cycle = 8,
     .trans_config = sp_s25fl_trans_config,
-    .reset     = sp_s25fl_reset,
+    .reset     = general_reset_f0,
     .err_chk   = sp_s25fl_err_chk,
     .quad_en   = sp_s25fl_quad_en,
     .quad_dis  = sp_s25fl_quad_dis
