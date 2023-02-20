@@ -1978,8 +1978,8 @@ static int riscv_wait_algorithm(struct target *target,
 
 	/* Restore Interrupts */
 
-	//riscv_interrupts_restore(target, algorithm_info->mstatus);
-	if (riscv_interrupts_restore(target, current_mstatus) != ERROR_OK)
+	//riscv_interrupts_restore(target, current_mstatus);
+	if (riscv_interrupts_restore(target, algorithm_info->mstatus) != ERROR_OK)
 		return ERROR_FAIL;
 
 	/* Restore registers */
