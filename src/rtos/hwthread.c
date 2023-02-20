@@ -32,17 +32,20 @@
 static bool hwthread_detect_rtos(struct target *target);
 static int hwthread_create(struct target *target);
 static int hwthread_update_threads(struct rtos *rtos);
-static int hwthread_get_thread_reg(struct rtos *rtos, int64_t thread_id,
-		uint32_t reg_num, struct rtos_reg *rtos_reg);
+static int hwthread_get_thread_reg_value(struct rtos *rtos, int64_t thread_id,
+		uint32_t reg_num, uint32_t *size, uint8_t **value);
 static int hwthread_get_thread_reg_list(struct rtos *rtos, int64_t thread_id,
 		struct rtos_reg **reg_list, int *num_regs);
 static int hwthread_get_symbol_list_to_lookup(struct symbol_table_elem *symbol_list[]);
 static int hwthread_smp_init(struct target *target);
 static int hwthread_set_reg(struct rtos *rtos, uint32_t reg_num, uint8_t *reg_value);
+static bool hwthread_needs_fake_step(struct target *target, int64_t thread_id);
 static int hwthread_read_buffer(struct rtos *rtos, target_addr_t address,
 		uint32_t size, uint8_t *buffer);
 static int hwthread_write_buffer(struct rtos *rtos, target_addr_t address,
 		uint32_t size, const uint8_t *buffer);
+struct target *hwthread_swbp_target(struct rtos *rtos, target_addr_t address,
+				    uint32_t length, enum breakpoint_type type);
 
 #define HW_THREAD_NAME_STR_SIZE (32)
 
@@ -59,12 +62,14 @@ const struct rtos_type hwthread_rtos = {
 	.create = hwthread_create,
 	.update_threads = hwthread_update_threads,
 	.get_thread_reg_list = hwthread_get_thread_reg_list,
-	.get_thread_reg = hwthread_get_thread_reg,
+	.get_thread_reg_value = hwthread_get_thread_reg_value,
 	.get_symbol_list_to_lookup = hwthread_get_symbol_list_to_lookup,
 	.smp_init = hwthread_smp_init,
 	.set_reg = hwthread_set_reg,
+	.needs_fake_step = hwthread_needs_fake_step,
 	.read_buffer = hwthread_read_buffer,
 	.write_buffer = hwthread_write_buffer,
+	.swbp_target = hwthread_swbp_target
 };
 
 struct hwthread_params {
@@ -99,12 +104,9 @@ static int hwthread_update_threads(struct rtos *rtos)
 	enum target_debug_reason current_reason = DBG_REASON_UNDEFINED;
 
 	if (!rtos)
-		return -1;
+		return ERROR_FAIL;
 
 	target = rtos->target;
-
-	/* wipe out previous thread details if any */
-	rtos_free_threadlist(rtos);
 
 	/* determine the number of "threads" */
 	if (target->smp) {
@@ -118,6 +120,11 @@ static int hwthread_update_threads(struct rtos *rtos)
 		}
 	} else
 		thread_list_size = 1;
+
+	/* Wipe out previous thread details if any, but preserve threadid. */
+	int64_t current_threadid = rtos->current_threadid;
+	rtos_free_threadlist(rtos);
+	rtos->current_threadid = current_threadid;
 
 	/* create space for new thread details */
 	rtos->thread_details = malloc(sizeof(struct thread_detail) * thread_list_size);
@@ -280,8 +287,8 @@ static int hwthread_get_thread_reg_list(struct rtos *rtos, int64_t thread_id,
 	return ERROR_OK;
 }
 
-static int hwthread_get_thread_reg(struct rtos *rtos, int64_t thread_id,
-		uint32_t reg_num, struct rtos_reg *rtos_reg)
+static int hwthread_get_thread_reg_value(struct rtos *rtos, int64_t thread_id,
+		uint32_t reg_num, uint32_t *size, uint8_t **value)
 {
 	if (!rtos)
 		return ERROR_FAIL;
@@ -309,11 +316,14 @@ static int hwthread_get_thread_reg(struct rtos *rtos, int64_t thread_id,
 	if (reg->type->get(reg) != ERROR_OK)
 		return ERROR_FAIL;
 
-	rtos_reg->number = reg->number;
-	rtos_reg->size = reg->size;
-	unsigned bytes = (reg->size + 7) / 8;
-	assert(bytes <= sizeof(rtos_reg->value));
-	memcpy(rtos_reg->value, reg->value, bytes);
+	*size = reg->size;
+	unsigned bytes = DIV_ROUND_UP(reg->size, 8);
+	*value = malloc(bytes);
+	if (!*value) {
+		LOG_ERROR("Failed to allocate memory for %d-bit register.", reg->size);
+		return ERROR_FAIL;
+	}
+	memcpy(*value, reg->value, bytes);
 
 	return ERROR_OK;
 }
@@ -405,6 +415,11 @@ static int hwthread_create(struct target *target)
 	return 0;
 }
 
+static bool hwthread_needs_fake_step(struct target *target, int64_t thread_id)
+{
+	return false;
+}
+
 static int hwthread_read_buffer(struct rtos *rtos, target_addr_t address,
 		uint32_t size, uint8_t *buffer)
 {
@@ -433,4 +448,10 @@ static int hwthread_write_buffer(struct rtos *rtos, target_addr_t address,
 		return ERROR_FAIL;
 
 	return target_write_buffer(curr, address, size, buffer);
+}
+
+struct target *hwthread_swbp_target(struct rtos *rtos, target_addr_t address,
+				    uint32_t length, enum breakpoint_type type)
+{
+	return hwthread_find_thread(rtos->target, rtos->current_thread);
 }

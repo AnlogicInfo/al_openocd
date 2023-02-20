@@ -2,7 +2,7 @@
 
 # Copyright (C) 2020 by Tarek BOUCHKATI <tarek.bouchkati@gmail.com>
 
-on: push
+on: pull_request
 
 name: OpenOCD Snapshot
 
@@ -55,6 +55,7 @@ jobs:
           LIBUSB1_CONFIG: --enable-shared --disable-static
           HIDAPI_CONFIG: --enable-shared --disable-static --disable-testgui
           CAPSTONE_CONFIG: "CAPSTONE_BUILD_CORE_ONLY=yes CAPSTONE_STATIC=yes CAPSTONE_SHARED=no"
+          CAPSTONE_CFLAGS: -I$(CAPSTONE_SRC)/include/capstone
         run: |
           # check if there is tag pointing at HEAD, otherwise take the HEAD SHA-1 as OPENOCD_TAG
           OPENOCD_TAG="`git tag --points-at HEAD`"
@@ -80,23 +81,3 @@ jobs:
           echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_ENV
           echo "IS_PRE_RELEASE=$IS_PRE_RELEASE" >> $GITHUB_ENV
           echo "ARTIFACT_PATH=$PWD/$ARTIFACT" >> $GITHUB_ENV
-      - name: Publish OpenOCD packaged for windows
-        uses: actions/upload-artifact@v2
-        with:
-          path: ${{ env.ARTIFACT_PATH }}
-      - name: Delete 'latest' Release
-        uses: dev-drprasad/delete-tag-and-release@v0.2.0
-        with:
-          delete_release: true
-          tag_name: ${{ env.RELEASE_NAME }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create Release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ env.RELEASE_NAME }}
-          commit: ${{ github.sha }}
-          draft: false
-          artifacts: ${{ env.ARTIFACT_PATH }}
-          prerelease: ${{ env.IS_PRE_RELEASE }}
-          token: ${{ secrets.GITHUB_TOKEN }}

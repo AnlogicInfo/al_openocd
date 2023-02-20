@@ -113,6 +113,7 @@ extern struct target_type mem_ap_target;
 extern struct target_type esirisc_target;
 extern struct target_type arcv2_target;
 extern struct target_type pstap_target;
+extern struct target_type vexriscv_target;
 
 static struct target_type *target_types[] = {
 	&arm7tdmi_target,
@@ -152,6 +153,7 @@ static struct target_type *target_types[] = {
 	&aarch64_target,
 	&mips_mips64_target,
 	&pstap_target,
+	&vexriscv_target,
 	NULL,
 };
 
@@ -161,7 +163,7 @@ static struct target_timer_callback *target_timer_callbacks;
 static int64_t target_timer_next_event_value;
 static LIST_HEAD(target_reset_callback_list);
 static LIST_HEAD(target_trace_callback_list);
-static const int polling_interval = TARGET_DEFAULT_POLLING_INTERVAL;
+static const unsigned int polling_interval = TARGET_DEFAULT_POLLING_INTERVAL;
 static LIST_HEAD(empty_smp_targets);
 
 static const struct jim_nvp nvp_assert[] = {
@@ -764,6 +766,7 @@ int target_examine_one(struct target *target)
 		return retval;
 	}
 
+	LOG_USER("[%s] Target successfully examined.", target_name(target));
 	target_set_examined(target);
 	target_call_event_callbacks(target, TARGET_EVENT_EXAMINE_END);
 
@@ -782,6 +785,12 @@ static int jtag_enable_callback(enum jtag_event event, void *priv)
 	return target_examine_one(target);
 }
 
+/* When this is true, it's OK to call examine() again in the hopes that this time
+ * it will work.  Earlier than that there is probably other initialization that
+ * needs to happen (like scanning the JTAG chain) before examine should be
+ * called. */
+static bool examine_attempted;
+
 /* Targets that correctly implement init + examine, i.e.
  * no communication with target during init:
  *
@@ -791,6 +800,8 @@ int target_examine(void)
 {
 	int retval = ERROR_OK;
 	struct target *target;
+
+	examine_attempted = true;
 
 	for (target = all_targets; target; target = target->next) {
 		/* defer examination, but don't skip it */
@@ -3240,51 +3251,40 @@ static int handle_target(void *priv)
 			is_jtag_poll_safe() && target;
 			target = target->next) {
 
-		if (!target_was_examined(target))
+		/* This function only gets called every polling_interval, so
+		 * allow some slack in the time comparison. Otherwise, if we
+		 * schedule for now+polling_interval, the next poll won't
+		 * actually happen until a polling_interval later. */
+		bool poll_needed = timeval_ms() + polling_interval / 2 >= target->backoff.next_attempt;
+		if (!target->tap->enabled || power_dropout || srst_asserted || !poll_needed)
 			continue;
 
-		if (!target->tap->enabled)
-			continue;
-
-		if (target->backoff.times > target->backoff.count) {
-			/* do not poll this time as we failed previously */
-			target->backoff.count++;
-			continue;
+		/* polling may fail silently until the target has been examined */
+		retval = target_poll(target);
+		if (retval == ERROR_OK) {
+			/* Polling succeeded, reset the back-off interval */
+			target->backoff.interval = polling_interval;
+		} else {
+			/* Increase interval between polling up to 5000ms */
+			target->backoff.interval = MAX(polling_interval,
+					MIN(target->backoff.interval * 2 + 1, 5000));
+			/* Tell GDB to halt the debugger. This allows the user to run
+			 * monitor commands to handle the situation. */
+			target_call_event_callbacks(target, TARGET_EVENT_GDB_HALT);
 		}
-		target->backoff.count = 0;
+		target->backoff.next_attempt = timeval_ms() + target->backoff.interval;
+		LOG_TARGET_DEBUG(target, "target_poll() -> %d, next attempt in %dms",
+				 retval, target->backoff.interval);
 
-		/* only poll target if we've got power and srst isn't asserted */
-		if (!power_dropout && !srst_asserted) {
-			/* polling may fail silently until the target has been examined */
-			retval = target_poll(target);
+		if (retval != ERROR_OK && examine_attempted) {
+			target_reset_examined(target);
+			retval = target_examine_one(target);
 			if (retval != ERROR_OK) {
-				/* 100ms polling interval. Increase interval between polling up to 5000ms */
-				if (target->backoff.times * polling_interval < 5000) {
-					target->backoff.times *= 2;
-					target->backoff.times++;
-				}
-
-				/* Tell GDB to halt the debugger. This allows the user to
-				 * run monitor commands to handle the situation.
-				 */
-				target_call_event_callbacks(target, TARGET_EVENT_GDB_HALT);
+				LOG_TARGET_DEBUG(target, "Examination failed, GDB will be halted. "
+					"Polling again in %dms",
+					target->backoff.interval);
+				return retval;
 			}
-			if (target->backoff.times > 0) {
-				LOG_USER("Polling target %s failed, trying to reexamine", target_name(target));
-				target_reset_examined(target);
-				retval = target_examine_one(target);
-				/* Target examination could have failed due to unstable connection,
-				 * but we set the examined flag anyway to repoll it later */
-				if (retval != ERROR_OK) {
-					target_set_examined(target);
-					LOG_USER("Examination failed, GDB will be halted. Polling again in %dms",
-						 target->backoff.times * polling_interval);
-					return retval;
-				}
-			}
-
-			/* Since we succeeded, we reset backoff count */
-			target->backoff.times = 0;
 		}
 	}
 
@@ -3314,21 +3314,23 @@ COMMAND_HANDLER(handle_reg_command)
 				if (reg->exist == false || reg->hidden)
 					continue;
 				/* only print cached values if they are valid */
-				if (reg->valid) {
-					char *value = buf_to_hex_str(reg->value,
-							reg->size);
-					command_print(CMD,
-							"(%i) %s (/%" PRIu32 "): 0x%s%s",
-							count, reg->name,
-							reg->size, value,
-							reg->dirty
+				if (reg->exist) {
+					if (reg->valid) {
+						char *value = buf_to_hex_str(reg->value,
+								reg->size);
+						command_print(CMD,
+								"(%i) %s (/%" PRIu32 "): 0x%s%s",
+								count, reg->name,
+								reg->size, value,
+								reg->dirty
 								? " (dirty)"
 								: "");
-					free(value);
-				} else {
-					command_print(CMD, "(%i) %s (/%" PRIu32 ")",
-							  count, reg->name,
-							  reg->size);
+						free(value);
+					} else {
+						command_print(CMD, "(%i) %s (/%" PRIu32 ")",
+								count, reg->name,
+								reg->size) ;
+					}
 				}
 			}
 			cache = cache->next;
@@ -3384,8 +3386,8 @@ COMMAND_HANDLER(handle_reg_command)
 		if (reg->valid == 0) {
 			int retval = reg->type->get(reg);
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Could not read register '%s'", reg->name);
-				return retval;
+			    LOG_DEBUG("Couldn't get register %s.", reg->name);
+			    return retval;
 			}
 		}
 		char *value = buf_to_hex_str(reg->value, reg->size);
@@ -3604,7 +3606,7 @@ COMMAND_HANDLER(handle_step_command)
 
 void target_handle_md_output(struct command_invocation *cmd,
 		struct target *target, target_addr_t address, unsigned size,
-		unsigned count, const uint8_t *buffer)
+		unsigned count, const uint8_t *buffer, bool include_address)
 {
 	const unsigned line_bytecnt = 32;
 	unsigned line_modulo = line_bytecnt / size;
@@ -3633,7 +3635,7 @@ void target_handle_md_output(struct command_invocation *cmd,
 	}
 
 	for (unsigned i = 0; i < count; i++) {
-		if (i % line_modulo == 0) {
+		if (include_address && (i % line_modulo == 0)) {
 			output_len += snprintf(output + output_len,
 					sizeof(output) - output_len,
 					TARGET_ADDR_FMT ": ",
@@ -3717,7 +3719,8 @@ COMMAND_HANDLER(handle_md_command)
 	struct target *target = get_current_target(CMD_CTX);
 	int retval = fn(target, address, size, count, buffer);
 	if (retval == ERROR_OK)
-		target_handle_md_output(CMD, target, address, size, count, buffer);
+		target_handle_md_output(CMD, target, address, size, count, buffer,
+				true);
 
 	free(buffer);
 
@@ -6636,6 +6639,7 @@ static int jim_target_smp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 	int i;
 	const char *targetname;
 	int retval, len;
+	static int smp_group = 1;
 	struct target *target = NULL;
 	struct target_list *head, *new;
 
@@ -6667,9 +6671,10 @@ static int jim_target_smp(Jim_Interp *interp, int argc, Jim_Obj *const *argv)
 	/*  now parse the list of cpu and put the target in smp mode*/
 	foreach_smp_target(head, lh) {
 		target = head->target;
-		target->smp = 1;
+		target->smp = smp_group;
 		target->smp_targets = lh;
 	}
+	smp_group++;
 
 	if (target && target->rtos)
 		retval = rtos_smp_init(head->target);

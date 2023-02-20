@@ -26,6 +26,7 @@
 #include "target.h"
 #include <helper/log.h>
 #include "breakpoints.h"
+#include "rtos/rtos.h"
 #include "smp.h"
 
 static const char * const breakpoint_type_strings[] = {
@@ -222,7 +223,10 @@ int breakpoint_add(struct target *target,
 
 		if (type == BKPT_SOFT) {
 			head = list_first_entry(target->smp_targets, struct target_list, lh);
-			return breakpoint_add_internal(head->target, address, length, type);
+			struct target *curr = head->target;
+			if (target->rtos)
+				curr = rtos_swbp_target(target, address, length, type);
+			return breakpoint_add_internal(curr, address, length, type);
 		}
 
 		foreach_smp_target(head, target->smp_targets) {

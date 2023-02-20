@@ -110,6 +110,7 @@ m4_define([ADAPTER_OPT], [m4_translit(ADAPTER_ARG($1), [_], [-])])
 
 m4_define([USB1_ADAPTERS],
 	[[[ftdi], [MPSSE mode of FTDI based devices], [FTDI]],
+	[[ftdi_cjtag], [cJTAG (OScan1, JScan3) tunneled thru MPSSE], [FTDI_CJTAG]],
 	[[stlink], [ST-Link Programmer], [HLADAPTER_STLINK]],
 	[[ti_icdi], [TI ICDI JTAG Programmer], [HLADAPTER_ICDI]],
 	[[ulink], [Keil ULINK JTAG Programmer], [ULINK]],
@@ -122,8 +123,10 @@ m4_define([USB1_ADAPTERS],
 	[[opendous], [eStick/opendous JTAG Programmer], [OPENDOUS]],
 	[[armjtagew], [Olimex ARM-JTAG-EW Programmer], [ARMJTAGEW]],
 	[[rlink], [Raisonance RLink JTAG Programmer], [RLINK]],
-	[[usbprog], [USBProg JTAG Programmer], [USBPROG]],
-	[[aice], [Andes JTAG Programmer], [AICE]]])
+	[[usbprog], [USBProg JTAG Programmer], [USBPROG]]])
+
+m4_define([DEPRECATED_USB1_ADAPTERS],
+	[[[aice], [Andes JTAG Programmer (deprecated)], [AICE]]])
 
 m4_define([HIDAPI_ADAPTERS],
 	[[[cmsis_dap], [CMSIS-DAP Compliant Debugger], [CMSIS_DAP_HID]],
@@ -256,6 +259,8 @@ AC_ARG_ADAPTERS([
   LIBJAYLINK_ADAPTERS
   ],[auto])
 
+AC_ARG_ADAPTERS([DEPRECATED_USB1_ADAPTERS],[no])
+
 AC_ARG_ENABLE([parport],
   AS_HELP_STRING([--enable-parport], [Enable building the pc parallel port driver]),
   [build_parport=$enableval], [build_parport=no])
@@ -365,7 +370,7 @@ AC_ARG_ENABLE([internal-libjaylink],
 
 AC_ARG_ENABLE([remote-bitbang],
   AS_HELP_STRING([--enable-remote-bitbang], [Enable building support for the Remote Bitbang jtag driver]),
-  [build_remote_bitbang=$enableval], [build_remote_bitbang=no])
+  [build_remote_bitbang=$enableval], [build_remote_bitbang=yes])
 
 AS_CASE(["${host_cpu}"],
   [i?86|x86*], [],
@@ -660,6 +665,7 @@ m4_define([PROCESS_ADAPTERS], [
 ])
 
 PROCESS_ADAPTERS([USB1_ADAPTERS], ["x$use_libusb1" = "xyes"], [libusb-1.x])
+PROCESS_ADAPTERS([DEPRECATED_USB1_ADAPTERS], ["x$use_libusb1" = "xyes"], [libusb-1.x])
 PROCESS_ADAPTERS([HIDAPI_ADAPTERS], ["x$use_hidapi" = "xyes"], [hidapi])
 PROCESS_ADAPTERS([HIDAPI_USB1_ADAPTERS], ["x$use_hidapi" = "xyes" -a "x$use_libusb1" = "xyes"], [hidapi and libusb-1.x])
 PROCESS_ADAPTERS([LIBFTDI_ADAPTERS], ["x$use_libftdi" = "xyes"], [libftdi])
@@ -798,6 +804,7 @@ echo
 echo OpenOCD configuration summary
 echo --------------------------------------------------
 m4_foreach([adapter], [USB1_ADAPTERS,
+	DEPRECATED_USB1_ADAPTERS,
 	HIDAPI_ADAPTERS, HIDAPI_USB1_ADAPTERS, LIBFTDI_ADAPTERS,
 	LIBFTDI_USB1_ADAPTERS,
 	LIBGPIOD_ADAPTERS,
