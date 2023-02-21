@@ -383,14 +383,14 @@ libusb_abort:
 				DWORD device_vid = devInfo[i].ID >> 16;   // higher 16 bits
 				DWORD device_pid = devInfo[i].ID & 65535; // lower 16 bits
 
-				// LOG_DEBUG("FTD2xx Device #%d:", i);
-				// LOG_DEBUG(" Flags=0x%lx", devInfo[i].Flags);
-				// LOG_DEBUG(" Type=0x%lx", devInfo[i].Type);
-				// LOG_DEBUG(" ID=0x%lx (VID=0x%04lx, PID=0x%04lx)", devInfo[i].ID, device_vid, device_pid);
-				// LOG_DEBUG(" LocId=0x%lx", devInfo[i].LocId);
-				// LOG_DEBUG(" SerialNumber=%s", devInfo[i].SerialNumber);
-				// LOG_DEBUG(" Description=%s", devInfo[i].Description);
-				// LOG_DEBUG(" ftHandle=0x%p", devInfo[i].ftHandle);
+				LOG_DEBUG("FTD2xx Device #%d:", i);
+				LOG_DEBUG(" Flags=0x%lx", devInfo[i].Flags);
+				LOG_DEBUG(" Type=0x%lx", devInfo[i].Type);
+				LOG_DEBUG(" ID=0x%lx (VID=0x%04lx, PID=0x%04lx)", devInfo[i].ID, device_vid, device_pid);
+				LOG_DEBUG(" LocId=0x%lx", devInfo[i].LocId);
+				LOG_DEBUG(" SerialNumber=%s", devInfo[i].SerialNumber);
+				LOG_DEBUG(" Description=%s", devInfo[i].Description);
+				LOG_DEBUG(" ftHandle=0x%p", devInfo[i].ftHandle);
 
 				if (vid && *vid != device_vid) continue;
 				if (pid && *pid != device_pid) continue;
@@ -1097,7 +1097,7 @@ int mpsse_flush(struct mpsse_ctx *ctx)
 #ifdef BUILD_BACKEND_FTD2XX
 	BACKEND_DIVERGENCE_FTD2XX
 
-	FT_STATUS ft_status;
+	FT_STATUS ft_status = FT_OK;
 	DWORD read_bytes_done, write_bytes_done;
 
 	if (ctx->read_count) {
