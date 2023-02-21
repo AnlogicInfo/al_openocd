@@ -292,19 +292,25 @@ COMMAND_HANDLER(handle_nand_write_image_command)
 	size_t one_read, bytes_read = 0;
 	uint32_t total_bytes = s.size;
 
-	uint32_t page_nums = 0, page_size = 0;
-	page_nums = (s.size - 1) / s.page_size + 1;
-	page_size = page_nums * s.page_size;
+	uint32_t page_nums = 0, write_size = 0;
+	if (s.oob) {
+		page_nums = (s.size - 1) / (s.page_size + s.oob_size) + 1;
+		write_size = page_nums * (s.page_size + s.oob_size);
+	} else {
+		page_nums = (s.size - 1) / s.page_size + 1;
+		write_size = page_nums * s.page_size;
+	}
 
 	int32_t offset, length;
 	offset = s.address / nand->erase_size;
-	length = (page_size - 1) / nand->erase_size + 1;
+	// length = (write_size - 1) / nand->erase_size + 1;
+	length = (page_nums * s.page_size - 1) / nand->erase_size + 1;
 
-	uint8_t *write_data = malloc(page_size);
+	uint8_t *write_data = malloc(write_size);
 	if (write_data) {
-		fileio_read(s.fileio, page_size, write_data, &one_read);
-		if (one_read < page_size)
-			memset(write_data + one_read, 0xff, page_size - one_read);
+		fileio_read(s.fileio, write_size, write_data, &one_read);
+		if (one_read < write_size)
+			memset(write_data + one_read, 0xff, write_size - one_read);
 		bytes_read += one_read;
 	}
 	if (bytes_read <= 0) {
@@ -322,7 +328,7 @@ COMMAND_HANDLER(handle_nand_write_image_command)
 	}
 
 	retval = nand_write_page(nand, s.address / nand->page_size,
-				write_data, page_size, s.oob, s.oob_size);
+				write_data, write_size, s.oob, s.oob_size);
 	if (retval != ERROR_OK) {
 		command_print(CMD, "failed writing file %s "
 			"to NAND flash %s at offset 0x%8.8" PRIx32,
@@ -334,7 +340,7 @@ COMMAND_HANDLER(handle_nand_write_image_command)
 		return retval;
 	}
 	
-	s.address += page_size;
+	s.address += write_size;
 	if (nand_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "wrote file %s to NAND flash %s up to "
 			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
@@ -519,7 +525,10 @@ COMMAND_HANDLER(handle_nand_dump_image_command)
 	if (retval != ERROR_OK)
 		return retval;
 
-	uint32_t dump_size = s.size;
+	uint32_t page_nums, dump_size;
+	page_nums = (s.size - 1) / s.page_size + 1;
+	dump_size = (s.oob) ? (page_nums * (s.page_size + s.oob_size)) : s.size;
+	
 	uint8_t *dump_data = malloc(dump_size);
 
 	if (dump_data) {
@@ -535,8 +544,8 @@ COMMAND_HANDLER(handle_nand_dump_image_command)
 		if (dump_data)
 			fileio_write(s.fileio, dump_size, dump_data, &size_written);
 
-		if (s.oob)
-			fileio_write(s.fileio, s.oob_size, s.oob, &size_written);
+		// if (s.oob)
+		// 	fileio_write(s.fileio, s.oob_size, s.oob, &size_written);
 	}
 
 	retval = fileio_size(s.fileio, &filesize);

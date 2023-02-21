@@ -461,6 +461,9 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 		/* form myself */
 		nand_size->eccNum = 1;
 	}
+	nand->oob_size = nand_size->spareBytesPerPage;
+	nand->page_size = nand_size->dataBytesPerPage;
+	nand->erase_size = nand_size->dataBytesPerPage * nand_size->pagesPerBlock;
 
 	if ((nand_size->device_id[0] == NAND_MFR_AMD) && (nand_size->eccNum == 0))
 	{
@@ -796,7 +799,9 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 	struct target *target = nand->target;
 	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	nand_size_type *nand_size = &smc35x_info->nand_size;
-	uint32_t count = nand_size->dataBytesPerPage;
+	// uint32_t count = nand_size->dataBytesPerPage;
+	uint32_t count = (oob) ? (nand_size->dataBytesPerPage + nand_size->spareBytesPerPage) : nand_size->dataBytesPerPage;
+	bool raw_oob = (oob) ? true : false;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("target must be halted to use SMC35X NAND flash controller");
@@ -832,7 +837,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 	
 	// 设置工作区
 	uint32_t xlen = 0;
-	struct reg_param reg_params[6];
+	struct reg_param reg_params[7];
 	struct working_area *algorithm_wa = NULL;
 	struct working_area *data_wa = NULL;
 	const uint8_t *bin;
@@ -863,7 +868,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 		((struct aarch64_algorithm *) arch_info)->common_magic = AARCH64_COMMON_MAGIC;
         ((struct aarch64_algorithm *) arch_info)->core_mode = ARMV8_64_EL0T;
 	}
-	
+
 	if (target_alloc_working_area(target, bin_size, &algorithm_wa) == ERROR_OK) {
 		if (target_write_buffer(target, algorithm_wa->address, bin_size, bin) != ERROR_OK) {
 			LOG_ERROR("Failed to write code to " TARGET_ADDR_FMT ": %d",
@@ -895,6 +900,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 		    init_reg_param(&reg_params[3], "a3", xlen, PARAM_OUT);
 		    init_reg_param(&reg_params[4], "a4", xlen, PARAM_OUT);
 			init_reg_param(&reg_params[5], "a5", xlen, PARAM_OUT);
+			init_reg_param(&reg_params[6], "a6", xlen, PARAM_OUT);
         }
         else if (loader_target == ARM)
         {
@@ -904,18 +910,20 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 		    init_reg_param(&reg_params[3], "x3", xlen, PARAM_OUT);
 		    init_reg_param(&reg_params[4], "x4", xlen, PARAM_OUT);
 		    init_reg_param(&reg_params[5], "x5", xlen, PARAM_OUT);
+			init_reg_param(&reg_params[6], "x6", xlen, PARAM_OUT);
         }
 		
 		while (data_size > 0)
         {
 			LOG_INFO("read page %d buffer addr %llx", page, data_wa_address);
 			
-			buf_set_u64(reg_params[0].value, 0, xlen, nand_size->dataBytesPerPage);
-			buf_set_u64(reg_params[1].value, 0, xlen, data_wa_address);
-			buf_set_u64(reg_params[2].value, 0, xlen, page++);
-			buf_set_u64(reg_params[3].value, 0, xlen, nand_size->spareBytesPerPage);
-			buf_set_u64(reg_params[4].value, 0, xlen, nand_size->device_id[0]);
-			buf_set_u64(reg_params[5].value, 0, xlen, nand_size->eccNum);
+			buf_set_u64(reg_params[0].value, 0, xlen, raw_oob);
+			buf_set_u64(reg_params[1].value, 0, xlen, nand_size->dataBytesPerPage);
+			buf_set_u64(reg_params[2].value, 0, xlen, data_wa_address);
+			buf_set_u64(reg_params[3].value, 0, xlen, page++);
+			buf_set_u64(reg_params[4].value, 0, xlen, nand_size->spareBytesPerPage);
+			buf_set_u64(reg_params[5].value, 0, xlen, nand_size->device_id[0]);
+			buf_set_u64(reg_params[6].value, 0, xlen, nand_size->eccNum);
 			
 			retval = target_run_algorithm(target, 0, NULL,
 					ARRAY_SIZE(reg_params), reg_params,
@@ -1089,7 +1097,9 @@ int smc35x_write_page_sync(struct nand_device *nand, uint32_t page, uint8_t *dat
 	struct target *target = nand->target;
 	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	nand_size_type *nand_size = &smc35x_info->nand_size;
-	uint32_t count = nand_size->dataBytesPerPage;
+	// uint32_t count = nand_size->dataBytesPerPage;
+	uint32_t count = (oob) ? (nand_size->dataBytesPerPage + nand_size->spareBytesPerPage) :  nand_size->dataBytesPerPage;
+	bool raw_oob = (oob) ? true : false;
 
 	// 设置工作区
 	uint32_t xlen = 0;
@@ -1157,7 +1167,9 @@ int smc35x_write_page_sync(struct nand_device *nand, uint32_t page, uint8_t *dat
 		LOG_WARNING("Couldn't allocate %zd-byte working area.", bin_size);
 		algorithm_wa = NULL;
 	}
-	uint64_t data_wa_address = data_wa->address;
+	uint64_t data_wa_address = data_wa->address, oob_wa_address = 0;
+	if (raw_oob)
+		oob_wa_address = data_wa_address + nand_size->dataBytesPerPage;
 
 	LOG_INFO("work area algorithm address: %llx, data length: %d", algorithm_wa->address, algorithm_wa->size);
 	LOG_INFO("work area data address: %llx, data length: %d", data_wa->address, data_wa->size);
@@ -1195,12 +1207,12 @@ int smc35x_write_page_sync(struct nand_device *nand, uint32_t page, uint8_t *dat
 				goto err;
 			}
 
-			buf_set_u64(reg_params[0].value, 0, xlen, SMC_BASE);
+			buf_set_u64(reg_params[0].value, 0, xlen, raw_oob);
 			buf_set_u64(reg_params[1].value, 0, xlen, nand_size->dataBytesPerPage);
 			buf_set_u64(reg_params[2].value, 0, xlen, data_wa_address);
 			buf_set_u64(reg_params[3].value, 0, xlen, page++);
 			buf_set_u64(reg_params[4].value, 0, xlen, nand_size->spareBytesPerPage);
-			buf_set_u64(reg_params[5].value, 0, xlen, NAND_BASE);
+			buf_set_u64(reg_params[5].value, 0, xlen, oob_wa_address);
 			buf_set_u64(reg_params[6].value, 0, xlen, nand_size->eccNum);
 			
 			retval = target_run_algorithm(target, 0, NULL,
@@ -1249,8 +1261,9 @@ void smc35x_write_async_params_priv(struct flash_loader *loader)
 {
 	struct smc35x_nand_controller *smc35x_info = loader->dev_info;
     nand_size_type *nand_size = &smc35x_info->nand_size;
-        
-    buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, nand_size->eccNum);
+
+    buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, nand_size->spareBytesPerPage);
+	buf_set_u64(loader->reg_params[7].value, 0, loader->xlen, nand_size->eccNum);
 }
 
 int smc35x_write_page_async(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
@@ -1261,21 +1274,24 @@ int smc35x_write_page_async(struct nand_device *nand, uint32_t page, uint8_t *da
 	nand_size_type *nand_size = &smc35x_info->nand_size;
 	struct flash_loader *loader = &smc35x_info->loader;
 
+	uint32_t count = (oob) ? (nand_size->dataBytesPerPage + nand_size->spareBytesPerPage) : nand_size->dataBytesPerPage;
+	bool raw_oob = (oob) ? true : false;
+
 	uint32_t index, first_block, last_block;
 
 	first_block = page / nand_size->pagesPerBlock;
-	last_block = (page + (data_size / nand_size->dataBytesPerPage) - 1) / nand_size->pagesPerBlock;
+	last_block = (page + (data_size / count) - 1) / nand_size->pagesPerBlock;
 	for (index = first_block; index <= last_block; ++index) {
 		if (nand->blocks[index].is_erased == 1)
 			nand->blocks[index].is_erased = 0;
 	}
 
 	loader->work_mode = ASYNC_TRANS;
-    loader->block_size = nand_size->dataBytesPerPage;
+    loader->block_size = count;
     loader->image_size = data_size;
-    loader->param_cnt = 7;
+    loader->param_cnt = 8;
     loader->set_params_priv = smc35x_write_async_params_priv;
-	loader->ctrl_base = oob_size;
+	loader->ctrl_base = raw_oob;
     LOG_DEBUG("count %x block size %x image size %x", data_size, loader->block_size, loader->image_size);
 
     retval = loader_flash_write_async(loader, async_srcs, data, page, data_size);
@@ -1294,11 +1310,11 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 		return ERROR_NAND_OPERATION_FAILED;
 	}
     
-    retval = smc35x_write_page_sync(nand, page, data, data_size, oob, oob_size);
+    retval = smc35x_write_page_async(nand, page, data, data_size, oob, oob_size);
 
     if(0) {
 		if(retval != ERROR_OK)
-			retval = smc35x_write_page_async(nand, page, data, data_size, oob, oob_size);
+			retval = smc35x_write_page_sync(nand, page, data, data_size, oob, oob_size);
     }
 
     return retval;

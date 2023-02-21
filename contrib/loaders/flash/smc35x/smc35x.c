@@ -210,14 +210,14 @@ static uint8_t smc35x_ecc_calculate(uint8_t nums)
 	return SmcSuccess;
 }
 
-int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint32_t nand_base, uint32_t ecc_num)
+int flash_smc35x(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint8_t *oob_buffer, uint32_t ecc_num)
 {
 	uint8_t state, nums = 0;
     uint32_t index, status;
 	
 	uint32_t *temp_buffer, temp_length = 0;
 	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
-	uint8_t *poob_data = oob_data;
+	uint8_t *poob_data =(raw_oob) ? oob_buffer : oob_data;
 
 	volatile unsigned long status_addr = 0;
 	volatile unsigned long cmd_phase_addr = 0;
@@ -225,17 +225,17 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 	uint32_t cmd_phase_data;
 
 	/* Check Nand Status */
-	cmd_phase_addr = (nand_base | (ONFI_CMD_READ_STATUS1 << 3));
+	cmd_phase_addr = (NAND_BASE | (ONFI_CMD_READ_STATUS1 << 3));
 	cmd_phase_data = ONFI_COLUMN_NOT_VALID;
 	SMC_WriteReg(cmd_phase_addr, cmd_phase_data);
 
-	data_phase_addr = (nand_base | NAND_DATA_PHASE_FLAG);
+	data_phase_addr = (NAND_BASE | NAND_DATA_PHASE_FLAG);
 	state = SMC_Read8BitReg(data_phase_addr);
 	if (!(state & ONFI_STATUS_WP))
 		return FAILED_FLAG;
 
 	/* Send Write Page Command */
-	cmd_phase_addr = (nand_base | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
+	cmd_phase_addr = (NAND_BASE | (ONFI_CMD_PROGRAM_PAGE_CYCLES << 21) | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (ONFI_CMD_PROGRAM_PAGE1 << 3));
 	cmd_phase_data = 0 | (offset << (2*8));
 	SMC_WriteReg(cmd_phase_addr, cmd_phase_data);
 	cmd_phase_data = offset >> (32 - (2*8));
@@ -243,13 +243,13 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 
 	if (ecc_num == 1) {
 		/* Write Page Data */
-		data_phase_addr = (nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+		data_phase_addr = (NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
 		temp_buffer = (uint32_t *)buffer;
 		temp_length = (page_size - ONFI_AXI_DATA_WIDTH) >> 2;
 		for (index = 0; index < temp_length; ++index)
 			SMC_WriteReg(data_phase_addr, temp_buffer[index]);
 
-		data_phase_addr = (nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
+		data_phase_addr = (NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11) | (1 << 10));
 		buffer += (page_size - ONFI_AXI_DATA_WIDTH);
 		temp_buffer = (uint32_t *)buffer;
 		temp_length = ONFI_AXI_DATA_WIDTH >> 2;
@@ -257,40 +257,42 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 			SMC_WriteReg(data_phase_addr, temp_buffer[index]);
 
 		/* Calculate ECC */
-		switch (oob_size)
-		{
-			case(16):
-				eccDataNums = 3;
-				nums = 1;
-				dataOffsetPtr = NandOob16;
-				break;
-			case(32):
-				eccDataNums = 6;
-				nums = 2;
-				dataOffsetPtr = NandOob32;
-				break;
-			case(64):
-				eccDataNums = 12;
-				nums = 4;
-				dataOffsetPtr = NandOob64;
-				break;
-			case(224):
-				eccDataNums = 12;
-				nums = 4;
-				dataOffsetPtr = NandOob64;
-				break;
-			default:
-				/* Page size 256 bytes & 4096 bytes not supported by ECC block */
-				return FAILED_FLAG;
+		if (!raw_oob) {
+			switch (oob_size)
+			{
+				case(16):
+					eccDataNums = 3;
+					nums = 1;
+					dataOffsetPtr = NandOob16;
+					break;
+				case(32):
+					eccDataNums = 6;
+					nums = 2;
+					dataOffsetPtr = NandOob32;
+					break;
+				case(64):
+					eccDataNums = 12;
+					nums = 4;
+					dataOffsetPtr = NandOob64;
+					break;
+				case(224):
+					eccDataNums = 12;
+					nums = 4;
+					dataOffsetPtr = NandOob64;
+					break;
+				default:
+					/* Page size 256 bytes & 4096 bytes not supported by ECC block */
+					return FAILED_FLAG;
+			}
+
+			smc35x_ecc_calculate(nums);
+
+			for (index = 0; index < eccDataNums; index++)
+				oob_data[dataOffsetPtr[index]] = (~ecc_data[index]);
 		}
-
-		smc35x_ecc_calculate(nums);
-
-		for (index = 0; index < eccDataNums; index++)
-			oob_data[dataOffsetPtr[index]] = (~ecc_data[index]);
 	} else {
 		/* Write Page Data */
-		data_phase_addr = (nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+		data_phase_addr = (NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
 		temp_buffer = (uint32_t *)buffer;
 		temp_length = (page_size) >> 2;
 		for (index = 0; index < temp_length; ++index)
@@ -298,14 +300,14 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 	}
 
 	/* Write Oob Data */
-	data_phase_addr = (nand_base | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+	data_phase_addr = (NAND_BASE | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
 	temp_buffer = (uint32_t *)poob_data;
 	temp_length = (oob_size - ONFI_AXI_DATA_WIDTH) >> 2;
 	for (index = 0; index < temp_length; ++index) {
 		SMC_WriteReg(data_phase_addr, temp_buffer[index]);
 	}
 
-	data_phase_addr =(nand_base | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
+	data_phase_addr =(NAND_BASE | (1 << 21) | (1 << 20) | NAND_DATA_PHASE_FLAG | (ONFI_CMD_PROGRAM_PAGE2 << 11));
 	poob_data += oob_size - ONFI_AXI_DATA_WIDTH;
 	temp_buffer = (uint32_t *)poob_data;
 	temp_length = ONFI_AXI_DATA_WIDTH >> 2;
@@ -314,19 +316,19 @@ int flash_smc35x(uint32_t ctrl_base, uint32_t page_size, uint8_t *buffer, uint32
 	}
 
 	/* Check Controller Status */
-	while (!(SMC_ReadReg(ctrl_base + SMC_REG_MEMC_STATUS) & (1 << SMC_MemcStatus_SmcInt1RawStatus_FIELD)));
+	while (!(SMC_ReadReg(SMC_BASE + SMC_REG_MEMC_STATUS) & (1 << SMC_MemcStatus_SmcInt1RawStatus_FIELD)));
 
 	/* Clear SMC Interrupt 1, as an alternative to an AXI read */
-    status_addr = (ctrl_base + SMC_REG_MEM_CFG_CLR);
-	status = SMC_ReadReg(ctrl_base + SMC_REG_MEM_CFG_CLR);
+    status_addr = (SMC_BASE + SMC_REG_MEM_CFG_CLR);
+	status = SMC_ReadReg(SMC_BASE + SMC_REG_MEM_CFG_CLR);
 	SMC_WriteReg(status_addr, (status | SMC_MemCfgClr_ClrSmcInt1));
 
 	/* Check Nand Status */
-	cmd_phase_addr = (nand_base | (ONFI_CMD_READ_STATUS1 << 3));
+	cmd_phase_addr = (NAND_BASE | (ONFI_CMD_READ_STATUS1 << 3));
 	cmd_phase_data = ONFI_COLUMN_NOT_VALID;
 	SMC_WriteReg(cmd_phase_addr, cmd_phase_data);
 
-	data_phase_addr = (nand_base | NAND_DATA_PHASE_FLAG);
+	data_phase_addr = (NAND_BASE | NAND_DATA_PHASE_FLAG);
 	state = SMC_Read8BitReg(data_phase_addr);
 	if (state & ONFI_STATUS_FAIL) {
 		return FAILED_FLAG;
