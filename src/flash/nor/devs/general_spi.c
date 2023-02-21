@@ -16,7 +16,7 @@ void general_spi_quad_rd_config(struct flash_bank *bank, uint8_t addr_len)
     trans_config.spi_frf = SPI_FRF_X4_MODE;
     trans_config.ndf = 0;
 
-    trans_config.rx_start_lv = 0x3F;
+    trans_config.rx_ip_lv = 0x3F;
     trans_config.wait_cycle = 0x8;
 
     trans_config.trans_type = TRANS_TYPE_TT0;

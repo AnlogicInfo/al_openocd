@@ -338,7 +338,7 @@ void dwcssi_config_trans(struct flash_bank *bank, struct dwcssi_trans_config *tr
             }
             break;
         case(RX_ONLY):
-            dwcssi_config_rx(bank, trans_config->spi_frf, trans_config->rx_start_lv);
+            dwcssi_config_rx(bank, trans_config->spi_frf, trans_config->rx_ip_lv);
             if(trans_config->spi_frf == SPI_FRF_X4_MODE)
             {
                 dwcssi_disable(bank);
@@ -419,17 +419,18 @@ int dwcssi_tx(struct flash_bank *bank, uint32_t in)
     return ERROR_OK;
 }
 
-// static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32_t in_cnt)
-// {
-//     uint32_t i;
-//     for(i = 0; i < in_cnt; i++)
-//     {
-//         // LOG_INFO("tx buf %x data %x", i, *(in_buf+i));
-//         dwcssi_tx(bank, *(in_buf+i));
-//     }
+static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32_t in_cnt)
+{
+    uint32_t i;
+    uint8_t sr;
+    for(i = 0; i < in_cnt; i++)
+    {
+        dwcssi_tx(bank, *(in_buf+i));
+    }
 
-//     return (dwcssi_txwm_wait(bank));
-// }
+    // return (dwcssi_txwm_wait(bank));
+    return dwcssi_wait_flash_idle(bank, 100, &sr);
+}
 
 static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
 {
@@ -509,13 +510,74 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
     return retval;
 }
 
+int dwcssi_wait_flash_idle_quad(struct flash_bank *bank)
+{
+    // struct dwcssi_flash_bank* driver_priv = bank->driver_priv;
+    // const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+
+    int64_t endtime;
+    int retval = ERROR_FAIL;
+    uint8_t rx;
+    struct dwcssi_trans_config trans_config;
+
+    trans_config.addr_len = ADDR_L0;
+    trans_config.ndf      = 1;
+    trans_config.rx_ip_lv = 0x3F;
+    trans_config.spi_frf  = SPI_FRF_X4_MODE;
+    trans_config.stretch_en = ENABLE;
+    trans_config.tmod       = RX_ONLY;
+    trans_config.trans_type = TRANS_TYPE_TT0;
+    trans_config.wait_cycle = 0;
+
+    // LOG_INFO("check flash status");
+
+    dwcssi_config_trans(bank, &trans_config);
+    dwcssi_disable(bank);
+    dwcssi_config_CTRLR1(bank, 0);
+    dwcssi_enable(bank);
+
+    endtime = timeval_ms() + 100;
+
+    while(timeval_ms() < endtime)
+    {
+        dwcssi_tx(bank, SPIFLASH_READ_STATUS);
+        if(dwcssi_txwm_wait(bank)!= ERROR_OK)
+        {
+            retval = ERROR_FAIL;
+            break;
+        }        
+
+        if(dwcssi_rx(bank, &rx) == ERROR_OK)
+        {
+            LOG_INFO("flash status %x idle", rx);
+            if((rx & SPIFLASH_BSY_BIT) == 0) {
+
+                retval = ERROR_OK;
+                break;
+            }
+        }
+        else
+            break;
+    }
+
+
+    // if((retval == ERROR_OK) && (flash_ops!= NULL))
+    // {
+    //     driver_priv->flash_sr1 = rx;
+    //     retval = flash_ops->err_chk(bank);
+    // }
+
+    return retval;
+}
+
+
 int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint8_t cmd_mode)
 {
     struct dwcssi_trans_config trans_config;
     int i;
     trans_config.tmod = TX_ONLY;
     trans_config.tx_start_lv = len - 1;
-    trans_config.rx_start_lv = 0;
+    trans_config.rx_ip_lv = 0;
     trans_config.trans_type = TRANS_TYPE_TT0;
     trans_config.stretch_en = DISABLE;
     trans_config.addr_len = 0;
@@ -541,9 +603,10 @@ int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
 
 static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
 {
+    uint8_t sr;
     dwcssi_config_tx(bank, frf, 0, 0);
     dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
-    return dwcssi_txwm_wait(bank);
+    return dwcssi_wait_flash_idle(bank, 100, &sr);
 }
 
 int dwcssi_rd_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, uint32_t len)
@@ -775,6 +838,8 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
     int retval = ERROR_OK;
     uint32_t target_crc, image_crc;
 
+    // count = 0x110;
+
     retval = image_calculate_checksum(buffer, count, &image_crc);
     if(retval != ERROR_OK)
         return retval;
@@ -793,20 +858,32 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
     return retval;
 }
 
-// static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
-// {
-//     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-//     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-//     uint8_t flash_sr;
+static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t len)
+{
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    struct dwcssi_trans_config trans_config;
+    int retval;
+    trans_config.tmod = TX_ONLY;
+    trans_config.spi_frf = SPI_FRF_X4_MODE;
+    trans_config.ndf = len - 1;
 
-//     // LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
-//     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
-//     dwcssi_config_tx(bank, SPI_FRF_X4_MODE, len, 0x4);
-//     dwcssi_tx(bank, flash_ops->qprog_cmd); // 1byte cmd
-//     dwcssi_tx(bank, offset); //4 byte addr
-//     dwcssi_tx_buf(bank, buffer, len);
-//     return dwcssi_wait_flash_idle(bank, 9000, &flash_sr);
-// }
+    trans_config.trans_type = TRANS_TYPE_TT0;
+    trans_config.stretch_en = ENABLE;
+    trans_config.addr_len = flash_ops->addr_len;
+    trans_config.wait_cycle = 0;
+    trans_config.tx_start_lv = 0;
+    LOG_INFO("dwcssi slow write offset %x len %x", offset, len);
+    flash_ops->quad_en(bank);
+    dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
+    dwcssi_config_trans(bank, &trans_config);
+    dwcssi_tx(bank, flash_ops->qprog_cmd); // 1byte cmd
+    dwcssi_tx(bank, offset); //addr
+    retval = dwcssi_tx_buf(bank, buffer, len);
+
+    return retval;
+
+}
 
 static const uint8_t riscv32_sync_bin[] = {
 #include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_sync_riscv_32.inc"
@@ -919,18 +996,37 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
     int retval = ERROR_FAIL;
+    struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+    uint32_t page_offset, page_size, cur_count;
 
+    page_size = driver_priv->dev->pagesize;
     count = flash_write_boundary_check(bank, offset, count);
-    retval = dwcssi_write_async(bank, buffer, offset, count);
+	while (count > 0) {
+		/* clip block at page boundary */
+		if (page_offset + count > page_size)
+			cur_count = page_size - page_offset;
+		else
+			cur_count = count;
+		retval = slow_dwcssi_write(bank, buffer, offset, cur_count);
+		if (retval != ERROR_OK)
+			return ERROR_FAIL;
+		page_offset = 0;
+		buffer += cur_count;
+		offset += cur_count;
+		count -= cur_count;
+	}
+    retval = ERROR_OK;
+
     if(0)
     {
+    retval = dwcssi_write_async(bank, buffer, offset, count);
+
     if(retval != ERROR_OK)
     {
         retval = dwcssi_write_sync(bank, buffer, offset, count);
     }
 
     }
-
 
     return retval;
 }

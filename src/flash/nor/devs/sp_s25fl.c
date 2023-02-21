@@ -53,7 +53,7 @@ void sp_s25fl_trans_config(struct flash_bank *bank, uint8_t trans_dir)
     }
     else
     {
-        trans_config.rx_start_lv = 0x3F;
+        trans_config.rx_ip_lv = 0x3F;
         trans_config.wait_cycle = 0x8;
     }
 

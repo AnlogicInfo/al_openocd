@@ -189,7 +189,7 @@ struct dwcssi_trans_config {
     uint8_t spi_frf;
     uint32_t ndf;
     uint32_t tx_start_lv;
-    uint32_t rx_start_lv;
+    uint32_t rx_ip_lv;
 
     uint8_t trans_type;
     uint8_t stretch_en;

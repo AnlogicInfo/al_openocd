@@ -4,10 +4,7 @@
  * Modified By: Tianyi Wang (tywang@anlogic.com>)
  * Last Modified: 2022-05-11
  */
-
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
+#include "dwcssi.h"
 
 #define	SPIFLASH_BSY		0
 #define SPIFLASH_BSY_BIT	(1 << SPIFLASH_BSY)	/* WIP Bit of SPI SR */
@@ -69,11 +66,11 @@
 
 #define     DWCSSI_ISR_TXEIS(x)                       (((x) & 0x1) << 0)
 
-#define     DWCSSI_SPI_CTRLR0_TRANS_TYPE              (((x) & 0x3) << 0)
-#define     DWCSSI_SPI_CTRLR0_ADDR_L                  (((x) & 0xF) << 2)
-#define     DWCSSI_SPI_CTRLR0_INST_L                  (((x) & 0x3) << 8)
-#define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES             (((x) & 0x1F) << 11)
-#define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN          (((x) & 0x1) << 30)
+#define     DWCSSI_SPI_CTRLR0_TRANS_TYPE(x)           (((x) & 0x3) << 0)
+#define     DWCSSI_SPI_CTRLR0_ADDR_L(x)               (((x) & 0xF) << 2)
+#define     DWCSSI_SPI_CTRLR0_INST_L(x)               (((x) & 0x3) << 8)
+#define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES(x)          (((x) & 0x1F) << 11)
+#define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN(x)       (((x) & 0x1) << 30)
 /*Masks*/
 #define     DWCSSI_CTRLR0_DFS_MASK                     DWCSSI_CTRLR0_DFS(0xFFFFFFFF)     
 #define     DWCSSI_CTRLR0_TMOD_MASK                    DWCSSI_CTRLR0_TMOD(0xFFFFFFFF)    
@@ -111,6 +108,26 @@
 #define     SPI_FRF_X2_MODE                           1
 #define     SPI_FRF_X4_MODE                           2
 #define     SPI_FRF_X8_MODE                           3
+
+#define     DISABLE                                   0
+#define     ENABLE                                    1
+/*SPI_CTRLR0 define*/
+#define     TRANS_TYPE_TT0                            0
+#define     TRANS_TYPE_TT1                            1
+#define     TRANS_TYPE_TT2                            2
+#define     TRANS_TYPE_TT3                            3
+
+#define     ADDR_L0                                   0
+#define     ADDR_L24                                  6
+#define     ADDR_L28                                  7
+#define     ADDR_L32                                  8
+
+#define     INST_L8                                   2
+
+#define     MBL_2                                     0
+#define     MBL_4                                     1
+#define     MBL_8                                     2
+#define     MBL_16                                    3
 
 
 #define TIMEOUT   1000
@@ -240,14 +257,15 @@ void dwcssi_config_tx(volatile uint32_t *ctrl_base, uint8_t frf, uint32_t tx_tot
     dwcssi_enable(ctrl_base);
 }
 
-void dwcssi_config_rx(volatile uint32_t *ctrl_base, uint8_t frf, uint8_t rx_ip_lv)
+void dwcssi_config_rx(volatile uint32_t *ctrl_base, uint8_t frf, uint8_t ndf, uint32_t spictrl_val)
 {
     dwcssi_disable(ctrl_base);
     dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, frf, RX_ONLY);
-    dwcssi_config_RXFTLR(ctrl_base, rx_ip_lv);
+    dwcssi_config_RXFTLR(ctrl_base, 0);
+    dwcssi_config_CTRLR1(ctrl_base, ndf);
     if(frf == SPI_FRF_X4_MODE)
     {
-        dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, 0x40004220, 0xFFFFFFFF); // wait 8 cycles for x4 read
+        dwcssi_set_bits(ctrl_base, DWCSSI_REG_SPI_CTRLR0, spictrl_val, 0xFFFFFFFF); // wait 8 cycles for x4 read
     }
     dwcssi_enable(ctrl_base);
 }
@@ -383,6 +401,27 @@ int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 
 }
 
+int dwcssi_wait_flash_idle_quad(volatile uint32_t *ctrl_base)
+{
+    uint8_t rx;
+    uint32_t spictrl_val =   DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN(DISABLE) 
+                           | DWCSSI_SPI_CTRLR0_WAIT_CYCLES(0)
+                           | DWCSSI_SPI_CTRLR0_INST_L(INST_L8) 
+                           | DWCSSI_SPI_CTRLR0_ADDR_L(ADDR_L0)
+                           | DWCSSI_SPI_CTRLR0_TRANS_TYPE(TRANS_TYPE_TT0);
+    dwcssi_config_rx(ctrl_base, SPI_FRF_X4_MODE, 1, spictrl_val);
+    // while(1)
+    {
+        dwcssi_tx(ctrl_base, SPIFLASH_READ_STATUS);
+        dwcssi_txwm_wait(ctrl_base);
+        if(dwcssi_rx(ctrl_base, &rx) == ERROR_OK)
+        {
+            if((rx & SPIFLASH_BSY_BIT) == 0)
+                return (ERROR_OK);
+        }
+    }
+}
+
 int dwcssi_flash_wr_en(volatile uint32_t *ctrl_base, uint8_t frf)
 {
     uint8_t tx_start_lv = 0;
@@ -406,7 +445,7 @@ int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uin
     dwcssi_tx(ctrl_base, offset);
     dwcssi_tx_buf(ctrl_base, buffer, len);
 
-    return dwcssi_wait_flash_idle(ctrl_base);
+    return dwcssi_wait_flash_idle_quad(ctrl_base);
 }
 
 int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t qread_cmd)
