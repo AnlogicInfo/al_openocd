@@ -1015,7 +1015,7 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 			break;
 		}
 
-		if (!IS_ALIGNED(fifo->rp - fifo->fifo_start_addr, block_size) || fifo->rp < fifo->fifo_start_addr || fifo->rp >= fifo->fifo_end_addr) {
+		if (fifo->rp < fifo->fifo_start_addr || fifo->rp >= fifo->fifo_end_addr) {
 			LOG_ERROR("corrupted fifo read pointer 0x%" PRIx32, fifo->rp);
 			break;
 		}

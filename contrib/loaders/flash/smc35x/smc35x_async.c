@@ -179,9 +179,9 @@ do {  \
 } while(0)
 #define OneHot(Value)	(!((Value) & (Value - 1)))
 
-static uint32_t __attribute__((aligned(4))) NandOob64[12] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
-static uint32_t __attribute__((aligned(4))) NandOob32[6] = {26, 27, 28, 29, 30, 31};
-static uint32_t __attribute__((aligned(4))) NandOob16[3] = {13, 14, 15};		/* data size 512bytes */
+static uint8_t NandOob64[12] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
+static uint8_t NandOob32[6] = {26, 27, 28, 29, 30, 31};
+static uint8_t NandOob16[3] = {13, 14, 15};		/* data size 512bytes */
 static uint8_t oob_data[512] = {0xff, 0xff};
 static uint8_t ecc_data[12] = {0};			/* calculated ecc data from nand HW*/
 
@@ -210,14 +210,27 @@ static uint8_t smc35x_ecc_calculate(uint8_t nums)
 	return SmcSuccess;
 }
 
-int flash_smc35x(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint8_t *oob_buffer, uint32_t ecc_num)
+static uint32_t wait_fifo(uint32_t *work_area_start)
+{
+    uint32_t wp = 0, rp = 0;
+    while(wp == rp)
+    {
+        wp = * (volatile uint32_t *) work_area_start;
+        rp = *(volatile uint32_t *) (work_area_start + 1);
+    }
+    return rp;
+}
+
+static int write_async(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint8_t *oob_buffer, uint32_t ecc_num)
 {
 	uint8_t state, nums = 0;
     uint32_t index, status;
 	
 	uint32_t *temp_buffer, temp_length = 0;
 	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
-	uint8_t *poob_data =(raw_oob) ? oob_buffer : oob_data;
+	uint8_t *poob_data = (raw_oob) ? oob_buffer : oob_data;
+	volatile uint8_t *dst_oob = NULL;
+	volatile uint8_t *dst = NULL;
 
 	volatile unsigned long status_addr = 0;
 	volatile unsigned long cmd_phase_addr = 0;
@@ -287,8 +300,11 @@ int flash_smc35x(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32_t off
 
 			smc35x_ecc_calculate(nums);
 
-			for (index = 0; index < eccDataNums; index++)
-				oob_data[dataOffsetPtr[index]] = (~ecc_data[index]);
+			for (index = 0; index < eccDataNums; ++index) {
+				dst_oob = dataOffsetPtr + index;
+				dst = oob_data + *dst_oob;
+				*dst = (~ecc_data[index]);
+			}
 		}
 	} else {
 		/* Write Page Data */
@@ -335,4 +351,39 @@ int flash_smc35x(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32_t off
 	}
 
 	return ERROR_OK;
+}
+
+int flash_smc35x(bool raw_oob, uint32_t block_size, uint32_t count, uint32_t *buf_start, uint32_t *buf_end, uint32_t offset, uint32_t oob_size, uint32_t ecc_num)
+{
+    uint8_t *rp;
+    uint32_t retval = 0;
+    // uint32_t page_offset = offset & (page_size - 1);
+    uint32_t cur_count;
+	uint32_t page_size = (raw_oob) ? (block_size - oob_size) : block_size;
+
+    while(count > 0)
+    {
+        // if(page_offset + count > page_size)
+        //     cur_count = page_size - page_offset;
+        // else
+        //     cur_count = count;        
+        rp = (uint8_t *) wait_fifo(buf_start);
+        if(count < block_size)
+            cur_count = count;
+        else cur_count = block_size;
+
+		retval = write_async(raw_oob, page_size, rp, offset, oob_size, (rp + page_size), ecc_num);
+
+        // page_offset = 0;
+        rp += cur_count;
+        if(rp == buf_end)
+            rp = buf_start + 2;
+        *(buf_start + 1) = (uint32_t) rp;
+
+        // offset += cur_count;
+        ++offset;
+        count -= cur_count;
+    }
+
+    return retval;
 }

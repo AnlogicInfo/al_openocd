@@ -65,6 +65,7 @@ struct nand_device {
 	int bus_width;
 	int address_cycles;
 	int page_size;
+	int oob_size;
 	int erase_size;
 	bool use_raw;
 	int num_blocks;

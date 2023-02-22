@@ -25,6 +25,7 @@
 
 #include "core.h"
 #include "fileio.h"
+#include "driver.h"
 
 static struct nand_ecclayout nand_oob_16 = {
 	.eccbytes = 6,
@@ -82,7 +83,10 @@ int nand_fileio_start(struct command_invocation *cmd,
 	}
 
 	if (state->oob_format & (NAND_OOB_RAW | NAND_OOB_SW_ECC | NAND_OOB_SW_ECC_KW)) {
-		if (nand->page_size == 512) {
+		if (strcmp(nand->controller->name, "smc35x") == 0)
+		{
+			state->oob_size = nand->oob_size;
+		} else if (nand->page_size == 512) {
 			state->oob_size = 16;
 			state->eccpos = nand_oob_16.eccpos;
 		} else if (nand->page_size == 2048)   {

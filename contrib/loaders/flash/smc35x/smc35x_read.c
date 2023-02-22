@@ -250,20 +250,24 @@ static uint8_t smc35x_ecc_correct(volatile uint8_t *eccCode, volatile uint8_t *e
 	return SmcMultipleBitsErr;
 }
 
-int flash_smc35x(uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint32_t device_id, uint32_t ecc_num)
+int flash_smc35x(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t oob_size, uint32_t device_id, uint32_t ecc_num)
 {
 	uint8_t state, eccDataNums = 0, nums = 0, eccOffset = 0;
     uint32_t status;
 	volatile uint32_t index = 0;
-
-	volatile uint8_t *ecc_data = buffer + page_size;
-	volatile uint8_t *read_ecc_data = ecc_data + 12;
 
 	volatile uint32_t *temp_buffer;
 	uint32_t temp_length = 0;
 	uint32_t *dataOffsetPtr = NULL;
 	uint8_t *page_data = buffer, *poob_data = oob_data;
 	
+	volatile uint8_t *ecc_data = buffer + page_size;
+	if (raw_oob) {
+		ecc_data = buffer + (page_size + oob_size);
+		poob_data = buffer + page_size;
+	}
+	volatile uint8_t *read_ecc_data = ecc_data + 12;
+
 	// volatile unsigned long status_addr = 0;
 	volatile unsigned long cmd_phase_addr = 0;
 	volatile unsigned long data_phase_addr = 0;
@@ -302,32 +306,34 @@ int flash_smc35x(uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t 
 			temp_buffer[index] = SMC_ReadReg(data_phase_addr);
 		
 		/* Calculate ECC */
-		switch (oob_size)
-		{
-			case(16):
-				eccDataNums = 3;
-				nums = 1;
-				dataOffsetPtr = NandOob16;
-				break;
-			case(32):
-				eccDataNums = 6;
-				nums = 2;
-				dataOffsetPtr = NandOob32;
-				break;
-			case(64):
-				eccDataNums = 12;
-				nums = 4;
-				dataOffsetPtr = NandOob64;
-				break;
-			default:
-				/* Page size 256 bytes & 4096 bytes not supported by ECC block */
-				return SmcHwReadSizeOver;
+		if (!raw_oob) {
+			switch (oob_size)
+			{
+				case(16):
+					eccDataNums = 3;
+					nums = 1;
+					dataOffsetPtr = NandOob16;
+					break;
+				case(32):
+					eccDataNums = 6;
+					nums = 2;
+					dataOffsetPtr = NandOob32;
+					break;
+				case(64):
+					eccDataNums = 12;
+					nums = 4;
+					dataOffsetPtr = NandOob64;
+					break;
+				default:
+					/* Page size 256 bytes & 4096 bytes not supported by ECC block */
+					return SmcHwReadSizeOver;
+			}
+
+			state = smc35x_ecc_calculate(ecc_data, nums);
+			if (state != SmcSuccess)
+				return state;
 		}
 
-		state =  smc35x_ecc_calculate(ecc_data, nums);
-		if(state != SmcSuccess)
-			return state;
-		
 		/* Read Oob Data */
 		data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG | (ONFI_CMD_READ_PAGE2 << 11);
 		temp_buffer = (uint32_t *)poob_data;
@@ -342,18 +348,19 @@ int flash_smc35x(uint32_t page_size, uint8_t *buffer, uint32_t offset, uint32_t 
 		for (index = 0; index < temp_length; ++index)
 			temp_buffer[index] = SMC_ReadReg(data_phase_addr);
 		
-		/* Correct ECC */
-		for (index = 0; index < eccDataNums; ++index)
-			read_ecc_data[index] = ~oob_data[dataOffsetPtr[index]];
-		
-		index = page_size / NAND_ECC_BLOCK_SIZE;
-		for (; index != 0; --index) {
-			state = smc35x_ecc_correct(&read_ecc_data[eccOffset], &ecc_data[eccOffset], page_data);
-			if (state != SmcSuccess)
-				return state;
+		if (!raw_oob) {
+			for (index = 0; index < eccDataNums; ++index)
+				read_ecc_data[index] = ~oob_data[dataOffsetPtr[index]];
 
-			eccOffset += NAND_ECC_BYTES;
-			page_data += NAND_ECC_BLOCK_SIZE;
+			index = page_size / NAND_ECC_BLOCK_SIZE;
+			for (; index != 0; --index) {
+				state = smc35x_ecc_correct(&read_ecc_data[eccOffset], &ecc_data[eccOffset], page_data);
+				if (state != SmcSuccess)
+					return state;
+
+				eccOffset += NAND_ECC_BYTES;
+				page_data += NAND_ECC_BLOCK_SIZE;
+			}
 		}
 	} else {
 		if (device_id == NAND_MFR_MICRON)
