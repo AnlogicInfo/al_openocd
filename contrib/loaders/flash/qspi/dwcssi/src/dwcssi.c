@@ -401,26 +401,26 @@ int dwcssi_wait_flash_idle(volatile uint32_t *ctrl_base)
 
 }
 
-int dwcssi_wait_flash_idle_quad(volatile uint32_t *ctrl_base)
-{
-    uint8_t rx;
-    uint32_t spictrl_val =   DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN(DISABLE) 
-                           | DWCSSI_SPI_CTRLR0_WAIT_CYCLES(0)
-                           | DWCSSI_SPI_CTRLR0_INST_L(INST_L8) 
-                           | DWCSSI_SPI_CTRLR0_ADDR_L(ADDR_L0)
-                           | DWCSSI_SPI_CTRLR0_TRANS_TYPE(TRANS_TYPE_TT0);
-    dwcssi_config_rx(ctrl_base, SPI_FRF_X4_MODE, 1, spictrl_val);
-    // while(1)
-    {
-        dwcssi_tx(ctrl_base, SPIFLASH_READ_STATUS);
-        dwcssi_txwm_wait(ctrl_base);
-        if(dwcssi_rx(ctrl_base, &rx) == ERROR_OK)
-        {
-            if((rx & SPIFLASH_BSY_BIT) == 0)
-                return (ERROR_OK);
-        }
-    }
-}
+// int dwcssi_wait_flash_idle_quad(volatile uint32_t *ctrl_base)
+// {
+//     uint8_t rx;
+//     uint32_t spictrl_val =   DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN(DISABLE) 
+//                            | DWCSSI_SPI_CTRLR0_WAIT_CYCLES(0)
+//                            | DWCSSI_SPI_CTRLR0_INST_L(INST_L8) 
+//                            | DWCSSI_SPI_CTRLR0_ADDR_L(ADDR_L0)
+//                            | DWCSSI_SPI_CTRLR0_TRANS_TYPE(TRANS_TYPE_TT0);
+//     dwcssi_config_rx(ctrl_base, SPI_FRF_X4_MODE, 1, spictrl_val);
+//     // while(1)
+//     {
+//         dwcssi_tx(ctrl_base, SPIFLASH_READ_STATUS);
+//         dwcssi_txwm_wait(ctrl_base);
+//         if(dwcssi_rx(ctrl_base, &rx) == ERROR_OK)
+//         {
+//             if((rx & SPIFLASH_BSY_BIT) == 0)
+//                 return (ERROR_OK);
+//         }
+//     }
+// }
 
 int dwcssi_flash_wr_en(volatile uint32_t *ctrl_base, uint8_t frf)
 {
@@ -445,7 +445,7 @@ int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uin
     dwcssi_tx(ctrl_base, offset);
     dwcssi_tx_buf(ctrl_base, buffer, len);
 
-    return dwcssi_wait_flash_idle_quad(ctrl_base);
+    return dwcssi_wait_flash_idle(ctrl_base);
 }
 
 int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t qread_cmd)

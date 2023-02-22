@@ -11,7 +11,7 @@
 void general_spi_quad_rd_config(struct flash_bank *bank, uint8_t addr_len)
 {
     struct dwcssi_trans_config trans_config;
-    LOG_INFO("sp s25fl config trans");
+    LOG_INFO("general config trans");
     trans_config.tmod = RX_ONLY;
     trans_config.spi_frf = SPI_FRF_X4_MODE;
     trans_config.ndf = 0;
