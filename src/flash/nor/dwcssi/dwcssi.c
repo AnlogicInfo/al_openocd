@@ -216,6 +216,17 @@ static int dwcssi_config_RXFTLR(struct flash_bank *bank, uint32_t rft)
     return ERROR_OK;
 }
 
+static int dwcssi_config_SAMPLE_DELAY(struct flash_bank *bank, uint8_t se, uint8_t sdr)
+{
+    uint32_t val, mask;
+
+    val = DWCSSI_SAMPLE_DELAY_SE(se) | DWCSSI_SAMPLE_DELAY_RSD(sdr);
+    mask = DWCSSI_SAMPLE_DELAY_SE_MASK | DWCSSI_SAMPLE_DELAY_RSD_MASK;
+    dwcssi_set_bits(bank, DWCSSI_REG_RX_SAMPLE_DELAY, val, mask);
+    return ERROR_OK;
+}
+
+
 static uint32_t dwcssi_set_SPICTRLR0(uint8_t trans_type, uint8_t addr_len, uint8_t stretch_en, uint8_t wait_cycle)
 {
     dwcssi_spi_ctrlr0_t spi_ctrlr0;
@@ -230,30 +241,29 @@ static uint32_t dwcssi_set_SPICTRLR0(uint8_t trans_type, uint8_t addr_len, uint8
     return spi_ctrlr0.reg_val;
 }
 
+
 // ctrl for enhanced spi mode
 static int dwcssi_config_SPICTRLR0(struct flash_bank *bank, uint8_t trans_type, uint8_t addr_len, uint8_t stretch_en, uint8_t wait_cycle)
 {
     uint32_t spictrl;
-    // dwcssi_spi_ctrlr0_t spi_ctrlr0;
 
-    // spi_ctrlr0.reg_val = 0;
-
-    // spi_ctrlr0.reg_fields.TRANS_TYPE            = trans_type;
-    // spi_ctrlr0.reg_fields.ADDR_L                = addr_len;
-    // spi_ctrlr0.reg_fields.INST_L                = INST_L8;
-    // spi_ctrlr0.reg_fields.CLK_STRETCH_EN        = stretch_en; 
-    // spi_ctrlr0.reg_fields.WAIT_CYCLES           = wait_cycle;
     spictrl = dwcssi_set_SPICTRLR0(trans_type, addr_len, stretch_en, wait_cycle);
     dwcssi_set_bits(bank, DWCSSI_REG_SPI_CTRLR0, spictrl, 0xFFFFFFFF);
     return ERROR_OK;
 }
 
+static void dwcssi_config_clk(struct flash_bank *bank, uint8_t sckdv)
+{
+    dwcssi_disable(bank);
+    dwcssi_config_BAUDR(bank, sckdv);
+    dwcssi_enable(bank);
+}
 
-static void dwcssi_config_init(struct flash_bank *bank)
+static void dwcssi_config_init(struct flash_bank *bank, uint8_t sckdv)
 {
 
     dwcssi_disable(bank);
-    dwcssi_config_BAUDR(bank, 8);
+    dwcssi_config_BAUDR(bank, sckdv);
     dwcssi_config_SER(bank, ENABLE);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
     dwcssi_enable(bank);
@@ -636,9 +646,9 @@ int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
 static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+    // const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     uint8_t flash_sr, offset_shift;
-    int addr_bytes = flash_ops->addr_len >> 1, i;
+    int addr_bytes = driver_priv->addr_len >> 1, i;
     uint32_t offset;
     int retval;
 
@@ -748,7 +758,16 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 
     LOG_DEBUG("read addr %x count %x", offset, count);
     flash_ops->quad_en(bank);
-    flash_ops->trans_config(bank, RX_ONLY);
+    if(0)
+    {
+    dwcssi_enable(bank);
+    dwcssi_config_SAMPLE_DELAY(bank, 0, 0);
+    dwcssi_disable(bank);
+    }
+
+    dwcssi_config_clk(bank, 8);
+
+    flash_ops->quad_rd_config(bank, driver_priv->addr_len);
     // dwcssi_config_rx(bank, SPI_FRF_X4_MODE, 0x3F);
 
     while(count > 0)
@@ -808,9 +827,9 @@ static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint3
     loader->image_size = count;
     loader->param_cnt = 5;
     loader->set_params_priv = dwcssi_checksum_params_priv;
-
+    dwcssi_config_clk(bank, 8);
     flash_ops->quad_en(bank);
-    flash_ops->trans_config(bank, RX_ONLY);   
+    flash_ops->quad_rd_config(bank, driver_priv->addr_len);   
     retval = loader_flash_crc(loader, crc_srcs, address, crc);
     return retval;
 }
@@ -852,9 +871,9 @@ static int slow_dwcssi_write_page(struct flash_bank *bank, const uint8_t *buffer
 
     trans_config.trans_type = TRANS_TYPE_TT0;
     trans_config.stretch_en = ENABLE;
-    trans_config.addr_len = flash_ops->addr_len;
+    trans_config.addr_len = driver_priv->addr_len;
     trans_config.wait_cycle = 0;
-    trans_config.tx_start_lv = flash_ops->addr_len >> 1;
+    trans_config.tx_start_lv = driver_priv->addr_len >> 1;
     LOG_INFO("dwcssi slow write offset %x len %x start lv %x", offset, len, trans_config.tx_start_lv);
     flash_ops->quad_en(bank);
 
@@ -939,7 +958,7 @@ static void dwcssi_write_sync_params_priv(struct flash_loader *loader)
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     uint32_t spictrl;
 
-    spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, flash_ops->addr_len, ENABLE, 0);
+    spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, driver_priv->addr_len, ENABLE, 0);
     buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, flash_ops->qprog_cmd);
     buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, spictrl);
 }
@@ -950,7 +969,7 @@ static void dwcssi_write_async_params_priv(struct flash_loader *loader)
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     uint32_t spictrl;
 
-    spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, flash_ops->addr_len, ENABLE, 0);
+    spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, driver_priv->addr_len, ENABLE, 0);
 
     buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, flash_ops->qprog_cmd);
     buf_set_u64(loader->reg_params[7].value, 0, loader->xlen, spictrl);
@@ -972,7 +991,7 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
     loader->param_cnt = 8;
     loader->set_params_priv = dwcssi_write_async_params_priv;
     LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
-
+    dwcssi_config_clk(bank, flash_ops->clk_div);
     flash_ops->quad_en(bank);
 
     retval = loader_flash_write_async(loader, async_srcs, 
@@ -1007,7 +1026,6 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
     int retval = ERROR_FAIL;
 
     count = flash_write_boundary_check(bank, offset, count);
-
     retval = dwcssi_write_async(bank, buffer, offset, count);
 
     if(retval != ERROR_OK)
@@ -1017,8 +1035,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 
     if(0)
     {
-	retval = slow_dwcssi_write(bank, buffer, offset, count);
-
+	    retval = slow_dwcssi_write(bank, buffer, offset, count);
     }
 
     return retval;
@@ -1139,7 +1156,7 @@ static int dwcssi_probe(struct flash_bank *bank)
         return ERROR_FAIL;
     }
 
-    dwcssi_config_init(bank);
+    dwcssi_config_init(bank, 2);
 
     return dwcssi_read_id(bank);
 }

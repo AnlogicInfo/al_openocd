@@ -31,13 +31,13 @@
 
 typedef struct flash_ops_t
 {
+	uint8_t clk_div;
+	uint8_t wait_cycle;
+
 	uint8_t qread_cmd;
 	uint8_t qprog_cmd;
-	uint8_t addr_len;
-	uint8_t wait_cycle;
-	void (*trans_config) (struct flash_bank *bank, uint8_t dir);
-	int (*reset) (struct flash_bank *bank, uint8_t cmd_mode);
-	int (*err_chk) (struct flash_bank *bank);
+
+	void (*quad_rd_config) (struct flash_bank *bank, uint8_t addr_len);
 	
 	int (*quad_en) (struct flash_bank *bank);
 	int (*quad_dis) (struct flash_bank *bank);
@@ -60,6 +60,7 @@ struct flash_device {
 	uint32_t pagesize;
 	uint32_t sectorsize;
 	uint32_t size_in_bytes;
+	uint8_t  addr_len;
 
 	// Pointer to model-specific operations for this flash
 	const flash_ops_t *flash_ops;

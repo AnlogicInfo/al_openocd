@@ -75,11 +75,9 @@
 
 #define     DWCSSI_ISR_TXEIS(x)                       (((x) & 0x1) << 0)
 
-#define     DWCSSI_SPI_CTRLR0_TRANS_TYPE              (((x) & 0x3) << 0)
-#define     DWCSSI_SPI_CTRLR0_ADDR_L                  (((x) & 0xF) << 2)
-#define     DWCSSI_SPI_CTRLR0_INST_L                  (((x) & 0x3) << 8)
-#define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES             (((x) & 0x1F) << 11)
-#define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN          (((x) & 0x1) << 30)
+#define     DWCSSI_SAMPLE_DELAY_SE(x)                 (((x) & 0x1) << 16)
+#define     DWCSSI_SAMPLE_DELAY_RSD(x)                (((x) & 0xFF) << 0)
+
 
 typedef union dwcssi_spi_ctrlr0_t
 {
@@ -126,12 +124,9 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     DWCSSI_SR_TFTNF_MASK                       DWCSSI_SR_TFNF(0xFFFFFFFF)
 #define     DWCSSI_SR_RFNE_MASK                        DWCSSI_SR_RFNE(0xFFFFFFFF)
 #define     DWCSSI_ISR_TXEIS_MASK                      DWCSSI_ISR_TXEIS(0xFFFFFFFF)      
+#define     DWCSSI_SAMPLE_DELAY_SE_MASK                DWCSSI_SAMPLE_DELAY_SE(0xFFFFFFFF)
+#define     DWCSSI_SAMPLE_DELAY_RSD_MASK               DWCSSI_SAMPLE_DELAY_RSD(0xFFFFFFFF)
 
-#define     DWCSSI_SPI_CTRLR0_TRANS_TYPE_MASK           DWCSSI_SPI_CTRLR0_TRANS_TYPE(0xFFFFFFFF)
-#define     DWCSSI_SPI_CTRLR0_ADDR_L_MASK               DWCSSI_SPI_CTRLR0_ADDR_L(0xFFFFFFFF)
-#define     DWCSSI_SPI_CTRLR0_INST_L_MASK               DWCSSI_SPI_CTRLR0_INST_L(0xFFFFFFFF)
-#define     DWCSSI_SPI_CTRLR0_WAIT_CYCLES_MASK          DWCSSI_SPI_CTRLR0_WAIT_CYCLES(0xFFFFFFFF)
-#define     DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN_MASK       DWCSSI_SPI_CTRLR0_CLK_STRETCH_EN(0xFFFFFFFF)
 
 #define     DISABLE                                   0
 #define     ENABLE                                    1
@@ -213,7 +208,7 @@ int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
 //general spi ops
 int general_reset_f0(struct flash_bank *bank, uint8_t cmd_mode);
 int general_reset_66_99(struct flash_bank *bank, uint8_t cmd_mode);
-void general_spi_trans_config(struct flash_bank *bank, uint8_t trans_dir);
+void general_spi_quad_rd_config(struct flash_bank *bank, uint8_t addr_len);
 int general_spi_err_chk(struct flash_bank* bank);
 int general_spi_quad_en(struct flash_bank* bank);
 int general_spi_quad_dis(struct flash_bank* bank);

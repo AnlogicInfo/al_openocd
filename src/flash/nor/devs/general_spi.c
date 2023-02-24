@@ -25,11 +25,6 @@ void general_spi_quad_rd_config(struct flash_bank *bank, uint8_t addr_len)
     dwcssi_config_trans(bank, &trans_config);
 }
 
-void general_spi_trans_config(struct flash_bank *bank, uint8_t trans_dir)
-{
-    general_spi_quad_rd_config(bank, ADDR_L24);
-}
-
 
 int general_reset_f0(struct flash_bank *bank, uint8_t cmd_mode)
 {
@@ -92,13 +87,13 @@ int general_spi_qpi_dis(struct flash_bank* bank)
     return ERROR_OK;
 }
 const flash_ops_t general_spi_ops = {
+    .clk_div    = 8,
+    .wait_cycle = 8,
+
     .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,
-    .addr_len = ADDR_L24,
-    .wait_cycle = 8,
-    .trans_config = general_spi_trans_config,
-    .reset     = general_spi_reset,
-    .err_chk   = general_spi_err_chk,
+
+    .quad_rd_config = general_spi_quad_rd_config,
     .quad_en   = general_spi_quad_en,
     .quad_dis  = general_spi_quad_dis,
     .qpi_en    = general_spi_qpi_en,

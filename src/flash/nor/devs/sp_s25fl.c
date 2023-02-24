@@ -39,30 +39,6 @@ typedef union sp_s25fl_cr1_t
 #define   FLASH_STATUS_WP(x)                   ((x >> 2) & 0x7)
 #define   FLASH_CONFIG_QUAD(x)                 ((x >> 1) & 0x1)
 
-void sp_s25fl_trans_config(struct flash_bank *bank, uint8_t trans_dir)
-{
-    struct dwcssi_trans_config trans_config;
-    LOG_INFO("sp s25fl config trans");
-    trans_config.tmod = trans_dir;
-    trans_config.spi_frf = SPI_FRF_X4_MODE;
-    trans_config.ndf = 0;
-    if(trans_dir == TX_ONLY)
-    {
-        trans_config.tx_start_lv = 0x4;
-        trans_config.wait_cycle = 0;
-    }
-    else
-    {
-        trans_config.rx_ip_lv = 0x3F;
-        trans_config.wait_cycle = 0x8;
-    }
-
-    trans_config.trans_type = TRANS_TYPE_TT0;
-    trans_config.stretch_en = ENABLE;
-    trans_config.addr_len = ADDR_L32;
-    dwcssi_config_trans(bank, &trans_config);
-}
-
 int sp_s25fl_reset(struct flash_bank *bank, uint8_t cmd_mode)
 {
     int flash_err;
@@ -140,11 +116,10 @@ int sp_s25fl_quad_dis(struct flash_bank* bank)
 const flash_ops_t sp_s25fl_ops = {
     .qread_cmd = 0x6C,
     .qprog_cmd = 0x34,
-    .addr_len  = ADDR_L32,
+    .clk_div = 2,
     .wait_cycle = 8,
-    .trans_config = sp_s25fl_trans_config,
-    .reset     = general_reset_f0,
-    .err_chk   = sp_s25fl_err_chk,
+
+    .quad_rd_config = general_spi_quad_rd_config,
     .quad_en   = sp_s25fl_quad_en,
     .quad_dis  = sp_s25fl_quad_dis
 };
