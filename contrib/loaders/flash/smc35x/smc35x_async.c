@@ -179,9 +179,6 @@ do {  \
 } while(0)
 #define OneHot(Value)	(!((Value) & (Value - 1)))
 
-static uint8_t NandOob64[12] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
-static uint8_t NandOob32[6] = {26, 27, 28, 29, 30, 31};
-static uint8_t NandOob16[3] = {13, 14, 15};		/* data size 512bytes */
 static uint8_t oob_data[512] = {0xff, 0xff};
 static uint8_t ecc_data[12] = {0};			/* calculated ecc data from nand HW*/
 
@@ -227,10 +224,8 @@ static int write_async(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32
     uint32_t index, status;
 	
 	uint32_t *temp_buffer, temp_length = 0;
-	uint32_t eccDataNums = 0, *dataOffsetPtr = NULL;
+	uint32_t eccDataNums = 0;
 	uint8_t *poob_data = (raw_oob) ? oob_buffer : oob_data;
-	volatile uint8_t *dst_oob = NULL;
-	volatile uint8_t *dst = NULL;
 
 	volatile unsigned long status_addr = 0;
 	volatile unsigned long cmd_phase_addr = 0;
@@ -276,22 +271,18 @@ static int write_async(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32
 				case(16):
 					eccDataNums = 3;
 					nums = 1;
-					dataOffsetPtr = NandOob16;
 					break;
 				case(32):
 					eccDataNums = 6;
 					nums = 2;
-					dataOffsetPtr = NandOob32;
 					break;
 				case(64):
 					eccDataNums = 12;
 					nums = 4;
-					dataOffsetPtr = NandOob64;
 					break;
 				case(224):
 					eccDataNums = 12;
 					nums = 4;
-					dataOffsetPtr = NandOob64;
 					break;
 				default:
 					/* Page size 256 bytes & 4096 bytes not supported by ECC block */
@@ -300,11 +291,10 @@ static int write_async(bool raw_oob, uint32_t page_size, uint8_t *buffer, uint32
 
 			smc35x_ecc_calculate(nums);
 
-			for (index = 0; index < eccDataNums; ++index) {
-				dst_oob = dataOffsetPtr + index;
-				dst = oob_data + *dst_oob;
-				*dst = (~ecc_data[index]);
-			}
+			uint32_t oob_index = (oob_size == 224) ? 52 : (oob_size - eccDataNums);
+
+			for (index = 0; index < eccDataNums; index++)
+				oob_data[oob_index++] = (~ecc_data[index]);
 		}
 	} else {
 		/* Write Page Data */

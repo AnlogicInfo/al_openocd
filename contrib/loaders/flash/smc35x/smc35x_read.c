@@ -244,7 +244,7 @@ static uint8_t smc35x_ecc_correct(volatile uint8_t *eccCode, volatile uint8_t *e
 
 	/* Two bits Error */
 	if (OneHot((eccOdd | eccEven)) == SmcSuccess)
-		return SmcSuccess;
+		return SmcTwoBitsErr;
 
 	/* Multiple bits error */
 	return SmcMultipleBitsErr;

@@ -417,60 +417,58 @@ COMMAND_HANDLER(handle_nand_verify_command)
 COMMAND_HANDLER(handle_nand_verify_image_command)
 {
 	struct nand_device *nand = NULL;
-	struct nand_fileio_state file;
+	struct nand_fileio_state s;
 	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
-			&file, &nand, FILEIO_READ, false, true);
+			&s, &nand, FILEIO_READ, false, true);
 	if (retval != ERROR_OK)
 		return retval;
 
-	struct nand_fileio_state dev;
-	nand_fileio_init(&dev);
-	dev.address = file.address;
-	dev.size = file.size;
-	dev.oob_format = file.oob_format;
-	retval = nand_fileio_start(CMD, nand, NULL, FILEIO_NONE, &dev);
-	if (retval != ERROR_OK)
-		return retval;
-
-	while (file.size > 0) {
-		retval = nand_read_page(nand, dev.address / dev.page_size,
-				dev.page, dev.page_size, dev.oob, dev.oob_size);
-		if (retval != ERROR_OK) {
-			command_print(CMD, "reading NAND flash page failed");
-			nand_fileio_cleanup(&dev);
-			nand_fileio_cleanup(&file);
-			return retval;
-		}
-
-		int bytes_read = nand_fileio_read(nand, &file);
-		if (bytes_read <= 0) {
-			command_print(CMD, "error while reading file");
-			nand_fileio_cleanup(&dev);
-			nand_fileio_cleanup(&file);
-			return ERROR_FAIL;
-		}
-
-		if ((dev.page && memcmp(dev.page, file.page, dev.page_size)) ||
-				(dev.oob && memcmp(dev.oob, file.oob, dev.oob_size))) {
-			command_print(CMD, "NAND flash contents differ "
-				"at 0x%8.8" PRIx32, dev.address);
-			nand_fileio_cleanup(&dev);
-			nand_fileio_cleanup(&file);
-			return ERROR_FAIL;
-		}
-
-		file.size -= bytes_read;
-		dev.address += nand->page_size;
+	size_t one_read, bytes_read = 0;
+	uint32_t page_nums = 0, write_size = 0;
+	if (s.oob) {
+		page_nums = (s.size - 1) / (s.page_size + s.oob_size) + 1;
+		write_size = page_nums * (s.page_size + s.oob_size);
+	} else {
+		page_nums = (s.size - 1) / s.page_size + 1;
+		write_size = page_nums * s.page_size;
 	}
 
-	if (nand_fileio_finish(&file) == ERROR_OK) {
+	uint8_t *write_data = malloc(write_size);
+	if (write_data) {
+		fileio_read(s.fileio, write_size, write_data, &one_read);
+		if (one_read < write_size)
+			memset(write_data + one_read, 0xff, write_size - one_read);
+		bytes_read += one_read;
+	}
+	if (bytes_read <= 0) {
+		nand_fileio_cleanup(&s);
+		if (write_data)
+			free(write_data);
+		return ERROR_FAIL;
+	}
+
+	retval = nand_verify_data(nand, s.address / nand->page_size,
+				write_data, write_size, s.oob, s.oob_size);
+	if (retval != ERROR_OK) {
+		nand_fileio_cleanup(&s);
+		if (write_data)
+			free(write_data);
+		return retval;
+	}
+	
+	s.address += write_size;
+	if (nand_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "verified file %s in NAND flash %s "
 			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
-			CMD_ARGV[1], CMD_ARGV[0], dev.address, duration_elapsed(&file.bench),
-			duration_kbps(&file.bench, dev.size));
+			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
+			duration_kbps(&s.bench, write_size));
 	}
 
-	return nand_fileio_cleanup(&dev);
+	if (write_data) {
+		free(write_data);
+	}
+
+	return ERROR_OK;
 }
 
 COMMAND_HANDLER(handle_nand_dump_command)
