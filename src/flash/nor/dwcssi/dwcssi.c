@@ -765,7 +765,8 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
     dwcssi_disable(bank);
     }
 
-    dwcssi_config_clk(bank, 8);
+    dwcssi_config_clk(bank, flash_ops->clk_div);
+
 
     flash_ops->quad_rd_config(bank, driver_priv->addr_len);
     // dwcssi_config_rx(bank, SPI_FRF_X4_MODE, 0x3F);
@@ -815,7 +816,13 @@ static void dwcssi_checksum_params_priv(struct flash_loader *loader)
     // LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, flash_ops->qread_cmd);
 }
 
-static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint32_t count, uint32_t *crc)
+static void dwcssi_checksum_params_priv_x1(struct flash_loader *loader)
+{
+    buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, 0x03);
+    // LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, flash_ops->qread_cmd);
+}
+
+static int dwcssi_checksum(struct flash_bank *bank, uint8_t spi_frf, target_addr_t address, uint32_t count, uint32_t *crc)
 {
     int retval = ERROR_OK;
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
@@ -826,10 +833,18 @@ static int dwcssi_checksum(struct flash_bank *bank, target_addr_t address, uint3
     loader->block_size = driver_priv->dev->pagesize;
     loader->image_size = count;
     loader->param_cnt = 5;
-    loader->set_params_priv = dwcssi_checksum_params_priv;
-    dwcssi_config_clk(bank, 8);
-    flash_ops->quad_en(bank);
-    flash_ops->quad_rd_config(bank, driver_priv->addr_len);   
+    dwcssi_config_clk(bank, flash_ops->clk_div);
+    if(spi_frf == SPI_FRF_X4_MODE)
+    {
+        loader->set_params_priv = dwcssi_checksum_params_priv;
+        flash_ops->quad_en(bank);
+        flash_ops->quad_rd_config(bank, driver_priv->addr_len);   
+    }
+    else
+    {
+        loader->set_params_priv = dwcssi_checksum_params_priv_x1;
+        dwcssi_config_rx(bank, SPI_FRF_X1_MODE, count>>1);
+    }
     retval = loader_flash_crc(loader, crc_srcs, address, crc);
     return retval;
 }
@@ -839,13 +854,11 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
     int retval = ERROR_OK;
     uint32_t target_crc, image_crc;
 
-    // count = 0x110;
-
     retval = image_calculate_checksum(buffer, count, &image_crc);
     if(retval != ERROR_OK)
         return retval;
     
-    retval = dwcssi_checksum(bank, offset, count, &target_crc);
+    retval = dwcssi_checksum(bank, SPI_FRF_X4_MODE, offset, count, &target_crc);
 
     if(retval != ERROR_OK)
         return retval;

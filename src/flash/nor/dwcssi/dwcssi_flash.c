@@ -48,7 +48,7 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
         sectors[sector].is_protected = 0;
         // LOG_INFO("sector %x offset %x", sector, sectors[sector].offset);
     }
-    if(dwcssi_info->dev->size_in_bytes < 0x200000)
+    if(dwcssi_info->dev->size_in_bytes <= 0x200000)
     {
         dwcssi_info->addr_len = ADDR_L24;
     }
@@ -56,6 +56,8 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
     {
         dwcssi_info->addr_len = ADDR_L32;
     }
+
+    LOG_INFO("init addr len %d", dwcssi_info->addr_len << 2);
 
     bank->sectors = sectors;
     dwcssi_info->probed = true;
