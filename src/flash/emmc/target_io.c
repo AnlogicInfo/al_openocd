@@ -29,7 +29,7 @@ int target_set_code(int arch_type, struct target_emmc_loader *loader, struct tar
     struct target_code_srcs srcs;
     uint32_t code_size;
 
-    if(async == ASYNC_TRANS)
+    if(async == 1)
         srcs = async_srcs;
     else
         srcs = sync_srcs;
@@ -41,7 +41,7 @@ int target_set_code(int arch_type, struct target_emmc_loader *loader, struct tar
         init_reg_param(&loader->reg_params[1], "a1", loader->xlen, PARAM_OUT);
         init_reg_param(&loader->reg_params[2], "a2", loader->xlen, PARAM_OUT);
         init_reg_param(&loader->reg_params[3], "a3", loader->xlen, PARAM_OUT);
-        if(async == ASYNC_TRANS)
+        if(async == 1)
         {
             init_reg_param(&loader->reg_params[4], "a4", loader->xlen, PARAM_OUT);
         }
@@ -64,7 +64,7 @@ int target_set_code(int arch_type, struct target_emmc_loader *loader, struct tar
         init_reg_param(&loader->reg_params[1], "x1", loader->xlen, PARAM_OUT);
         init_reg_param(&loader->reg_params[2], "x2", loader->xlen, PARAM_OUT);
         init_reg_param(&loader->reg_params[3], "x3", loader->xlen, PARAM_OUT);
-        if(async == ASYNC_TRANS)
+        if(async == 1)
         {
             init_reg_param(&loader->reg_params[4], "x4", loader->xlen, PARAM_OUT);
         }

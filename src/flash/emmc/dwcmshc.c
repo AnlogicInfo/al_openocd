@@ -33,6 +33,12 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
     dwcmshc_emmc->loader.copy_area = NULL;
     dwcmshc_emmc->loader.ctrl_base = base;
 
+    dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller*) dwcmshc_emmc;
+    dwcmshc_emmc->flash_loader.set_params_priv = NULL;
+    dwcmshc_emmc->flash_loader.exec_target = emmc->target;
+    dwcmshc_emmc->flash_loader.copy_area = NULL;
+    dwcmshc_emmc->flash_loader.ctrl_base = base;
+
     return ERROR_OK;    
 }
 
@@ -97,6 +103,12 @@ static int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, u
     return ERROR_OK;
 }
 
+static int dwcmshc_emmc_verify(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr, uint32_t count)
+{
+
+    return ERROR_OK;
+}
+
 static int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout)
 {
     return ERROR_OK;
@@ -110,6 +122,7 @@ const struct emmc_flash_controller dwcmshc_emmc_controller = {
     .reset = dwcmshc_emmc_reset,
     .write_image = dwcmshc_emmc_write_image,
     .read_block_data = dwcmshc_emmc_read_block,
+    .verify = dwcmshc_emmc_verify,
     .emmc_ready = dwcmshc_emmc_ready,
     .init = dwcmshc_emmc_init,
 };

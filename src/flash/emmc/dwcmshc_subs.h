@@ -15,6 +15,8 @@
 
 #include "dwcmshc_regs.h"
 #include "target_io.h"
+#include <target/image.h>
+#include <flash/loader_io.h>
 
 
 typedef struct dwcmshc_cmd_pkt_t 
@@ -34,6 +36,7 @@ struct dwcmshc_emmc_controller {
 	dwcmshc_cmd_pkt_t  ctrl_cmd;
 	uint32_t           io_bank_pwr;
 	struct target_emmc_loader loader;
+	struct flash_loader flash_loader;
     const struct       emmc_device *dev;
 };
 

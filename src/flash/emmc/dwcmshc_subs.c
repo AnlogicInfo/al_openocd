@@ -5,9 +5,7 @@
  * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
  * Last Modified: 2022-11-08
  */
-
 #include "dwcmshc_subs.h"
-
 int dwcmshc_mio_init(struct emmc_device *emmc)
 {
     struct target *target = emmc->target;
@@ -680,27 +678,27 @@ int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ui
 }
 
 static const uint8_t riscv32_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_riscv_32.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_32.inc"
 };
 
 static const uint8_t riscv64_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_riscv_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_64.inc"
 };
 
 static const uint8_t aarch64_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_aarch_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_aarch_64.inc"
 };
 
 static const uint8_t riscv32_async_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_riscv_32.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_async_riscv_32.inc"
 };
 
 static const uint8_t riscv64_async_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_riscv_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_async_riscv_64.inc"
 };
 
 static const uint8_t aarch64_async_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc_async/build/emmc_aarch_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_async_aarch_64.inc"
 };
 
 static const struct target_code_srcs srcs = 
@@ -803,5 +801,62 @@ int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uin
     dwcmshc_emmc_cmd_set_block_length(emmc, 512);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
     retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, addr);
+    return retval;
+}
+
+static const uint8_t riscv32_crc_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_32.inc"
+};
+
+static const uint8_t riscv64_crc_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_64.inc"
+};
+
+static const uint8_t aarch64_crc_bin[] = {
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_aarch_64.inc"
+};
+
+static struct code_src crc_srcs[3] = 
+{
+    [RV64_SRC] = {riscv64_crc_bin, sizeof(riscv64_crc_bin)},
+    [RV32_SRC] = {riscv32_crc_bin, sizeof(riscv32_crc_bin)},
+    [AARCH64_SRC] = {aarch64_crc_bin, sizeof(aarch64_crc_bin)},
+};
+
+static int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc)
+{
+    int retval = ERROR_OK;
+    struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
+    struct flash_loader *loader = &driver_priv->flash_loader;
+
+    loader->work_mode = CRC_CHECK;
+    loader->block_size = driver_priv->dev->block_size;
+    loader->image_size = count;
+    loader->param_cnt = 4;
+    
+    retval = loader_flash_crc(loader, crc_srcs, addr, crc);
+    return retval;
+}
+
+
+int dwcmsch_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count)
+{
+    int retval = ERROR_OK;
+    uint32_t target_crc, image_crc;
+
+    retval = image_calculate_checksum(buffer, count, &image_crc);
+    if(retval != ERROR_OK)
+        return retval;
+
+    retval = dwcmshc_checksum(emmc, buffer, addr, count, &target_crc);
+    if(retval != ERROR_OK)
+        return retval;
+
+    if(~image_crc != ~target_crc)
+    {
+        LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
+        retval = ERROR_FAIL;
+    }
+
     return retval;
 }

@@ -46,8 +46,8 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
     bank->driver_priv = driver_priv;
 
     driver_priv->probed = false;
-    driver_priv->loader.dev_info = (struct dwcssi_flash_bank *) driver_priv;
     driver_priv->ctrl_base = base;
+    driver_priv->loader.dev_info = (struct dwcssi_flash_bank *) driver_priv;
     driver_priv->loader.set_params_priv = NULL;
     driver_priv->loader.exec_target = bank->target;
     driver_priv->loader.copy_area  = NULL;

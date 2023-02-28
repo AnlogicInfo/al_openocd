@@ -21,14 +21,23 @@ DST_DIR   = $(WORK_DIR)/build/$(ARCH)
 $(info # dst dir $(DST_DIR))
 $(shell mkdir -p $(DST_DIR))
 
-IMAGE_REL = build/emmc_$(ARCH)
+IMAGE_REL = build/emmc_$(MODE)_$(ARCH)
 IMAGE     = $(abspath $(IMAGE_REL))
 
 
-SRCS		 	+= $(WORK_DIR)/src/dwcmshc.c \
-				   $(WORK_DIR)/src/boot/$(ISA)/wrapper.S
+SRCS		 	+= $(WORK_DIR)/src/boot/$(ISA)/wrapper.S \
+				   $(WORK_DIR)/src/dwcmshc.c
 
-				
+ifeq ($(MODE),async)
+	SRCS += $(WORK_DIR)/src/dwcmshc_async.c
+else ifeq ($(MODE),sync)
+	SRCS += $(WORK_DIR)/src/dwcmshc_sync.c
+else ifeq ($(MODE),crc)
+	SRCS += $(WORK_DIR)/src/dwcmshc_crc.c
+else
+	$(info invalid mode input)
+endif
+
 OBJS 		   	= $(addprefix $(DST_DIR)/, $(addsuffix .o, $(basename $(SRCS))))
 
 $(info # OBJS $(OBJS))
@@ -40,7 +49,7 @@ ifeq ($(ISA),aarch)
 	CROSS_COMPILE := aarch64-none-elf-
 	COMMON_FLAGS  := -mabi=lp64
 else
-	CROSS_COMPILE := riscv-none-embed-
+	CROSS_COMPILE := riscv-nuclei-elf-
 	ifeq ($(PLATFORM),32)
 		COMMON_FLAGS  := -march=rv32e -mabi=ilp32e
 	else
@@ -60,7 +69,7 @@ READELF   = $(CROSS_COMPILE)readelf
 INC_PATH += $(WORK_DIR)/src/boot/$(ISA)
 INCFLAGS += $(addprefix -I, $(INC_PATH))
 
-CFLAGS   += $(COMMON_FLAGS) -nostdlib -fno-builtin  -nostartfiles -Wall -Werror  -Os -fPIC -Wunused-result -g $(INCFLAGS)
+CFLAGS   += $(COMMON_FLAGS) -nostdlib -fno-builtin  -nostartfiles -Wall  -Os -fPIC -Wunused-result -g $(INCFLAGS)
 ASFLAGS  += $(COMMON_FLAGS) -MMD $(INCFLAGS)
 
 $(info # Compiler $(CROSS_COMPILE))

@@ -13,8 +13,8 @@
 #include <target/riscv/riscv.h>
 #include <target/algorithm.h>
 
-#define SYNC_TRANS        0
-#define ASYNC_TRANS       1
+// #define SYNC_TRANS        0
+// #define ASYNC_TRANS       1
 
 enum target_emmc_op {
     TARGET_EMMC_NONE,

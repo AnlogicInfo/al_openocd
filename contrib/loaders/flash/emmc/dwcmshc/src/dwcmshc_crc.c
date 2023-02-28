@@ -1,4 +1,4 @@
-#include "dwcssi.h"
+#include "dwcmshc.h"
 
 static const unsigned int crc32_table[] = {
 	0x00000000, 0x04c11db7, 0x09823b6e, 0x0d4326d9,
@@ -67,38 +67,31 @@ static const unsigned int crc32_table[] = {
 	0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4
 };
 
-static uint8_t out_buf[256] = {0};
-
-int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uint32_t offset, uint32_t qread_cmd)
+static uint8_t out_buf[512] = {0};
+int emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, int offset)
 {
     uint32_t crc = 0xffffffff;
     int cur_count = 0, crc_count = 0;
     int i=0;
-    uint32_t page_offset = offset & (page_size - 1);
-
     while(count > 0)
     {
-        if(page_offset + count > page_size) // remain count > page size
-            cur_count = page_size - page_offset;
-        else 
+        if(count > block_size)
+            cur_count = block_size;
+        else
             cur_count = count;
         crc_count = cur_count;
         i = 0;
 
-        dwcssi_read_page(ctrl_base, out_buf, offset, cur_count, qread_cmd);
-
-        while(crc_count--)
+        emmc_read_block(ctrl_base, out_buf, offset, block_size); // read single blk
+        while(crc_count --)
         {
             crc = (crc << 8) ^ crc32_table[((crc >> 24) ^ out_buf[i]) & 255];
             i++;
         }
-		
-        page_offset = 0;
-        offset += cur_count;
+
         count -= cur_count;
+        offset += cur_count;
     }
-
     return crc;
+
 }
-
-

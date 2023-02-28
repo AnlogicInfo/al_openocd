@@ -37,31 +37,3 @@ void emmc_write_block(volatile uint32_t *ctrl_base, uint32_t offset, const uint3
     reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
 
 }
-
-void emmc_read_block(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t count)
-{
-    uint32_t i, int_val;
-    uint8_t done_flag;
-
-    reg_write((ctrl_base + ARGUMENT_R), offset);
-    reg_write((ctrl_base + XFER_CMD_R), RD_SINGLE_BLK);
-    while(1)
-    {
-        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
-        done_flag = (int_val >> INT_BUF_WR_READY) & 0x1;
-        if(done_flag && ((int_val >> 16) ==0))
-            break;
-    }
-    for(i=0; i < count; i++)
-        *(buffer + i) = reg_read(ctrl_base + BUF_DATA_R);
-
-    while(1)
-    {
-        int_val = reg_read(ctrl_base + NORMAL_ERROR_INT_R);
-        done_flag = (int_val >> INT_XFER_COMPLETE_OFFSET) & 0x1;
-        if(done_flag && ((int_val >> 16) ==0))
-            break;
-    }
-    reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
-}
-
