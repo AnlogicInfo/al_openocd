@@ -23,7 +23,7 @@ int emmc_fileio_start(struct command_invocation *cmd,
 	struct emmc_device *emmc, const char *filename, int filemode,
 	struct emmc_fileio_state *state)
 {
-	if (state->address % emmc->block_size) {
+	if (state->address % emmc->device->block_size) {
 		command_print(cmd, "only block-aligned addresses are supported");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
@@ -41,8 +41,8 @@ int emmc_fileio_start(struct command_invocation *cmd,
 		state->file_opened = true;
 	}
 
-    state->block_size = emmc->block_size;
-    state->block = malloc(emmc->block_size);
+    state->block_size = emmc->device->block_size;
+    state->block = malloc(emmc->device->block_size);
 
 	return ERROR_OK;
 }
@@ -103,7 +103,7 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 
 	if (need_size) {
 		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->size);
-		if (state->size % emmc->block_size) {
+		if (state->size % emmc->device->block_size) {
 			command_print(CMD, "only block-aligned sizes are supported");
 			return ERROR_COMMAND_SYNTAX_ERROR;
 		}

@@ -37,7 +37,7 @@ struct dwcmshc_emmc_controller {
 	uint32_t           io_bank_pwr;
 	struct target_emmc_loader loader;
 	struct flash_loader flash_loader;
-    const struct       emmc_device *dev;
+    // const struct       emmc_device *dev;
 };
 
 

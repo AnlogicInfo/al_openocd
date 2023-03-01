@@ -122,7 +122,7 @@ static int emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 	    if(emmc_flash_ids[i].prd_name == prd_name && (emmc_flash_ids[i].mfr_id == mrf_id))
 		{
             emmc->device = &emmc_flash_ids[i];
-			emmc->block_size = emmc_flash_ids[i].block_size;
+			emmc->device->block_size = emmc_flash_ids[i].block_size;
 	        break;
 		}
     }
@@ -194,6 +194,8 @@ int emmc_write_image(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr, 
 
 int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size)
 {
-	emmc->controller->verify_image(emmc, buffer, addr, size);
-	return ERROR_OK;
+	int retval;
+	retval = emmc->controller->verify_image(emmc, buffer, addr, size);
+	LOG_INFO("emmc verify retval %x", retval);
+	return retval;
 }

@@ -106,12 +106,13 @@ static int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, u
 static int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count)
 {
     int retval = ERROR_OK;
-    uint32_t target_crc, image_crc;
+    uint32_t target_crc = 0, image_crc;
 
     retval = image_calculate_checksum(buffer, count, &image_crc);
     if(retval != ERROR_OK)
         return retval;
 
+    LOG_INFO("image crc %x", image_crc);
     retval = dwcmshc_checksum(emmc, buffer, addr, count, &target_crc);
     if(retval != ERROR_OK)
         return retval;

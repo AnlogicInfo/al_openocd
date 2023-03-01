@@ -82,7 +82,7 @@ int emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, in
         crc_count = cur_count;
         i = 0;
 
-        emmc_read_block(ctrl_base, out_buf, offset, block_size); // read single blk
+        // emmc_read_block(ctrl_base, out_buf, offset, block_size); // read single blk
         while(crc_count --)
         {
             crc = (crc << 8) ^ crc32_table[((crc >> 24) ^ out_buf[i]) & 255];
