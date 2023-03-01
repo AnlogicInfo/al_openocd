@@ -27,6 +27,7 @@
 #define INT_BUF_WR_READY          (4)
 #define INT_BUF_RD_READY          (5)
 
+
 #define WR_SINGLE_BLK             (XFER_DIR_WRITE | XFER_BLOCK_COUNT_ENABLE | XFER_RESP_ERR_CHK_ENABLE | \
                                   CMD_RESP_TYPE_SEL_48 | CMD_DATA_PRESENT | CMD_CRC_CHECK_ENABLE | CMD_IDX_CHECK_ENABLE | \
                                   CMD_INDEX_24)
@@ -44,6 +45,6 @@ do { \
 
 uint32_t  emmc_wait_fifo(uint32_t *work_area_start);
 void emmc_write_block(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer);
-void emmc_read_block(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t count);
+void emmc_read_block(volatile uint32_t *ctrl_base, uint32_t *buffer, uint32_t offset, uint32_t count);
 
 #endif

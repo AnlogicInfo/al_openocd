@@ -343,9 +343,12 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t poll_flag)
     dwcmshc_emmc_wait_ctl(emmc);
 
     if(cmd_pkt->argu_en)
+    {
+        LOG_DEBUG("emmc cmd addr %llx argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
         target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
+    }
     target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, ((cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16));
-
+    LOG_DEBUG("emmc cmd addr %llx xfer %x", dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, ((cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16));
     status = dwcmshc_emmc_poll_int(emmc, poll_flag, TIMEOUT_1S);
     dwcmshc_emmc_get_resp(emmc);
     return status;
@@ -805,15 +808,15 @@ int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uin
 }
 
 static const uint8_t riscv32_crc_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_32.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_crc_riscv_32.inc"
 };
 
 static const uint8_t riscv64_crc_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_crc_riscv_64.inc"
 };
 
 static const uint8_t aarch64_crc_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_aarch_64.inc"
+#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_crc_aarch_64.inc"
 };
 
 static struct code_src crc_srcs[3] = 
@@ -829,19 +832,15 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t a
     struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
     struct flash_loader *loader = &driver_priv->flash_loader;
 
-    LOG_INFO("dwcmshc checksum");
+    dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+    dwcmshc_emmc_cmd_set_block_count(emmc, 1);
 
-    // loader->work_mode = CRC_CHECK;
+    loader->work_mode = CRC_CHECK;
     loader->block_size = emmc->device->block_size;
     loader->image_size = count;
     loader->param_cnt = 4;
-    if(0)
-    {
 
-        retval = loader_flash_crc(loader, crc_srcs, addr, crc);
-    }
-
-    LOG_INFO("dwcmshc checksum done");
+    retval = loader_flash_crc(loader, crc_srcs, addr, crc);
     return retval;
 }
 

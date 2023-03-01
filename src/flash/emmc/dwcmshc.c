@@ -112,7 +112,6 @@ static int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, 
     if(retval != ERROR_OK)
         return retval;
 
-    LOG_INFO("image crc %x", image_crc);
     retval = dwcmshc_checksum(emmc, buffer, addr, count, &target_crc);
     if(retval != ERROR_OK)
         return retval;
@@ -121,6 +120,11 @@ static int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, 
     {
         LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
         retval = ERROR_FAIL;
+    }
+    else
+    {
+        LOG_INFO("checksum %x verify succeeded ", image_crc);
+        retval = ERROR_OK;
     }
 
     return retval;

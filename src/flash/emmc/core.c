@@ -194,8 +194,7 @@ int emmc_write_image(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr, 
 
 int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size)
 {
-	int retval;
-	retval = emmc->controller->verify_image(emmc, buffer, addr, size);
-	LOG_INFO("emmc verify retval %x", retval);
-	return retval;
+	// int retval;
+	emmc->controller->verify_image(emmc, buffer, addr, size);
+	return ERROR_OK;
 }

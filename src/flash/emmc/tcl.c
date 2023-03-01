@@ -210,11 +210,10 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 	file_size = file.size;
 	emmc_fileio_read(&file);
 	retval = emmc_verify_image(emmc, file.block, file.address, file_size);
-	LOG_INFO("tcl verify %x", retval);
 	if (emmc_fileio_finish(&file) == ERROR_OK) {
-		command_print(CMD, "verified file %s in emmc flash %s "
+		command_print(CMD, "verified file %s "
 			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
-			CMD_ARGV[1], CMD_ARGV[0], file.address, duration_elapsed(&file.bench),
+			CMD_ARGV[0], file.address, duration_elapsed(&file.bench),
 			duration_kbps(&file.bench, file.size));
 	}
 
