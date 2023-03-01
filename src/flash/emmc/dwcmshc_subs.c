@@ -823,7 +823,7 @@ static struct code_src crc_srcs[3] =
     [AARCH64_SRC] = {aarch64_crc_bin, sizeof(aarch64_crc_bin)},
 };
 
-static int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc)
+int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc)
 {
     int retval = ERROR_OK;
     struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
@@ -839,24 +839,3 @@ static int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uin
 }
 
 
-int dwcmsch_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count)
-{
-    int retval = ERROR_OK;
-    uint32_t target_crc, image_crc;
-
-    retval = image_calculate_checksum(buffer, count, &image_crc);
-    if(retval != ERROR_OK)
-        return retval;
-
-    retval = dwcmshc_checksum(emmc, buffer, addr, count, &target_crc);
-    if(retval != ERROR_OK)
-        return retval;
-
-    if(~image_crc != ~target_crc)
-    {
-        LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
-        retval = ERROR_FAIL;
-    }
-
-    return retval;
-}

@@ -103,10 +103,26 @@ static int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, u
     return ERROR_OK;
 }
 
-static int dwcmshc_emmc_verify(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr, uint32_t count)
+static int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count)
 {
+    int retval = ERROR_OK;
+    uint32_t target_crc, image_crc;
 
-    return ERROR_OK;
+    retval = image_calculate_checksum(buffer, count, &image_crc);
+    if(retval != ERROR_OK)
+        return retval;
+
+    retval = dwcmshc_checksum(emmc, buffer, addr, count, &target_crc);
+    if(retval != ERROR_OK)
+        return retval;
+
+    if(~image_crc != ~target_crc)
+    {
+        LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
+        retval = ERROR_FAIL;
+    }
+
+    return retval;
 }
 
 static int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout)
@@ -122,7 +138,7 @@ const struct emmc_flash_controller dwcmshc_emmc_controller = {
     .reset = dwcmshc_emmc_reset,
     .write_image = dwcmshc_emmc_write_image,
     .read_block_data = dwcmshc_emmc_read_block,
-    .verify = dwcmshc_emmc_verify,
+    .verify_image = dwcmshc_emmc_verify,
     .emmc_ready = dwcmshc_emmc_ready,
     .init = dwcmshc_emmc_init,
 };
