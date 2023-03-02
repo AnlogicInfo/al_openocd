@@ -18,7 +18,8 @@ AARCH64_CFLAGS = -mabi=lp64 $(CFLAGS)
 
 all: riscv32_smc35x.inc riscv64_smc35x.inc aarch64_smc35x.inc \
 	 riscv32_smc35x_read.inc riscv64_smc35x_read.inc aarch64_smc35x_read.inc \
-	 riscv32_smc35x_async.inc riscv64_smc35x_async.inc aarch64_smc35x_async.inc aarch64_smc35x_async.lst
+	 riscv32_smc35x_async.inc riscv64_smc35x_async.inc aarch64_smc35x_async.inc \
+	 riscv32_smc35x_crc.inc riscv64_smc35x_crc.inc aarch64_smc35x_crc.inc
 # all: aarch64_smc35x_read.inc aarch64_smc35x_read.lst
 
 .PHONY: clean
