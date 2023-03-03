@@ -3,7 +3,6 @@ noinst_LTLIBRARIES += %D%/libocdflashemmc.la
 	%D%/core.c \
 	%D%/fileio.c \
 	%D%/tcl.c \
-	%D%/target_io.c \
 	$(EMMC_DRIVERS) \
 	%D%/driver.c \
 	$(EMMCHEADERS)
@@ -16,7 +15,6 @@ EMMCHEADERS = \
 	%D%/core.h \
 	%D%/driver.h \
 	%D%/fileio.h \
-	%D%/target_io.h \
 	%D%/imp.h \
     %D%/dwcmshc.h \
 	%D%/dwcmshc_subs.h \

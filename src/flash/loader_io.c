@@ -221,14 +221,18 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
             return ERROR_FAIL;
         loader->op = LOADER_WRITE;
         loader->buf_start = loader->copy_area->address + loader->code_area;
-        loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ; //update data size for async write
+        if(loader->work_mode == ASYNC_TRANS)
+            loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ; //update data size for async write
+        else
+            loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
+        LOG_DEBUG("init loader data_size %x", loader->data_size);
     }
 
     loader_set_params(loader, addr);
 
     if(loader->work_mode == SYNC_TRANS)
     {
-        LOG_INFO("trans %x bytes data to wa %x", loader->data_size, loader->buf_start);
+        LOG_DEBUG("trans %x bytes start data %x to wa %x", loader->data_size, *data, loader->buf_start);
         loader_data_to_wa(loader, data);
     }
 
@@ -249,7 +253,7 @@ static void loader_exit(struct flash_loader *loader, int restore)
 int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size)
 {
     int retval = ERROR_OK;
-    LOG_INFO("loader write sync");
+    LOG_INFO("loader write sync size %x", image_size);
     loader_init(loader, srcs);
 
     while(image_size > 0)

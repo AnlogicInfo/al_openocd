@@ -1034,6 +1034,7 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
 
     return retval;
 }
+
 static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
     int retval = ERROR_FAIL;

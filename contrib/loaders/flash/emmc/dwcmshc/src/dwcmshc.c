@@ -24,7 +24,7 @@ int emmc_poll_int(volatile uint32_t *ctrl_base, uint8_t flag_offset)
     }
     clear_reg = int_val |(1<<flag_offset);
     reg_write(ctrl_base + NORMAL_ERROR_INT_R, clear_reg);
-
+    return 0;
 }
 
 void emmc_write_block(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer)

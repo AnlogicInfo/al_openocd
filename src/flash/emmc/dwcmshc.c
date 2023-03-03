@@ -29,9 +29,6 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
     emmc->controller_priv = dwcmshc_emmc;
     dwcmshc_emmc->probed = false;
     dwcmshc_emmc->ctrl_base = base;
-    dwcmshc_emmc->loader.target = emmc->target;
-    dwcmshc_emmc->loader.copy_area = NULL;
-    dwcmshc_emmc->loader.ctrl_base = base;
 
     dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller*) dwcmshc_emmc;
     dwcmshc_emmc->flash_loader.set_params_priv = NULL;
@@ -82,16 +79,17 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 {
     return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
-static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, uint32_t addr, int size)
+static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
 
 {
     int retval = ERROR_OK;
 
-    retval = async_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
+    retval = dwcmshc_emmc_async_write_image(emmc, buffer, addr, size);
+
     if(retval != ERROR_OK)
     {
         LOG_ERROR("async write fail, try sync write");
-        retval = fast_dwcmshc_emmc_write_image(emmc, buffer, addr, size);
+        retval = dwcmshc_emmc_sync_write_image(emmc, buffer, addr, size);
     }
 
     return retval;

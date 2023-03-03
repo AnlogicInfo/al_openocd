@@ -77,7 +77,7 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 
 	file_size = s.size;
 	total_size = emmc_fileio_read(&s);
-	retval = emmc_write_image(emmc, (uint32_t*) s.block, s.address, total_size);
+	retval = emmc_write_image(emmc, s.block, s.address, total_size);
 
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "wrote file %s to EMMC flash %d up to "
@@ -85,7 +85,7 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 			CMD_ARGV[0], s.bank_num, s.address, duration_elapsed(&s.bench),
 			duration_kbps(&s.bench, file_size));
 	}
-	return ERROR_OK;
+	return retval;
 }
 
 COMMAND_HANDLER(handle_emmc_read_block_command)
@@ -155,6 +155,13 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 	file_size = file.size;
 	emmc_fileio_read(&file);
 	retval = emmc_verify_image(emmc, file.block, file.address, file_size);
+	if(retval != ERROR_OK)
+	{
+		command_print(CMD, "emmc verify file %s fail", CMD_ARGV[0]);
+		emmc_fileio_finish(&file);
+		return retval;
+	}
+	
 	if (emmc_fileio_finish(&file) == ERROR_OK) {
 		command_print(CMD, "verified file %s "
 			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",

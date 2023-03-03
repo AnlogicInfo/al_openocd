@@ -681,15 +681,15 @@ int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ui
     return ERROR_OK;
 }
 
-static const uint8_t riscv32_bin[] = {
+static const uint8_t riscv32_sync_bin[] = {
 #include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_32.inc"
 };
 
-static const uint8_t riscv64_bin[] = {
+static const uint8_t riscv64_sync_bin[] = {
 #include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_64.inc"
 };
 
-static const uint8_t aarch64_bin[] = {
+static const uint8_t aarch64_sync_bin[] = {
 #include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_aarch_64.inc"
 };
 
@@ -705,102 +705,60 @@ static const uint8_t aarch64_async_bin[] = {
 #include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_async_aarch_64.inc"
 };
 
-static const struct target_code_srcs srcs = 
+static struct code_src async_srcs[3] = 
 {
-    .riscv32_bin = riscv32_bin,
-    .riscv32_size = sizeof(riscv32_bin),
-    .riscv64_bin = riscv64_bin,
-    .riscv64_size = sizeof(riscv64_bin),
-    .aarch64_bin = aarch64_bin,
-    .aarch64_size = sizeof(aarch64_bin),
+    [RV64_SRC] = {riscv64_async_bin, sizeof(riscv64_async_bin)},
+    [RV32_SRC] = {riscv32_async_bin, sizeof(riscv32_async_bin)},
+    [AARCH64_SRC] = {aarch64_async_bin, sizeof(aarch64_async_bin)},
 };
 
-static const struct target_code_srcs async_srcs = 
+static struct code_src sync_srcs[3] = 
 {
-    .riscv32_bin = riscv32_async_bin,
-    .riscv32_size = sizeof(riscv32_async_bin),
-    .riscv64_bin = riscv64_async_bin,
-    .riscv64_size = sizeof(riscv64_async_bin),
-    .aarch64_bin = aarch64_async_bin,
-    .aarch64_size = sizeof(aarch64_async_bin),
+    [RV64_SRC] = {riscv64_sync_bin, sizeof(riscv64_sync_bin)},
+    [RV32_SRC] = {riscv32_sync_bin, sizeof(riscv32_sync_bin)},
+    [AARCH64_SRC] = {aarch64_sync_bin, sizeof(aarch64_sync_bin)},
 
 };
 
-static int dwcmshc_emmc_init_loader(struct emmc_device* emmc, struct reg_param* reg_params, int image_size , struct aarch64_algorithm* arm_info, struct riscv_algorithm* riscv_info, uint8_t async)
+
+int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, target_addr_t addr, int image_size)
 {
-    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-    struct target* target = emmc->target;
-    int arch_type;
-    int wa_size;
-
-    dwcmshc_emmc->loader.reg_params = reg_params;
-    dwcmshc_emmc->loader.block_size =emmc->device->block_size;
-    dwcmshc_emmc->loader.image_block_cnt = image_size/(dwcmshc_emmc->loader.block_size);
-
-    arch_type = target_set_arch_info(&dwcmshc_emmc->loader, arm_info, riscv_info);
-    target_set_code(arch_type, &dwcmshc_emmc->loader, srcs, async_srcs, async);
-
-    wa_size = target_get_working_area_avail(target);
-    dwcmshc_emmc->loader.data_size = wa_size - dwcmshc_emmc->loader.code_area;
-
-    return ERROR_OK;
-}
-
-int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
-{
-    struct target *trans_target;
-    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-    struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
-    struct aarch64_algorithm aarch64_info;
-    struct riscv_algorithm riscv_info;
-    struct reg_param reg_params[5];
+    struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv; 
+    struct flash_loader *loader = &driver_priv->flash_loader;
     int block_addr = addr/emmc->device->block_size;
-    int retval = ERROR_OK;
+    int retval;
+    loader->work_mode = ASYNC_TRANS;
+    loader->block_size = emmc->device->block_size;
+    loader->image_size = image_size;
+    loader->param_cnt = 6;
 
-    LOG_INFO("async write addr %llx size %x", addr, image_size);
-
-    dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, &riscv_info, ASYNC_TRANS);
-    trans_target = target_emmc_init_trans(loader->trans_name);
-    if(trans_target == NULL)
-        return ERROR_FAIL;
-
-    retval = target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, block_addr);
+    dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+    dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+    retval = loader_flash_write_async(loader, async_srcs, buffer, block_addr, image_size);
     return retval;
 }
 
-int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, target_addr_t addr, int image_size)
+int dwcmshc_emmc_sync_write_image(struct emmc_device* emmc, uint8_t *buffer, target_addr_t addr, int image_size)
 {
-    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-    struct target_emmc_loader* loader = &dwcmshc_emmc->loader;
-    struct aarch64_algorithm aarch64_info;
-    struct riscv_algorithm riscv_info;
-    struct reg_param reg_params[4];
-    int retval = ERROR_OK;
+    struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv; 
+    struct flash_loader *loader = &driver_priv->flash_loader;
+    int retval;
 
-    dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, &riscv_info, SYNC_TRANS);
-    while(image_size>0)
-    {
-        // set data
-        loader->data_size = MIN(loader->data_size, image_size);
-        // LOG_INFO("wr image total count %x start val %x addr " TARGET_ADDR_FMT, loader->data_size, *buffer, addr);
-        retval = target_emmc_write(loader, (uint8_t*)buffer, addr);
-        if(retval != ERROR_OK)
-            break;
-        addr += (loader->data_size)/(emmc->device->block_size);
-        buffer += (loader->data_size >> 2);
-        image_size -= loader->data_size;
-    }
+    loader->work_mode = SYNC_TRANS;
+    loader->block_size = emmc->device->block_size;
+    loader->image_size = image_size;
+    loader->param_cnt = 5;
 
-    destroy_reg_param(&loader->reg_params[0]);
-	destroy_reg_param(&loader->reg_params[1]);
-	destroy_reg_param(&loader->reg_params[2]);
-    destroy_reg_param(&loader->reg_params[3]);
+    dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+    dwcmshc_emmc_cmd_set_block_count(emmc, 1);
 
-    target_free_working_area_restore(emmc->target, dwcmshc_emmc->loader.copy_area, 1);
+    retval = loader_flash_write_sync(loader, sync_srcs, buffer, addr, image_size);
+
+    if(retval != ERROR_OK)
+        LOG_ERROR("dwcssi write sync error");
+
     return retval;
 }
-
-
 
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
@@ -836,6 +794,7 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t a
     int retval = ERROR_OK;
     struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
     struct flash_loader *loader = &driver_priv->flash_loader;
+    int block_addr = addr/emmc->device->block_size;
 
     dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
@@ -845,7 +804,7 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t a
     loader->image_size = count;
     loader->param_cnt = 4;
 
-    retval = loader_flash_crc(loader, crc_srcs, addr, crc);
+    retval = loader_flash_crc(loader, crc_srcs, block_addr, crc);
     return retval;
 }
 
