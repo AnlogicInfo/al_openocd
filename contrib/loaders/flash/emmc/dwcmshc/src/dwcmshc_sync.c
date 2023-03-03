@@ -1,13 +1,12 @@
 #include "dwcmshc.h"
 
-void emmc_dwcmshc(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer, int size_in_bytes)
+void emmc_dwcmshc(volatile uint32_t *ctrl_base, uint32_t block_addr, const uint32_t *buffer, int size_in_bytes)
 {
     uint32_t i, int_val;
     uint8_t done_flag;
-
     while(size_in_bytes > 0)
     {
-        reg_write((ctrl_base + ARGUMENT_R), offset);
+        reg_write((ctrl_base + ARGUMENT_R), block_addr);
         reg_write((ctrl_base + XFER_CMD_R), WR_SINGLE_BLK);
         // poll int val
         while(1)
@@ -33,7 +32,7 @@ void emmc_dwcmshc(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t 
         reg_write(ctrl_base + NORMAL_ERROR_INT_R, int_val | (1<<INT_XFER_COMPLETE_OFFSET));
 
         size_in_bytes -= BLOCK_SIZE;
-        offset += BLOCK_SIZE;
+        block_addr += 1;
         buffer += BLOCK_SIZE_IN_WORD;
     }
 

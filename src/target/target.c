@@ -1479,8 +1479,6 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 	}	
 	retval = target_async_algorithm_trans_data(trans_target, buffer, (int) count, block_size, fifo);
 
-	if(1)
-	{
 	int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
 			num_reg_params, reg_params,
 			exit_point,
@@ -1498,8 +1496,6 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 			LOG_ERROR("flash write algorithm aborted by target");
 			retval = ERROR_FLASH_OPERATION_FAILED;
 		}
-	}
-
 	}
 
 	free(fifo);

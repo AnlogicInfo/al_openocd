@@ -18,7 +18,6 @@ struct emmc_device
     struct emmc_flash_controller *controller;
     void *controller_priv;
     struct emmc_info *device;
-    int block_size;
 
     struct emmc_device *next;
 };

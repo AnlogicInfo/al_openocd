@@ -68,7 +68,7 @@ static const unsigned int crc32_table[] = {
 };
 
 static uint8_t out_buf[512] = {0};
-int emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, int offset)
+int emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, int block_addr)
 {
     uint32_t crc = 0xffffffff;
     int cur_count = 0, crc_count = 0;
@@ -82,7 +82,7 @@ int emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, in
         crc_count = cur_count;
         i = 0;
 
-        emmc_read_block(ctrl_base, (uint32_t *) out_buf, offset, block_size>>2); // read single blk
+        emmc_read_block(ctrl_base, (uint32_t *) out_buf, block_addr, block_size>>2); // read single blk
         while(crc_count --)
         {
             crc = (crc << 8) ^ crc32_table[((crc >> 24) ^ out_buf[i]) & 255];
@@ -90,7 +90,7 @@ int emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, in
         }
 
         count -= cur_count;
-        offset += cur_count;
+        block_addr += 1;
     }
     return crc;
 

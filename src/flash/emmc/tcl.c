@@ -33,7 +33,7 @@ COMMAND_HANDLER(handle_emmc_list_command)
 		if (p->device)
 			command_print(CMD, "#%i: %s blocksize: %i",
 				i, p->device->name,
-				p->block_size);
+				p->device->block_size);
 		else
 			command_print(CMD, "#%i: not probed", i);
 	}
@@ -141,61 +141,6 @@ fail:
 	return retval;
 }
 
-// COMMAND_HANDLER(handle_emmc_verify_command)
-// {
-// 	struct emmc_device *emmc = NULL;
-// 	struct emmc_fileio_state file;
-// 	int retval = CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
-// 			&file, &emmc, FILEIO_READ, false);
-// 	if (retval != ERROR_OK)
-// 		return retval;
-
-// 	struct emmc_fileio_state dev;
-// 	emmc_fileio_init(&dev);
-// 	dev.address = file.address;
-// 	dev.size = file.size;
-// 	retval = emmc_fileio_start(CMD, emmc, NULL, FILEIO_NONE, &dev);
-// 	if (retval != ERROR_OK)
-// 		return retval;
-
-// 	while (file.size > 0) {
-// 		retval = emmc_read_data_block(emmc, (uint32_t*)dev.block, dev.address);
-// 		if (retval != ERROR_OK) {
-// 			command_print(CMD, "reading emmc flash block failed");
-// 			emmc_fileio_cleanup(&dev);
-// 			emmc_fileio_cleanup(&file);
-// 			return retval;
-// 		}
-
-// 		int bytes_read = emmc_fileio_read_block(&file);
-// 		if (bytes_read <= 0) {
-// 			command_print(CMD, "error while reading file");
-// 			emmc_fileio_cleanup(&dev);
-// 			emmc_fileio_cleanup(&file);
-// 			return ERROR_FAIL;
-// 		}
-
-// 		if (dev.block && memcmp(dev.block, file.block, dev.block_size)) {
-// 			command_print(CMD, "emmc flash contents differ "
-// 				"at 0x%8.8" PRIx32 " get %x expect %x", dev.address, *(dev.block + dev.address), *(file.block + dev.address));
-// 			emmc_fileio_cleanup(&dev);
-// 			emmc_fileio_cleanup(&file);
-// 			return ERROR_FAIL;
-// 		}
-
-// 		file.size -= bytes_read;
-// 		dev.address += emmc->block_size;
-// 	}
-
-// 	if (emmc_fileio_finish(&file) == ERROR_OK) {
-// 		command_print(CMD, "verified file %s in emmc flash %s "
-// 			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
-// 			CMD_ARGV[1], CMD_ARGV[0], dev.address, duration_elapsed(&file.bench),
-// 			duration_kbps(&file.bench, dev.size));
-// 	}
-
-// 	return emmc_fileio_cleanup(&dev);
-// }
 
 COMMAND_HANDLER(handle_emmc_verify_command)
 {

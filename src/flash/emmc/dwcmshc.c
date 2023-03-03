@@ -82,8 +82,8 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 {
     return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
-
 static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, uint32_t addr, int size)
+
 {
     int retval = ERROR_OK;
 

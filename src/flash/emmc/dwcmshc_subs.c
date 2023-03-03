@@ -548,16 +548,17 @@ static int dwcmshc_emmc_cmd_set_block_length(struct emmc_device *emmc, uint32_t 
     return dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
 }
 
-static int dwcmshc_emmc_cmd_17_read_single_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
+static int dwcmshc_emmc_cmd_17_read_single_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t block_addr)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
     uint32_t rd_cnt = emmc->device->block_size >> 2;
     int retval = ERROR_OK;
 
+
     memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
     cmd_pkt->argu_en = ARGU_EN;
-    cmd_pkt->argument = addr;
+    cmd_pkt->argument = block_addr;
 
     cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
     cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
@@ -614,7 +615,7 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
 
     
     cmd_pkt->argu_en = ARGU_EN;
-    cmd_pkt->argument = addr;
+    cmd_pkt->argument = addr/emmc->device->block_size;
     cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_WRITE;
     cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
     cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
@@ -753,14 +754,17 @@ int async_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, t
     struct aarch64_algorithm aarch64_info;
     struct riscv_algorithm riscv_info;
     struct reg_param reg_params[5];
+    int block_addr = addr/emmc->device->block_size;
     int retval = ERROR_OK;
+
+    LOG_INFO("async write addr %llx size %x", addr, image_size);
 
     dwcmshc_emmc_init_loader(emmc, reg_params, image_size, &aarch64_info, &riscv_info, ASYNC_TRANS);
     trans_target = target_emmc_init_trans(loader->trans_name);
     if(trans_target == NULL)
         return ERROR_FAIL;
 
-    retval = target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, addr);
+    retval = target_emmc_write_async(trans_target, loader, (uint8_t*)buffer, block_addr);
     return retval;
 }
 
@@ -782,7 +786,7 @@ int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, ta
         retval = target_emmc_write(loader, (uint8_t*)buffer, addr);
         if(retval != ERROR_OK)
             break;
-        addr += loader->data_size;
+        addr += (loader->data_size)/(emmc->device->block_size);
         buffer += (loader->data_size >> 2);
         image_size -= loader->data_size;
     }
@@ -801,9 +805,10 @@ int fast_dwcmshc_emmc_write_image(struct emmc_device* emmc, uint32_t *buffer, ta
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
     int retval = ERROR_OK;
+    uint32_t block_addr = addr/emmc->device->block_size;
     dwcmshc_emmc_cmd_set_block_length(emmc, 512);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, addr);
+    retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, block_addr);
     return retval;
 }
 
