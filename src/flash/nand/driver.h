@@ -81,6 +81,10 @@ struct nand_flash_controller {
 
 	/** Check if the NAND device is ready for more instructions with timeout. */
 	int (*nand_ready)(struct nand_device *nand, int timeout);
+
+	/** Verify data in nand flash. */
+	int (*verify)(struct nand_device *nand, uint32_t page, uint8_t *data, uint32_t data_size,
+			uint8_t *oob, uint32_t oob_size);
 };
 
 #define NAND_DEVICE_COMMAND_HANDLER(name) static __NAND_DEVICE_COMMAND(name)

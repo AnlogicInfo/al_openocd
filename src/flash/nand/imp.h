@@ -31,6 +31,10 @@ int nand_read_page(struct nand_device *nand, uint32_t page,
 		uint8_t *data, uint32_t data_size,
 		uint8_t *oob, uint32_t oob_size);
 
+int nand_verify_data(struct nand_device *nand, uint32_t page,
+		uint8_t *data, uint32_t data_size,
+		uint8_t *oob, uint32_t oob_size);
+
 int nand_probe(struct nand_device *nand);
 int nand_erase(struct nand_device *nand, int first_block, int last_block);
 int nand_build_bbt(struct nand_device *nand, int first, int last);

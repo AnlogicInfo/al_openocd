@@ -711,6 +711,21 @@ int nand_read_page(struct nand_device *nand, uint32_t page,
 		return nand->controller->read_page(nand, page, data, data_size, oob, oob_size);
 }
 
+int nand_verify_data(struct nand_device *nand, uint32_t page,
+	uint8_t *data, uint32_t data_size,
+	uint8_t *oob, uint32_t oob_size)
+{
+	if (!nand->device)
+		return ERROR_NAND_DEVICE_NOT_PROBED;
+
+	if (nand->controller->verify)
+		return nand->controller->verify(nand, page, data, data_size, oob, oob_size);
+	else {
+		LOG_ERROR("verify failed, nand starting at page 0x%8.8" PRIx32, page);
+		return ERROR_FAIL;
+	}
+}
+
 int nand_page_command(struct nand_device *nand, uint32_t page,
 	uint8_t cmd, bool oob_only)
 {
