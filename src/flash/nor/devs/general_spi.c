@@ -1,4 +1,4 @@
-#include <flash\nor\dwcssi\dwcssi.h>
+#include <flash/nor/dwcssi/dwcssi.h>
 
 #define      SPI_RD_SR_BYTE0       0x05
 #define      SPI_RD_SR_BYTE1       0x35

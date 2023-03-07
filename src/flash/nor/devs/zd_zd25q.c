@@ -1,4 +1,4 @@
-#include <flash\nor\dwcssi\dwcssi.h>
+#include <flash/nor/dwcssi/dwcssi.h>
 #define ZETTA_CMD_WRITE_REGISTER               0x01
 #define ZETTA_CMD_WRITE_REGISTER_BYTE1         0x31
 

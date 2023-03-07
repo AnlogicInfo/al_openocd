@@ -1,4 +1,4 @@
-#include <flash\nor\dwcssi\dwcssi.h>
+#include <flash/nor/dwcssi/dwcssi.h>
 #define GD_CMD_READ_STATUS_BYTE1      0x35
 #define GD_CMD_WRITE_STATUS_BYTE1     0x31
 
