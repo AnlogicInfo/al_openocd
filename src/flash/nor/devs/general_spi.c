@@ -50,12 +50,13 @@ int general_spi_reset(struct flash_bank *bank, uint8_t cmd_mode)
     return ERROR_OK;
 }
 
-int general_spi_err_chk(struct flash_bank* bank)
+int general_spi_err_chk(struct flash_bank *bank)
 {
     return ERROR_OK;
 }
 
-int general_spi_quad_en(struct flash_bank* bank)
+
+int general_spi_quad_en(struct flash_bank *bank)
 {
     uint32_t flash_cr = 0;
     uint8_t sr_wr_seq[2] = {SPI_WR_SR_BYTE1, 0};

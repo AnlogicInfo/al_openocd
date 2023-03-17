@@ -20,6 +20,7 @@ int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uin
             cur_count = page_size;
 
         retval = dwcssi_write_buffer(ctrl_base, rp, offset, cur_count, qprog_cmd, spictrl);
+        // retval = dwcssi_write_buffer_x1(ctrl_base, rp, offset, cur_count, 0x02);
 
         // page_offset = 0;
         rp += cur_count;

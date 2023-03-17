@@ -10,38 +10,52 @@
 
 #define ZETTA_EP_FAIL(x)                   ((x>>2) & 0x1)
 
-// int zetta_zd25q_err_chk(struct flash_bank *bank)
-// {
-//     uint32_t sr;
-
-//     dwcssi_rd_flash_reg(bank, &sr, ZETTA_CMD_READ_STATUS_BYTE1, 1);
-//     if(ZETTA_EP_FAIL(sr))
-//         return ERROR_FAIL;
-//     else
-//         return ERROR_OK;
-// }
-
 int zetta_zd25q_quad_en(struct flash_bank *bank)
 {
     uint32_t sr_byte1 = 0;
-    uint8_t quad_en_seq[2] = {ZETTA_CMD_WRITE_REGISTER_BYTE1, 0};
+    uint8_t quad_en_seq[3] = {ZETTA_CMD_WRITE_REGISTER, 0, 0};
+    uint8_t quad_en;
 
     dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
     
-    quad_en_seq[1] = sr_byte1 | 0x2;
-    dwcssi_wr_flash_reg(bank, quad_en_seq, 2, STANDARD_SPI_MODE);
+    quad_en_seq[2] = sr_byte1 | 0x2;
+    dwcssi_wr_flash_reg(bank, quad_en_seq, 3, STANDARD_SPI_MODE);
+
+    dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
+    quad_en = (sr_byte1>>1) & 0x1;
+    if(quad_en != 1)
+    {
+        LOG_ERROR("zd quad en failed sr %x", sr_byte1);
+        return ERROR_FAIL;
+    }
+
     return ERROR_OK;
 }
 
 int zetta_zd25q_quad_dis(struct flash_bank *bank)
 {
     uint32_t sr_byte1 = 0;
-    uint8_t quad_dis_seq[2] = {ZETTA_CMD_WRITE_REGISTER_BYTE1, 0};
+    uint8_t quad_dis_seq[3] = {ZETTA_CMD_WRITE_REGISTER, 0, 0};
+    uint8_t quad_en;
+
+    LOG_INFO("zd quad dis");
 
     dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE1, 1);
 
-    quad_dis_seq[1] = sr_byte1 & 0xFD;
-    dwcssi_wr_flash_reg(bank, quad_dis_seq, 2, STANDARD_SPI_MODE);
+    quad_dis_seq[2] = sr_byte1 & 0xFD;
+    dwcssi_wr_flash_reg(bank, quad_dis_seq, 3, STANDARD_SPI_MODE);
+
+    dwcssi_rd_flash_reg(bank, &sr_byte1, ZETTA_CMD_READ_STATUS_BYTE0, 2);
+
+    LOG_INFO("sr byte0 %x byte1 %x", sr_byte1>>0x8, sr_byte1 & 0xFF);
+
+    quad_en = (sr_byte1>>1) & 0x1;
+    if(quad_en == 1)
+    {
+        LOG_ERROR("zd quad dis failed wr %x reset sr %x", quad_dis_seq[2], sr_byte1);
+        return ERROR_FAIL;
+    }
+
     return ERROR_OK;
 }
 
@@ -53,6 +67,6 @@ const flash_ops_t zetta_zd25q_ops = {
     .wait_cycle = 8,
 
     .quad_rd_config = general_spi_quad_rd_config,
-    .quad_en   = general_spi_quad_en,
-    .quad_dis  = general_spi_quad_dis
+    .quad_en   = zetta_zd25q_quad_en,
+    .quad_dis  = zetta_zd25q_quad_dis
 };
