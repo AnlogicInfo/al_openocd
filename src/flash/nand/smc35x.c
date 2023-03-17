@@ -829,6 +829,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 		
 		for (index = 0; index < oob_size; ++index, ++oob) {
 			target_read_u8(target, smc35x_info->data_phase_addr, oob);
+			if (*oob != 0xff)	*oob = 0xff;
 		}
 
 		return ERROR_OK;
