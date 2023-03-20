@@ -57,7 +57,7 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
         dwcssi_info->addr_len = ADDR_L32;
     }
 
-    LOG_INFO("init addr len %d", dwcssi_info->addr_len << 2);
+    // LOG_INFO("init addr len %d", dwcssi_info->addr_len << 2);
 
     bank->sectors = sectors;
     dwcssi_info->probed = true;

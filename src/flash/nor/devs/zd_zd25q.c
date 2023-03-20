@@ -17,13 +17,13 @@ int zetta_zd25q_quad_en(struct flash_bank *bank)
     uint8_t quad_en_seq[3] = {ZETTA_CMD_WRITE_REGISTER, 0, 0};
     uint8_t quad_en;
 
-    LOG_INFO("zd quad en");
     dwcssi_rd_flash_reg(bank,sr, ZETTA_CMD_READ_STATUS_BYTE1, 1);
-    
     quad_en_seq[2] = sr[0] | 0x2;
     dwcssi_wr_flash_reg(bank, quad_en_seq, 3, STANDARD_SPI_MODE);
 
     dwcssi_rd_flash_reg(bank,sr, ZETTA_CMD_READ_STATUS_BYTE1, 1);
+    // LOG_INFO("zd quad en sr %x", sr[0]);
+
     quad_en = (sr[0]>>1) & 0x1;
     if(quad_en != 1)
     {
@@ -40,19 +40,19 @@ int zetta_zd25q_quad_dis(struct flash_bank *bank)
     uint8_t quad_dis_seq[3] = {ZETTA_CMD_WRITE_REGISTER, 0, 0};
     uint8_t quad_en;
 
-    LOG_INFO("zd quad dis");
+    // LOG_INFO("zd quad dis");
 
-    dwcssi_rd_flash_reg(bank, sr, ZETTA_CMD_READ_STATUS_BYTE0, 2);
-    LOG_INFO("before sr byte0 %x byte1 %x", sr[0], sr[1]);
-    // quad_dis_seq[2] = sr[1] & 0xFD;
+    dwcssi_rd_flash_reg(bank,sr, ZETTA_CMD_READ_STATUS_BYTE1, 1);
+    // LOG_INFO("before sr byte0 %x", sr[0]);
+    quad_dis_seq[2] = sr[0] & 0xFD;
     dwcssi_wr_flash_reg(bank, quad_dis_seq, 2, STANDARD_SPI_MODE);
-    dwcssi_rd_flash_reg(bank, sr, ZETTA_CMD_READ_STATUS_BYTE0, 2);
-    LOG_INFO("after sr byte0 %x byte1 %x", sr[0], sr[1]);
+    dwcssi_rd_flash_reg(bank,sr, ZETTA_CMD_READ_STATUS_BYTE1, 1);
+    // LOG_INFO("after sr byte0 %x", sr[0]);
 
-    quad_en = (sr[1]>>1) & 0x1;
+    quad_en = (sr[0]>>1) & 0x1;
     if(quad_en == 1)
     {
-        LOG_ERROR("zd quad dis failed wr %x reset sr %x", quad_dis_seq[1], sr[1]);
+        LOG_ERROR("zd quad dis failed wr %x reset sr %x", quad_dis_seq[1], sr[0]);
         return ERROR_FAIL;
     }
 

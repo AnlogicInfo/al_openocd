@@ -596,7 +596,7 @@ static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
     dwcssi_config_tx(bank, frf, 0, 0);
     dwcssi_tx(bank, SPIFLASH_WRITE_ENABLE);
     retval =  dwcssi_wait_flash_idle(bank, 100, &sr);
-    LOG_INFO("wr en status %x", sr);
+    // LOG_INFO("wr en status %x", sr);
     return retval;
 }
 
