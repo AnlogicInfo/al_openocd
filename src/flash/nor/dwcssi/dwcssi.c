@@ -560,10 +560,10 @@ int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
 {
     struct dwcssi_trans_config trans_config;
     int i;
-    uint8_t sr;
+    // uint8_t sr;
     trans_config.tmod = TX_ONLY;
-    trans_config.tx_start_lv = len;
-    // trans_config.tx_start_lv = len - 1;
+    trans_config.tx_start_lv = len-1;
+    // trans_config.tx_start_lv = len;
     trans_config.rx_ip_lv = 0;
     trans_config.trans_type = TRANS_TYPE_TT0;
     trans_config.stretch_en = DISABLE;
@@ -581,11 +581,11 @@ int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
     dwcssi_config_trans(bank, &trans_config);
     for(i=0; i<len; i++)
     {
-        LOG_INFO("tx data %x", *(cmd+i));
+        // LOG_INFO("tx data %x", *(cmd+i));
         dwcssi_tx(bank, *(cmd+i));
     }
-    // dwcssi_txwm_wait(bank);
-    dwcssi_wait_flash_idle(bank, 100, &sr);
+    dwcssi_txwm_wait(bank);
+    // dwcssi_wait_flash_idle(bank, 100, &sr);
     return ERROR_OK;
 }
 
@@ -608,7 +608,7 @@ static int dwcssi_unset_protect(struct flash_bank *bank)
 }
 
 
-int dwcssi_rd_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, uint32_t len)
+int dwcssi_rd_flash_reg(struct flash_bank *bank, uint8_t* rd_val, uint8_t cmd, uint32_t len)
 {
     // LOG_INFO("dwcssi read flash reg");
     int64_t endtime;
@@ -624,7 +624,8 @@ int dwcssi_rd_flash_reg(struct flash_bank *bank, uint32_t* rd_val, uint8_t cmd, 
     {
         if(dwcssi_rx(bank, &rx) == ERROR_OK)
         {
-            *rd_val |= rx << (8 * i);
+            // *rd_val |= rx << (8 * i);
+            *(rd_val+i) = rx;
             i = i + 1;
         }
     }
@@ -637,6 +638,15 @@ int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
     uint8_t sr;
     dwcssi_flash_tx_cmd(bank, &wr_en, 1, cmd_mode);
     dwcssi_flash_tx_cmd(bank, cmd, len, cmd_mode);
+
+    dwcssi_disable(bank);
+    dwcssi_config_SER(bank,0);
+    dwcssi_enable(bank);
+
+    dwcssi_disable(bank);
+    dwcssi_config_SER(bank,1);
+    dwcssi_enable(bank);
+
     return dwcssi_wait_flash_idle(bank, 1000, &sr);
 }
 
@@ -1153,7 +1163,8 @@ int driver_priv_init(struct flash_bank* bank, struct dwcssi_flash_bank *driver_p
 static int dwcssi_read_id_reset(struct flash_bank * bank, int (*reset)(struct flash_bank*, uint8_t cmd_mode), uint8_t cmd_mode)
 {
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    uint32_t id = 0;
+    // uint32_t id = 0;
+    uint8_t id[4] = {0};
     
     if(reset != NULL)
         reset(bank, cmd_mode);
@@ -1163,8 +1174,8 @@ static int dwcssi_read_id_reset(struct flash_bank * bank, int (*reset)(struct fl
             return ERROR_FAIL;
     }
 
-    dwcssi_rd_flash_reg(bank, &id, SPIFLASH_READ_ID, 3);
-    return flash_id_parse(driver_priv, id);
+    dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
+    return flash_id_parse(driver_priv, (uint32_t *)id);
 }
 
 static int dwcssi_read_id(struct flash_bank *bank)
@@ -1181,7 +1192,7 @@ static int dwcssi_read_id(struct flash_bank *bank)
 
     if(0) // qpi mode exit
     {
-    uint32_t sr_byte1 = 0;
+    uint8_t sr_byte1 = 0;
     uint8_t qpi_seq[2] = {0x31, 0}, qpi_enable = 0x38;    
     dwcssi_rd_flash_reg(bank, &sr_byte1, 0x35, 1);
     LOG_INFO("sr_byte1 %x", sr_byte1);

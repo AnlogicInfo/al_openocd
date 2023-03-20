@@ -1,15 +1,15 @@
 #include "dwcssi.h"
 #include "dwcssi_flash.h"
 
-int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t id)
+int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t* id)
 {
     dwcssi_info->dev = NULL;
 
     dwcssi_info->dev = NULL;
     for(const struct flash_device *p = flash_devices; p->name; p++)
     {
-        if(p->device_id == id) {
-            LOG_INFO("flash finded id %x name %s", id, p->name);
+        if(p->device_id == *id) {
+            LOG_INFO("flash finded id %x name %s", *id, p->name);
             dwcssi_info->dev = p;
             dwcssi_info->probed = true;
             break;
@@ -18,7 +18,7 @@ int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t id)
 
     if(!dwcssi_info->dev)
     {
-        LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", id);
+        LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", *id);
         return ERROR_FAIL;
     }
 
@@ -65,7 +65,7 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
 }
 
 
-int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t id)
+int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t *id)
 {
 
     int retval;

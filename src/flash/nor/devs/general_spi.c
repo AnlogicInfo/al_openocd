@@ -58,7 +58,7 @@ int general_spi_err_chk(struct flash_bank *bank)
 
 int general_spi_quad_en(struct flash_bank *bank)
 {
-    uint32_t flash_cr = 0;
+    uint8_t flash_cr = 0;
     uint8_t sr_wr_seq[2] = {SPI_WR_SR_BYTE1, 0};
     dwcssi_rd_flash_reg(bank, &flash_cr, SPI_RD_SR_BYTE1, 1);
     sr_wr_seq[1] = flash_cr | 0x2;
@@ -69,12 +69,13 @@ int general_spi_quad_en(struct flash_bank *bank)
 
 int general_spi_quad_dis(struct flash_bank* bank)
 {
-    uint32_t flash_cr = 0;
+    uint8_t flash_cr = 0;
     uint8_t sr_wr_seq[2] = {SPI_WR_SR_BYTE1, 0};
     dwcssi_rd_flash_reg(bank, &flash_cr, SPI_RD_SR_BYTE1, 1);
     sr_wr_seq[1] =  flash_cr & (0x3C);
     dwcssi_wr_flash_reg(bank, sr_wr_seq, 2, STANDARD_SPI_MODE);
-
+    dwcssi_rd_flash_reg(bank, &flash_cr, SPI_RD_SR_BYTE1, 1);
+    LOG_INFO("general quad dis sr%x", flash_cr);
     return ERROR_OK;
 }
 

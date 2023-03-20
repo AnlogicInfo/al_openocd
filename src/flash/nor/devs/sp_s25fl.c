@@ -76,7 +76,7 @@ int sp_s25fl_err_chk(struct flash_bank* bank)
 
 int sp_s25fl_quad_en(struct flash_bank* bank)
 {
-    uint32_t flash_cr = 0, quad_en;
+    uint8_t flash_cr = 0, quad_en;
     uint8_t config_reg[3] = {0};
     dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);
     quad_en = (flash_cr >> 0x1) & 0x1;
@@ -97,7 +97,7 @@ int sp_s25fl_quad_en(struct flash_bank* bank)
 
 int sp_s25fl_quad_dis(struct flash_bank* bank)
 {
-    uint32_t flash_cr, quad_en;
+    uint8_t flash_cr, quad_en;
     uint8_t config_reg[3] = {0};
 
     dwcssi_rd_flash_reg(bank, &flash_cr, FLASH_RD_CONFIG_REG_CMD, 1);

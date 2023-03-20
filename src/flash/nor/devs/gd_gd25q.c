@@ -12,7 +12,7 @@
 
 int gd_gd25q_quad_en(struct flash_bank *bank)
 {
-    uint32_t sr_byte1 = 0;
+    uint8_t sr_byte1 = 0;
     uint8_t quad_en_seq[2] = {GD_CMD_WRITE_STATUS_BYTE1, 0};
 
     dwcssi_rd_flash_reg(bank, &sr_byte1, GD_CMD_READ_STATUS_BYTE1, 1);
@@ -24,7 +24,7 @@ int gd_gd25q_quad_en(struct flash_bank *bank)
 
 int gd_gd25q_quad_dis(struct flash_bank *bank)
 {
-    uint32_t sr_byte1 = 0;
+    uint8_t sr_byte1 = 0;
     uint8_t quad_dis_seq[2] = {GD_CMD_WRITE_STATUS_BYTE1, 0};
 
     dwcssi_rd_flash_reg(bank, &sr_byte1, GD_CMD_READ_STATUS_BYTE1, 1);
