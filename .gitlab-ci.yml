@@ -25,7 +25,6 @@ test-job1:
 test-job2:
   stage: test
   script:
-    - 
     - sleep 20
 
 deploy-prod:
