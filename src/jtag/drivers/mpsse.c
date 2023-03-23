@@ -19,7 +19,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-
+#include <stdint.h>
 #include "mpsse.h"
 #include "helper/log.h"
 #include "helper/replacements.h"
@@ -353,7 +353,7 @@ libusb_abort:
 	// try FTD2XX
 
 	LOG_DEBUG("open_matching_device() FTD2xx init start");
-	FT_STATUS ft_status;
+	FT_STATUS ft_status = FT_OK;
 	DWORD ft_cnt;
 	ft_status = FT_CreateDeviceInfoList(&ft_cnt);
 	if (ft_status != FT_OK) {
@@ -366,7 +366,7 @@ libusb_abort:
 	// libusb descriptor is "USB <-> JTAG-DEBUGGER"
 	// so the suffix is mapped to libusb channels for compatibility
 	char product_with_suffix[256];
-	if (product && ctx->interface >= FTD2XX_CHANNEL_MIN && ctx->interface <= FTD2XX_CHANNEL_MAX) {
+	if (product && ctx->interface <= FTD2XX_CHANNEL_MAX) {// ctx->interface > FTD2XX_CHANNEL_MIN && 
 		snprintf(product_with_suffix, sizeof(product_with_suffix), "%s %s", product, ftd2xx_channel_names[ctx->interface]);
 	} else {
 		snprintf(product_with_suffix, sizeof(product_with_suffix), "%s", product);
@@ -379,11 +379,11 @@ libusb_abort:
 	if (ft_cnt > 0) {
 		ft_status = FT_GetDeviceInfoList(devInfo, &ft_cnt);
 		if (ft_status == FT_OK) {
-			for (int i = 0; i < ft_cnt; i++) {
+			for (DWORD i = 0; i < ft_cnt; i++) {
 				DWORD device_vid = devInfo[i].ID >> 16;   // higher 16 bits
 				DWORD device_pid = devInfo[i].ID & 65535; // lower 16 bits
 
-				LOG_DEBUG("FTD2xx Device #%d:", i);
+				LOG_DEBUG("FTD2xx Device #%d:", (int)i);
 				LOG_DEBUG(" Flags=0x%lx", devInfo[i].Flags);
 				LOG_DEBUG(" Type=0x%lx", devInfo[i].Type);
 				LOG_DEBUG(" ID=0x%lx (VID=0x%04lx, PID=0x%04lx)", devInfo[i].ID, device_vid, device_pid);
@@ -399,7 +399,7 @@ libusb_abort:
 
 				if (product) {
 					if (!strcmp(devInfo[i].Description, product)) {                         // whole string match -- for FT232H with only one channel
-						ft_matched_device_description = product;
+						ft_matched_device_description = (char *)product;
 					}
 					else if (!strcmp(devInfo[i].Description, product_with_suffix)) {        // for FT2232H, etc. with multiple channels
 						ft_matched_device_description = product_with_suffix;
@@ -442,7 +442,7 @@ libusb_abort:
 		ctx->type = TYPE_FT232H;
 		break;
 	default:
-		LOG_ERROR("unsupported FTDI chip type (D2xx): 0x%04x", devInfo[ft_matched_device_id].Type);
+		LOG_ERROR("unsupported FTDI chip type (D2xx): 0x%04x", (unsigned int) devInfo[ft_matched_device_id].Type);
 		goto error;
 	}
 
@@ -664,7 +664,7 @@ void mpsse_purge(struct mpsse_ctx *ctx)
 	BACKEND_DIVERGENCE_FTD2XX
 	FT_STATUS ft_status = FT_Purge(ctx->usb_ft_handle, FT_PURGE_TX | FT_PURGE_RX);
 	if (ft_status != FT_OK) {
-		LOG_ERROR("unable to purge ftdi tx&rx buffers: %ul", ft_status);
+		LOG_ERROR("unable to purge ftdi tx&rx buffers: %lu", (unsigned long int)ft_status);
 		return;
 	}
 #endif // BUILD_BACKEND_FTD2XX
@@ -1147,12 +1147,12 @@ int mpsse_flush(struct mpsse_ctx *ctx)
 		retval = ERROR_FAIL;
 	} else if (write_bytes_done < ctx->write_count) {
 		LOG_ERROR("ftdi device did not accept all data: %d, tried %d",
-			write_bytes_done,
+			(int) write_bytes_done,
 			ctx->write_count);
 		retval = ERROR_FAIL;
 	} else if (read_bytes_done < ctx->read_count) {
 		LOG_ERROR("ftdi device did not return all data: %d, expected %d",
-			read_bytes_done,
+			(int)read_bytes_done,
 			ctx->read_count);
 		retval = ERROR_FAIL;
 	} else if (ctx->read_count) {

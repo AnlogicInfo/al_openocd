@@ -99,7 +99,7 @@ struct VJTAGParams
 	int m_width;
 };
 */
-
+/*
 static unsigned char guess_addr_width(unsigned char number_of_nodes)
 {
 	unsigned char width = 0;
@@ -112,6 +112,7 @@ static unsigned char guess_addr_width(unsigned char number_of_nodes)
 
 	return width;
 }
+*/
 struct BusInfo{
 	uint32_t flushInstructionsSize;
 	uint32_t *flushInstructions;
