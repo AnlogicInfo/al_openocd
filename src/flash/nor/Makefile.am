@@ -12,7 +12,8 @@ NOR_DEVS = \
 	%D%/devs/sp_s25fl.c \
 	%D%/devs/zd_zd25q.c \
 	%D%/devs/gd_gd25q.c \
-	%D%/devs/gd_gd25b512.c
+	%D%/devs/gd_gd25b512.c \
+	%D%/devs/issi.c
 
 NOR_DRIVERS = \
 	%D%/aduc702x.c \

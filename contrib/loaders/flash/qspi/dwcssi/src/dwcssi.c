@@ -470,3 +470,23 @@ int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t off
     dwcssi_rx_buf(ctrl_base, buffer, len);
     return ERROR_OK;
 }
+
+int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint8_t rd_cmd, uint8_t addr_size)
+{
+    uint8_t offset_shift, addr_byte;
+    uint i;
+    dwcssi_disable(ctrl_base);
+    dwcssi_config_CTRLR1(ctrl_base, len);
+    dwcssi_enable(ctrl_base);
+    dwcssi_tx(ctrl_base, rd_cmd);
+    for(i = (addr_size-1); i >= 0; i--)
+    {
+        offset_shift = i<<3;
+        addr_byte = (offset >> offset_shift) & 0xff;
+        dwcssi_tx(ctrl_base, addr_byte);
+    }
+    dwcssi_tx_empty(ctrl_base);
+    dwcssi_rx_buf(ctrl_base, buffer, len);
+    return ERROR_OK;
+}
+

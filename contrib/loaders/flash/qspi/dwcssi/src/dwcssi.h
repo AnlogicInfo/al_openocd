@@ -20,4 +20,5 @@ int dwcssi_tx_buf_no_wait(volatile uint32_t *ctrl_base, const uint8_t* in_buf, u
 int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offest, uint32_t len, uint32_t flash_info, uint32_t spictrl);
 int dwcssi_write_buffer_x1(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info);
 int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t qread_cmd);
+int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint8_t rd_cmd, uint8_t addr_size);
 #endif

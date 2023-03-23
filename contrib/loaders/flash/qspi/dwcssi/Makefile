@@ -25,12 +25,14 @@ IMAGE_REL = build/flash_$(MODE)_$(ARCH)
 IMAGE     = $(abspath $(IMAGE_REL))
 SRCS     +=  $(WORK_DIR)/src/boot/$(ISA)/wrapper.S \
 			 $(WORK_DIR)/src/dwcssi.c
-ifeq ($(MODE),async)
-	SRCS += $(WORK_DIR)/src/dwcssi_async.c
-else ifeq ($(MODE),sync)
-	SRCS += $(WORK_DIR)/src/dwcssi_sync.c
-else ifeq ($(MODE),crc)
-	SRCS += $(WORK_DIR)/src/dwcssi_crc.c
+ifeq ($(MODE),async_x1)
+	SRCS += $(WORK_DIR)/src/dwcssi_async_x1.c
+else ifeq ($(MODE),async_x4)
+	SRCS += $(WORK_DIR)/src/dwcssi_async_x4.c
+else ifeq ($(MODE),crc_x1)
+	SRCS += $(WORK_DIR)/src/dwcssi_crc_x1.c
+else ifeq ($(MODE),crc_x4)
+	SRCS += $(WORK_DIR)/src/dwcssi_crc_x4.c
 else
 	$(info invalid mode input)
 endif
@@ -84,14 +86,20 @@ $(IMAGE).elf: $(OBJS)
 
 
 $(IMAGE).bin: $(IMAGE).elf
-	@$(OBJDUMP) -D $(IMAGE).elf > $(IMAGE).txt
 	@$(OBJCOPY) -S -Obinary $(IMAGE).elf $(IMAGE).bin
 
 $(IMAGE).inc: $(IMAGE).bin
 	$(BIN2C) < $< > $@
 
+$(IMAGE).txt: $(IMAGE).elf
+	@$(OBJDUMP) -D $(IMAGE).elf > $(IMAGE).txt
+
 image: $(IMAGE).inc
 	rm -rf $(DST_DIR)
+	rm $(WORK_DIR)/build/*.elf
+	rm $(WORK_DIR)/build/*.bin
+
+dump: $(IMAGE).txt
 
 clean:
 	rm -rf $(WORK_DIR)/build

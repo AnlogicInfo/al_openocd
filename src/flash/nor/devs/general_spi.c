@@ -17,7 +17,7 @@ void general_spi_quad_rd_config(struct flash_bank *bank, uint8_t addr_len)
     trans_config.ndf = 0;
 
     trans_config.rx_ip_lv = 0x3F;
-    trans_config.wait_cycle = 0x8;
+    trans_config.wait_cycle = 8;
 
     trans_config.trans_type = TRANS_TYPE_TT0;
     trans_config.stretch_en = ENABLE;
@@ -75,7 +75,7 @@ int general_spi_quad_dis(struct flash_bank* bank)
     sr_wr_seq[1] =  flash_cr & (0x3C);
     dwcssi_wr_flash_reg(bank, sr_wr_seq, 2, STANDARD_SPI_MODE);
     dwcssi_rd_flash_reg(bank, &flash_cr, SPI_RD_SR_BYTE1, 1);
-    LOG_INFO("general quad dis sr%x", flash_cr);
+    LOG_INFO("general quad dis sr %x", flash_cr);
     return ERROR_OK;
 }
 
