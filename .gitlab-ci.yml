@@ -5,7 +5,6 @@ buildlin-job:
     - ./bootstrap
     - ./configure --prefix=${PWD}/../openocd_lin --enable-ftdi --enable-ftdi-oscan1 
     - make distclean
-    - make clean
     - make -j4
     - make install
 
@@ -24,7 +23,6 @@ buildwin-job:
     - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
     - ./configure --prefix=${PWD}/../openocd_win --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
     - make distclean
-    - make clean
     - make -j4
     - make install
 
