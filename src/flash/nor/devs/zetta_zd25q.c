@@ -1,4 +1,4 @@
-#include <flash\nor\dwcssi\dwcssi.h>
+#include <flash/nor/dwcssi/dwcssi.h>
 #define ZETTA_READ_STATUS_BYTE0            0x05
 #define ZETTA_READ_STATUS_BYTE1            0x35
 #define ZETTA_ENABLE_QPI                   0x38

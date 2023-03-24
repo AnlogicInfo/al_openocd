@@ -1,4 +1,4 @@
-#include <flash\nor\dwcssi\dwcssi.h>
+#include <flash/nor/dwcssi/dwcssi.h>
 // s25f1256s flash defines
 #define   FLASH_RD_CONFIG_REG_CMD              0x35
 #define   FLASH_WR_CONFIG_REG_CMD              0x01
