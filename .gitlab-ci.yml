@@ -1,3 +1,12 @@
+
+buildlin-job:
+  stage: build
+  script:
+    - ./bootstrap
+    - ./configure --prefix=${PWD}/../openocd_lin --enable-ftdi --enable-ftdi-oscan1 
+    - make -j4
+    - make install
+
 buildwin-job:
   stage: build
   script:
@@ -14,15 +23,6 @@ buildwin-job:
     - ./configure --prefix=${PWD}/../openocd_win --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
     - make -j4
     - make install
-
-buildlin-job:
-  stage: build
-  script:
-    - ./bootstrap
-    - ./configure --prefix=${PWD}/../openocd_lin --enable-ftdi --enable-ftdi-oscan1 
-    - make -j4
-    - make install
-
 
 test-job1:
   stage: test
