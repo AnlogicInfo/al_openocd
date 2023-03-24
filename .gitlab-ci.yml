@@ -10,7 +10,6 @@ buildwin-job:
     - export libusb_LIBS="$LIBUSB1_LIBS"
     - ./bootstrap
     - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
-    - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/static -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/static -lusb-1.0"
     - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
     - ./configure --prefix=${PWD}/../openocd_win --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
     - make -j4
