@@ -129,7 +129,7 @@ static int emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 	
 	if(!emmc->device)
 	{
-		LOG_ERROR("unknown EMMC device, cid: %llx mrf_id: %x", prd_name, mrf_id);
+		LOG_ERROR("unknown EMMC device, cid: %llx mrf_id: %x", (long long unsigned int) prd_name, mrf_id);
 		return ERROR_FAIL;
 	}
 	else{
