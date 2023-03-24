@@ -442,18 +442,24 @@ int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uin
     return dwcssi_wait_flash_idle(ctrl_base);
 }
 
-int dwcssi_write_buffer_x1(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t flash_info)
+int dwcssi_write_buffer_x1(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t prog_cmd, uint32_t addr_size)
 {
+    uint8_t offset_shift, addr_byte;
+    uint i;
+
     dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
     dwcssi_disable(ctrl_base);
     dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
-    dwcssi_config_TXFTLR(ctrl_base, 0, len+3);
+    dwcssi_config_TXFTLR(ctrl_base, 0, len+addr_size);
     dwcssi_enable(ctrl_base);
 
-    dwcssi_tx(ctrl_base, 0x02);
-    dwcssi_tx(ctrl_base, (offset>>16) & 0xff);
-    dwcssi_tx(ctrl_base, (offset>>8) & 0xff);
-    dwcssi_tx(ctrl_base, offset & 0xff);
+    dwcssi_tx(ctrl_base, prog_cmd);
+    for(i = (addr_size-1); i >= 0; i--)
+    {
+        offset_shift = i<<3;
+        addr_byte = (offset >> offset_shift) & 0xff;
+        dwcssi_tx(ctrl_base, addr_byte);
+    }
     dwcssi_tx_buf(ctrl_base, buffer, len);
 
     return dwcssi_wait_flash_idle(ctrl_base);
@@ -471,7 +477,7 @@ int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t off
     return ERROR_OK;
 }
 
-int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint8_t rd_cmd, uint8_t addr_size)
+int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t rd_cmd, uint32_t addr_size)
 {
     uint8_t offset_shift, addr_byte;
     uint i;

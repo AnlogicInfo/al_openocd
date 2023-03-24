@@ -69,7 +69,7 @@ static const unsigned int crc32_table[] = {
 
 static uint8_t out_buf[256] = {0};
 
-int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uint32_t offset, uint8_t read_cmd, uint8_t addr_size)
+int flash_dwcssi(volatile uint32_t *ctrl_base, int32_t page_size, int count, uint32_t offset, uint32_t read_cmd, uint32_t addr_size)
 {
     uint32_t crc = 0xffffffff;
     int cur_count = 0, crc_count = 0;
