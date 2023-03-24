@@ -331,7 +331,7 @@ int get_flash_bank_by_addr(struct target *target,
 		if(c->next != NULL)
 		{
 			c->next->base = c->base + c->size;
-			LOG_DEBUG("reset bank %d base to %llx according to chip size", c->next->bank_number, c->next->base);
+			LOG_DEBUG("reset bank %d base to %lx according to chip size", c->next->bank_number, c->next->base);
 		}
 
 		/* check whether address belongs to this flash bank */

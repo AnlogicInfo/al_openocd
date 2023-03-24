@@ -11,7 +11,7 @@ buildwin-job:
   stage: build
   script:
     - export OCDLIB_DIR=/home/ocdlib
-    - export VER_LIBUSB="1.0.26"
+    - export VER_LIBUSB="1.0.25"
     - export VER_FTD2XX="v2.12.36.4"
     - export LIBUSB1_CFLAGS="-I$OCDLIB_DIR/libusb-$VER_LIBUSB/include/libusb-1.0"
     - export LIBUSB1_LIBS=" -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/static -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/static -lusb-1.0"
