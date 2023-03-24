@@ -1,4 +1,4 @@
-build-job:
+buildwin-job:
   stage: build
   script:
     - export OCDLIB_DIR=/home/ocdlib
@@ -9,14 +9,30 @@ build-job:
     - export libusb_CFLAGS="$LIBUSB1_CFLAGS"
     - export libusb_LIBS="$LIBUSB1_LIBS"
     - ./bootstrap
-    - ./configure --prefix=${PWD}/../openocd --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32
+    - ./configure --prefix=${PWD}/../openocd --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
     - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
     - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/static -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/static -lusb-1.0"
     - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
     - make -j4
     - make install
 
-
+buildlin-job:
+  stage: build
+  script:
+    - export OCDLIB_DIR=/home/ocdlib
+    - export VER_LIBUSB="1.0.26"
+    - export VER_FTD2XX="v2.12.36.4"
+    - export LIBUSB1_CFLAGS="-I$OCDLIB_DIR/libusb-$VER_LIBUSB/include/libusb-1.0"
+    - export LIBUSB1_LIBS=" -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/static -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/static -lusb-1.0"
+    - export libusb_CFLAGS="$LIBUSB1_CFLAGS"
+    - export libusb_LIBS="$LIBUSB1_LIBS"
+    - ./bootstrap
+    - ./configure --prefix=${PWD}/../openocd --enable-ftdi --enable-ftdi-oscan1 
+    - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
+    - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/static -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/dll -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/static -lusb-1.0"
+    - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
+    - make -j4
+    - make install
 
 
 test-job1:
