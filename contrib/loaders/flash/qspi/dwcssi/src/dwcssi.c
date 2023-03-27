@@ -442,10 +442,10 @@ int dwcssi_write_buffer(volatile uint32_t *ctrl_base, const uint8_t *buffer, uin
     return dwcssi_wait_flash_idle(ctrl_base);
 }
 
-int dwcssi_write_buffer_x1(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t prog_cmd, uint32_t addr_size)
+int dwcssi_write_buffer_x1(volatile uint32_t *ctrl_base, const uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t prog_cmd, int addr_size)
 {
     uint8_t offset_shift, addr_byte;
-    uint i;
+    int i;
 
     dwcssi_flash_wr_en(ctrl_base, SPI_FRF_X1_MODE);
     dwcssi_disable(ctrl_base);
@@ -454,6 +454,10 @@ int dwcssi_write_buffer_x1(volatile uint32_t *ctrl_base, const uint8_t *buffer, 
     dwcssi_enable(ctrl_base);
 
     dwcssi_tx(ctrl_base, prog_cmd);
+    // dwcssi_tx(ctrl_base, offset >> 16);
+    // dwcssi_tx(ctrl_base, offset >> 8);
+    // dwcssi_tx(ctrl_base, offset);
+
     for(i = (addr_size-1); i >= 0; i--)
     {
         offset_shift = i<<3;
@@ -477,10 +481,10 @@ int dwcssi_read_page(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t off
     return ERROR_OK;
 }
 
-int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t rd_cmd, uint32_t addr_size)
+int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t offset, uint32_t len, uint32_t rd_cmd, int addr_size)
 {
     uint8_t offset_shift, addr_byte;
-    uint i;
+    int i;
     dwcssi_disable(ctrl_base);
     dwcssi_config_CTRLR1(ctrl_base, len);
     dwcssi_enable(ctrl_base);

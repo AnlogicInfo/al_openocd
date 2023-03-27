@@ -662,7 +662,7 @@ static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 
     dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
     // dwcssi_config_tx(bank, SPI_FRF_X1_MODE, 0xFF, addr_size);
-    LOG_DEBUG("dwcssi erase cmd %x sector %x addr_size %d", driver_priv->dev->erase_cmd, offset, addr_size);
+    LOG_INFO("dwcssi erase cmd %x sector %x addr_size %d", driver_priv->dev->erase_cmd, offset, addr_size);
     dwcssi_disable(bank);
     dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
     dwcssi_config_TXFTLR(bank, 0, addr_size);
@@ -759,8 +759,8 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 
     if (driver_priv->dev->erase_cmd == 0x00)
         return ERROR_FLASH_OPER_UNSUPPORTED;
-
-    flash_ops->quad_dis(bank);
+    if(flash_ops != NULL)
+        flash_ops->quad_dis(bank);
     dwcssi_unset_protect(bank);
     if((first == 0) && (last == bank->num_sectors))
         dwcssi_erase_bulk(bank);
@@ -818,7 +818,7 @@ static int dwcssi_read_page_x4(struct flash_bank *bank, uint8_t *buffer, uint32_
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
-    LOG_INFO("dwcssi read page offset %x len %x cmd %x", offset, len, flash_ops->qread_cmd);
+    LOG_INFO("dwcssi x4 read page offset %x len %x cmd %x", offset, len, flash_ops->qread_cmd);
     dwcssi_disable(bank);
     dwcssi_config_CTRLR1(bank, len);
     dwcssi_enable(bank);
@@ -868,7 +868,6 @@ static void dwcssi_read_x4(struct flash_bank *bank, uint8_t *buffer, uint32_t of
 
     page_offset = offset % page_size;
 
-    LOG_DEBUG("read addr %x count %x addr len %d", offset, count, driver_priv->addr_len);
     flash_ops->quad_en(bank);
     dwcssi_config_clk(bank, flash_ops->clk_div);
     flash_ops->quad_rd_config(bank, driver_priv->addr_len);
@@ -1220,6 +1219,8 @@ static void dwcssi_write_async_x1_params_priv(struct flash_loader *loader)
     struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
     int addr_size = driver_priv->addr_len >> 1;
 
+    LOG_INFO("x1 parm cmd %x size %x", driver_priv->dev->pprog_cmd, addr_size);
+
     buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, driver_priv->dev->pprog_cmd);
     buf_set_u64(loader->reg_params[7].value, 0, loader->xlen, addr_size);
 }
@@ -1237,7 +1238,7 @@ static int dwcssi_write_async_x1(struct flash_bank *bank, const uint8_t *buffer,
     loader->image_size = count;
     loader->param_cnt = 8;
     loader->set_params_priv = dwcssi_write_async_x1_params_priv;
-    LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
+    LOG_INFO("x1 write count %x block size %x image size %x", count, loader->block_size, loader->image_size);
 
     retval = loader_flash_write_async(loader, async_x1_srcs, 
         buffer, offset, count);
@@ -1388,7 +1389,8 @@ static int dwcssi_read_id(struct flash_bank *bank)
     {
         flash_sector_init(bank, driver_priv);
         flash_ops = driver_priv->dev->flash_ops;
-        flash_ops->quad_dis(bank);
+        if(flash_ops != NULL)
+            flash_ops->quad_dis(bank);
         return ERROR_OK;
     }
     else
