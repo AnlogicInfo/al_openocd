@@ -17,7 +17,7 @@ void issi_quad_rd_config(struct flash_bank *bank, uint8_t addr_len)
     trans_config.trans_type = TRANS_TYPE_TT1;
     trans_config.stretch_en = ENABLE;
     trans_config.addr_len = addr_len; //add mode bits into addr
-    LOG_INFO("issi rd config addr len %d", addr_len);
+    // LOG_INFO("issi rd config addr len %d", addr_len);
     dwcssi_config_trans(bank, &trans_config);
 }
 
@@ -31,7 +31,7 @@ int issi_quad_en(struct flash_bank *bank)
     dwcssi_wr_flash_reg(bank, wr_seq, 2, STANDARD_SPI_MODE);
     dwcssi_rd_flash_reg(bank, sr, SPIFLASH_READ_STATUS, 1);
 
-    LOG_ERROR("issi quad en sr %x", sr[0]);
+    // LOG_ERROR("issi quad en sr %x", sr[0]);
     quad_en = (sr[0]>>6) & 0x1;
     if(quad_en != 1)
     {
@@ -52,7 +52,7 @@ int issi_quad_dis(struct flash_bank *bank)
     dwcssi_wr_flash_reg(bank, wr_seq, 2, STANDARD_SPI_MODE);
     dwcssi_rd_flash_reg(bank, sr, SPIFLASH_READ_STATUS, 1);
 
-    LOG_INFO("issi quad dis sr %x", sr[0]);
+    // LOG_INFO("issi quad dis sr %x", sr[0]);
     quad_en = (sr[0]>>6) & 0x1;
     if(quad_en != 0)
     {
@@ -65,7 +65,7 @@ int issi_quad_dis(struct flash_bank *bank)
 const flash_ops_t issi_ops = {
     .qread_cmd = 0xEB,
     .qprog_cmd = 0x32,
-    .clk_div = 8,
+    .clk_div = 4,
     .wait_cycle = 6,
     .quad_rd_config = issi_quad_rd_config,
     .quad_en = issi_quad_en,

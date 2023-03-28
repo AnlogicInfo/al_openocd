@@ -1178,7 +1178,7 @@ static void dwcssi_write_async_params_priv(struct flash_loader *loader)
     const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
     uint32_t spictrl;
 
-    LOG_INFO("write async cmd %x addr_len %x", flash_ops->qprog_cmd, driver_priv->addr_len);
+    // LOG_INFO("write async cmd %x addr_len %x", flash_ops->qprog_cmd, driver_priv->addr_len);
 
     spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, driver_priv->addr_len, ENABLE, 0);
 
