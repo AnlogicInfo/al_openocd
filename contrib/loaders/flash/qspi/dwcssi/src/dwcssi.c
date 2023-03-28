@@ -486,9 +486,14 @@ int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t 
     uint8_t offset_shift, addr_byte;
     int i;
     dwcssi_disable(ctrl_base);
-    dwcssi_config_CTRLR1(ctrl_base, len);
+    dwcssi_config_CTRLR0(ctrl_base, DFS_BYTE, SPI_FRF_X1_MODE, EEPROM_READ);
+    dwcssi_config_CTRLR1(ctrl_base, len-1);
+    dwcssi_config_TXFTLR(ctrl_base, 0, addr_size);
     dwcssi_enable(ctrl_base);
     dwcssi_tx(ctrl_base, rd_cmd);
+    // dwcssi_tx(ctrl_base, offset >> 16);
+    // dwcssi_tx(ctrl_base, offset >> 8);
+    // dwcssi_tx(ctrl_base, offset);    
     for(i = (addr_size-1); i >= 0; i--)
     {
         offset_shift = i<<3;

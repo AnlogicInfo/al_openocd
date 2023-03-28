@@ -167,6 +167,8 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     QUAD_SPI_MODE                             2
 #define     QPI_MODE                                  3
 
+#define     X1_PAGE_SIZE                              64
+
 /* Timeout in ms */
 #define     DWCSSI_CMD_TIMEOUT                        (100)
 #define     DWCSSI_PROBE_TIMEOUT                      (100)
