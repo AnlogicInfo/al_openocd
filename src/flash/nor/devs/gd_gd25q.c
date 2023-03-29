@@ -52,6 +52,15 @@ int gd_gd25q_qpi_dis(struct flash_bank* bank)
 const flash_ops_t gd_gd25q_ops = {
     .clk_div   = 8,
     .wait_cycle = 8,
+    .trans_type = TRANS_TYPE_TT0,
+
+    .qe_index = 0x9,
+    .rdsr1_cmd = 0x05,
+    .rdsr2_cmd = 0x35,
+    .rdsr1n2_cmd = 0,
+    .wrsr1_cmd = 0x01,
+    .wrsr2_cmd = 0x31,
+    .wrsr1n2_cmd = 0,
 
     .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,

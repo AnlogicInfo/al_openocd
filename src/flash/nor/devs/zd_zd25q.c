@@ -61,11 +61,18 @@ int zetta_zd25q_quad_dis(struct flash_bank *bank)
 
 
 const flash_ops_t zetta_zd25q_ops = {
+    .clk_div = 8,
+    .qe_index = 9,
+    .rdsr1_cmd = 0x05,
+    .rdsr2_cmd = 0x35,
+    .rdsr1n2_cmd = 0,
+
+    .wrsr1_cmd = 0x01,
+    .wrsr2_cmd = 0x31,
+    .wrsr1n2_cmd = 0x01,
+    
     .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,
-    .clk_div = 8,
-    .wait_cycle = 8,
-
     .quad_rd_config = general_spi_quad_rd_config,
     .quad_en   = zetta_zd25q_quad_en,
     .quad_dis  = zetta_zd25q_quad_dis

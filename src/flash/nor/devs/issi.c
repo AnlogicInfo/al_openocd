@@ -1,4 +1,5 @@
 #include <flash/nor/dwcssi/dwcssi.h>
+// SR
 //|BIT 7 | BIT 6| BIT 5| BIT 4| BIT 3 | BIT 2| BIT 1| BIT 0|
 // SRWD    QE     BP3    BP2    BP1     BP1   WEL    WIP 
 
@@ -63,10 +64,20 @@ int issi_quad_dis(struct flash_bank *bank)
 }
 
 const flash_ops_t issi_ops = {
+    .clk_div = 4,
+    .wait_cycle  = 6,
+    .trans_type = TRANS_TYPE_TT1,
+
+    .qe_index = 6,
+    .rdsr1_cmd = 0x05,
+    .rdsr2_cmd = 0,
+    .rdsr1n2_cmd = 0,
+
+    .wrsr1_cmd = 0x01,
+    .wrsr2_cmd = 0,
+    .wrsr1n2_cmd = 0,
     .qread_cmd = 0xEB,
     .qprog_cmd = 0x32,
-    .clk_div = 4,
-    .wait_cycle = 6,
     .quad_rd_config = issi_quad_rd_config,
     .quad_en = issi_quad_en,
     .quad_dis = issi_quad_dis

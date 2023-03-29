@@ -33,6 +33,15 @@ typedef struct flash_ops_t
 {
 	uint8_t clk_div;
 	uint8_t wait_cycle;
+	uint8_t trans_type;
+
+	uint8_t qe_index;
+	uint8_t rdsr1_cmd;
+	uint8_t rdsr2_cmd;
+	uint8_t rdsr1n2_cmd;
+	uint8_t wrsr1_cmd;
+	uint8_t wrsr2_cmd;
+	uint8_t wrsr1n2_cmd;
 
 	uint8_t qread_cmd;
 	uint8_t qprog_cmd;
@@ -65,13 +74,6 @@ struct flash_device {
 	// Pointer to model-specific operations for this flash
 	const flash_ops_t *flash_ops;
 };
-
-// struct flash_device_op 
-// {
-// 	int (*reset) (struct flash_bank *bank);
-// 	int (*quad_en) (struct flash_bank* bank);
-// 	int (*quad_dis) (struct flash_bank* bank);
-// };
 
 #define FLASH_ID(n, re, qr, pp, es, ces, id, psize, ssize, size, ops) \
 {	                                \

@@ -90,7 +90,6 @@ int general_spi_qpi_dis(struct flash_bank* bank)
 }
 const flash_ops_t general_spi_ops = {
     .clk_div    = 8,
-    .wait_cycle = 8,
 
     .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,
