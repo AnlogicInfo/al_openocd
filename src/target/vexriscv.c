@@ -1651,7 +1651,7 @@ static int vexriscv_add_breakpoint(struct target *target,
 
 		breakpoint->orig_instr = malloc(4);
 		memcpy(breakpoint->orig_instr, &data, 4);
-
+		LOG_INFO("Original Instruction is 0x%"PRIx32, breakpoint->orig_instr);
 		if((data & 3) == 3){
 			retval = vexriscv_write16(target,
 							  breakpoint->address,
@@ -1671,6 +1671,11 @@ static int vexriscv_add_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address+2);
 				return retval;
 			}
+			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
+				LOG_ERROR("Error while flushing cache when adding breakpoint");
+				return retval;
+			};
+
 		}else{
 			retval = vexriscv_write16(target,
 							  breakpoint->address,
@@ -1681,6 +1686,10 @@ static int vexriscv_add_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address);
 				return retval;
 			}
+			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
+				LOG_ERROR("Error while flushing cache when adding breakpoint");
+				return retval;
+			};
 		}
 	} else {
 		struct vexriscv_common *vexriscv = target_to_vexriscv(target);
@@ -1713,6 +1722,7 @@ static int vexriscv_remove_breakpoint(struct target *target,
 
 		/* Replace the removed instruction */
 		uint32_t data = buf_get_u32(breakpoint->orig_instr,0,32);
+		LOG_INFO("Original Instruction is 0x%"PRIx32, data);
 		if((data & 3) == 3){
 			int retval = vexriscv_write16(target,
 							  breakpoint->address,
@@ -1732,6 +1742,10 @@ static int vexriscv_remove_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address+2);
 				return retval;
 			}
+			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
+				LOG_ERROR("Error while flushing cache when removing breakpoint");
+				return retval;
+			};
 		}else{
 			int retval = vexriscv_write16(target,
 							  breakpoint->address,
@@ -1742,6 +1756,10 @@ static int vexriscv_remove_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address);
 				return retval;
 			}
+			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
+				LOG_ERROR("Error while flushing cache when removing breakpoint");
+				return retval;
+			};
 		}
 	} else {
 		struct vexriscv_common *vexriscv = target_to_vexriscv(target);
@@ -1768,7 +1786,6 @@ static int vexriscv_resume_or_step(struct target *target, int current,
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	struct breakpoint *breakpoint = NULL;
 	int retval;
-
 	LOG_DEBUG("Addr: 0x%" PRIx32 ", stepping: %s, handle breakpoints %s\n",
 		  address, step ? "yes" : "no", handle_breakpoints ? "yes" : "no");
 
@@ -1802,9 +1819,9 @@ static int vexriscv_resume_or_step(struct target *target, int current,
 	}
 
 
-	if((error = vexriscv_flush_caches(target))!= ERROR_OK){
+	if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
 		LOG_ERROR("Error while flushing cache when resuming");
-		 return error;
+		 return retval;
 	};
 
 	if ((retval = vexriscv_restore_context(target))){
