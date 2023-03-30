@@ -1651,7 +1651,7 @@ static int vexriscv_add_breakpoint(struct target *target,
 
 		breakpoint->orig_instr = malloc(4);
 		memcpy(breakpoint->orig_instr, &data, 4);
-		LOG_INFO("Original Instruction is 0x%"PRIx32, breakpoint->orig_instr);
+		LOG_INFO("Original Instruction is 0x%"PRIx32, data);
 		if((data & 3) == 3){
 			retval = vexriscv_write16(target,
 							  breakpoint->address,
