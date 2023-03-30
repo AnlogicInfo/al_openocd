@@ -820,8 +820,8 @@ static int vexriscv_save_context(struct target *target)
 	if(vexriscv_execute_jtag_queue(target))
 		return ERROR_FAIL;
 
-//	if((error = vexriscv_flush_caches(target)) != ERROR_OK) //Flush instruction cache
-//		return error;
+	if((error = vexriscv_flush_caches(target)) != ERROR_OK) //Flush instruction cache
+		return error;
 
 	return ERROR_OK;
 }
@@ -1802,7 +1802,10 @@ static int vexriscv_resume_or_step(struct target *target, int current,
 	}
 
 
-	vexriscv_flush_caches(target);
+	if((error = vexriscv_flush_caches(target))!= ERROR_OK){
+		LOG_ERROR("Error while flushing cache when resuming");
+		 return error;
+	};
 
 	if ((retval = vexriscv_restore_context(target))){
 		LOG_ERROR("Error while calling vexriscv_restore_context");
