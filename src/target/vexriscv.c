@@ -758,7 +758,7 @@ static int vexriscv_flush_bus(struct target *target,struct BusInfo * busInfo){
 	int error;
 	if(!busInfo) return ERROR_OK;
 	for(uint32_t idx = 0;idx < busInfo->flushInstructionsSize;idx++){
-		vexriscv_pushInstruction(target, false, busInfo->flushInstructions[idx]);
+		vexriscv_pushInstruction(target, true, busInfo->flushInstructions[idx]);
 	}
 	if((error = vexriscv_execute_jtag_queue(target)) != ERROR_OK)
 		return error;
@@ -776,10 +776,20 @@ static int vexriscv_flush_caches(struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	int error;
-	if((error = vexriscv_flush_bus(target,vexriscv->iBus)) != ERROR_OK)
-		return error;
-	if((error = vexriscv_flush_bus(target,vexriscv->dBus)) != ERROR_OK)
-		return error;
+	if(vexriscv->iBus->flushInstructionsSize!=0)
+	{
+		if((error = vexriscv_flush_bus(target,vexriscv->iBus)) != ERROR_OK)
+			return error;
+	}
+	else
+		LOG_INFO("System have no I-Cache, No need to flush I-Cache");
+	if(vexriscv->dBus->flushInstructionsSize!=0)
+	{	
+		if((error = vexriscv_flush_bus(target,vexriscv->dBus)) != ERROR_OK)
+			return error;
+	}
+	else
+		LOG_INFO("System have no D-Cache, No need to flush D-Cache");
 	return ERROR_OK;
 }
 
@@ -1628,7 +1638,7 @@ static int vexriscv_add_breakpoint(struct target *target,
 		  (uint32_t)breakpoint->address, breakpoint->length, breakpoint->type,
 		  breakpoint->number, breakpoint->unique_id);
 
-	/* Only support SW breakpoints for now. */
+	/* Only support SW breakpoints for now. */ //TODO: Oh really???????????????
 	if (breakpoint->type == BKPT_SOFT){
 		/* Read and save the instruction */
 		int retval = vexriscv_read16(target,
@@ -1671,10 +1681,6 @@ static int vexriscv_add_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address+2);
 				return retval;
 			}
-			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
-				LOG_ERROR("Error while flushing cache when adding breakpoint");
-				return retval;
-			};
 
 		}else{
 			retval = vexriscv_write16(target,
@@ -1686,10 +1692,6 @@ static int vexriscv_add_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address);
 				return retval;
 			}
-			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
-				LOG_ERROR("Error while flushing cache when adding breakpoint");
-				return retval;
-			};
 		}
 	} else {
 		struct vexriscv_common *vexriscv = target_to_vexriscv(target);
@@ -1742,10 +1744,6 @@ static int vexriscv_remove_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address+2);
 				return retval;
 			}
-			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
-				LOG_ERROR("Error while flushing cache when removing breakpoint");
-				return retval;
-			};
 		}else{
 			int retval = vexriscv_write16(target,
 							  breakpoint->address,
@@ -1756,10 +1754,6 @@ static int vexriscv_remove_breakpoint(struct target *target,
 						(uint32_t)breakpoint->address);
 				return retval;
 			}
-			if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
-				LOG_ERROR("Error while flushing cache when removing breakpoint");
-				return retval;
-			};
 		}
 	} else {
 		struct vexriscv_common *vexriscv = target_to_vexriscv(target);
