@@ -48,15 +48,6 @@ typedef struct flash_ops_t
 	uint8_t wr_trans_type;
 
 	uint8_t unset_protect_cmd;
-
-	void (*quad_rd_config) (struct flash_bank *bank, uint8_t addr_len);
-	
-	int (*quad_en) (struct flash_bank *bank);
-	int (*quad_dis) (struct flash_bank *bank);
-	
-	int (*qpi_en) (struct flash_bank *bank);
-	int (*qpi_dis) (struct flash_bank *bank);
-
 } flash_ops_t;
 
 /* data structure to maintain flash ids from different vendors */

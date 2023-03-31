@@ -93,11 +93,5 @@ const flash_ops_t general_spi_ops = {
 
     .qread_cmd = 0x6B,
     .qprog_cmd = 0x32,
-
-    .quad_rd_config = general_spi_quad_rd_config,
-    .quad_en   = general_spi_quad_en,
-    .quad_dis  = general_spi_quad_dis,
-    .qpi_en    = general_spi_qpi_en,
-    .qpi_dis   = general_spi_qpi_dis
 };
 
