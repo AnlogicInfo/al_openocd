@@ -33,7 +33,6 @@ typedef struct flash_ops_t
 {
 	uint8_t clk_div;
 	uint8_t wait_cycle;
-	uint8_t trans_type;
 
 	uint8_t qe_index;
 	uint8_t rdsr1_cmd;
@@ -44,7 +43,11 @@ typedef struct flash_ops_t
 	uint8_t wrsr1n2_cmd;
 
 	uint8_t qread_cmd;
+	uint8_t rd_trans_type;
 	uint8_t qprog_cmd;
+	uint8_t wr_trans_type;
+
+	uint8_t unset_protect_cmd;
 
 	void (*quad_rd_config) (struct flash_bank *bank, uint8_t addr_len);
 	

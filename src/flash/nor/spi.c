@@ -38,6 +38,7 @@ extern const flash_ops_t gd_gd25q_ops;
 extern const flash_ops_t gd_gd25b512_ops;
 extern const flash_ops_t issi_ops;
 extern const flash_ops_t win_ops;
+extern const flash_ops_t mc_ops;
 
  /* Shared table of known SPI flash devices for SPI-based flash drivers. Taken
   * from device datasheets and Linux SPI flash drivers. */
@@ -143,6 +144,7 @@ const struct flash_device flash_devices[] = {
 	FLASH_ID("issi is25wp256d",     0x13, 0xec, 0x12, 0xdc, 0xc7, 0x0019709d, 0x100, 0x10000, 0x2000000,     &issi_ops),
 	FLASH_ID("issi is25lp512m",     0x13, 0xec, 0x12, 0xdc, 0xc7, 0x001a609d, 0x100, 0x10000, 0x4000000,     &issi_ops),
 	FLASH_ID("issi is25wp512m",     0x13, 0xec, 0x12, 0xdc, 0xc7, 0x001a709d, 0x100, 0x10000, 0x4000000,     &issi_ops),
+	FLASH_ID("mc sst26vf032",       0x03, 0x00, 0x02, 0x20, 0xc7, 0x004226bf, 0x100, 0x1000,  0x400000,      &mc_ops),
 
 	/* FRAM, no erase commands, no write page or sectors */
 	FRAM_ID("fu mb85rs16n",         0x03, 0,    0x02, 0x00010104, 0x800),

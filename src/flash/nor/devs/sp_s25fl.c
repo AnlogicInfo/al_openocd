@@ -116,7 +116,6 @@ int sp_s25fl_quad_dis(struct flash_bank* bank)
 const flash_ops_t sp_s25fl_ops = {
     .clk_div = 2,
     .wait_cycle = 8,
-    .trans_type = TRANS_TYPE_TT0,
     
     .qe_index = 9,
     .rdsr1_cmd = 0x05,
@@ -127,8 +126,9 @@ const flash_ops_t sp_s25fl_ops = {
     .wrsr1n2_cmd = 0x01,
 
     .qread_cmd = 0x6C,
+    .rd_trans_type = TRANS_TYPE_TT0,
     .qprog_cmd = 0x34,
-
+    .wr_trans_type = TRANS_TYPE_TT0,
     .quad_rd_config = general_spi_quad_rd_config,
     .quad_en   = sp_s25fl_quad_en,
     .quad_dis  = sp_s25fl_quad_dis

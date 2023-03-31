@@ -66,7 +66,6 @@ int issi_quad_dis(struct flash_bank *bank)
 const flash_ops_t issi_ops = {
     .clk_div = 4,
     .wait_cycle  = 6,
-    .trans_type = TRANS_TYPE_TT1,
 
     .qe_index = 6,
     .rdsr1_cmd = 0x05,
@@ -77,7 +76,9 @@ const flash_ops_t issi_ops = {
     .wrsr2_cmd = 0,
     .wrsr1n2_cmd = 0,
     .qread_cmd = 0xEB,
+    .rd_trans_type = TRANS_TYPE_TT1,
     .qprog_cmd = 0x32,
+    .wr_trans_type = TRANS_TYPE_TT0,
     .quad_rd_config = issi_quad_rd_config,
     .quad_en = issi_quad_en,
     .quad_dis = issi_quad_dis
