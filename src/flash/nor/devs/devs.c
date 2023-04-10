@@ -199,24 +199,24 @@ const flash_ops_t mksv_ops = {
 };
 
 // Nonvolatile Configuration Register
-// const flash_ops_t micron_n25q_ops = {
-//     .clk_div = 8,
-//     .wait_cycle  = 6,
+const flash_ops_t micron_n25q_ops = {
+    .clk_div = 8,
+    .wait_cycle  = 8,
 
-//     .qe_index = 7,
-//     .rdsr1_cmd = 0x65,
-//     .rdsr2_cmd = 0,
-//     .rdsr1n2_cmd = 0,
+    .qe_index = 0,
+    .rdsr1_cmd = 0,
+    .rdsr2_cmd = 0,
+    .rdsr1n2_cmd = 0,
 
-//     .wrsr1_cmd = 0x61,
-//     .wrsr2_cmd = 0,
-//     .wrsr1n2_cmd = 0,
+    .wrsr1_cmd = 0,
+    .wrsr2_cmd = 0,
+    .wrsr1n2_cmd = 0,
 
-//     .qread_cmd = 0x6B,
-//     .rd_trans_type = TRANS_TYPE_TT1,
-//     .qprog_cmd = 0x32,
-//     .wr_trans_type = TRANS_TYPE_TT0,
-// };
+    .qread_cmd = 0x6B,
+    .rd_trans_type = TRANS_TYPE_TT0,
+    .qprog_cmd = 0x32,
+    .wr_trans_type = TRANS_TYPE_TT0,
+};
 
 const flash_ops_t mac_25l_ops = {
     .clk_div = 8,

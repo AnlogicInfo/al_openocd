@@ -681,7 +681,7 @@ static int dwcssi_rdsr(struct flash_bank *bank, uint8_t *sr, uint8_t cnt)
             dwcssi_rd_flash_reg(bank, &sr[1], flash_ops->rdsr2_cmd, 1);
         }
     }
-    else
+    else if(cnt > 2)
     {
         LOG_ERROR("Rd sr cnt %x error", cnt);
         return ERROR_FAIL;
@@ -725,7 +725,7 @@ static int dwcssi_wrsr(struct flash_bank *bank, uint8_t *sr, uint8_t cnt, uint8_
             dwcssi_wr_flash_reg(bank, wr_seq, 2, STANDARD_SPI_MODE);
         }
     }
-    else
+    else if(cnt > 2)
     {
         LOG_ERROR("Wr sr cnt %x error", cnt);
         return ERROR_FAIL;
@@ -743,12 +743,14 @@ int dwcssi_wr_qe(struct flash_bank *bank, uint8_t enable)
     uint8_t sr_byte_cnt = (flash_ops->qe_index >> 3) +1, bit_index = flash_ops->qe_index % 8;
     uint8_t sr[4] = {0}, result;
 
+    if (flash_ops->qe_index == 0)
+        sr_byte_cnt = 0;
     dwcssi_rdsr(bank, sr, sr_byte_cnt);
     dwcssi_wrsr(bank, sr, sr_byte_cnt, bit_index, enable);
     dwcssi_rdsr(bank, sr, sr_byte_cnt);
 
     result = (sr[sr_byte_cnt -1] >> bit_index) & 0x1;
-    if(result != enable)
+    if(result != enable && flash_ops->qe_index != 0)
     {
         LOG_DEBUG("spi wr qe %d index %x result %d fail", enable, result, bit_index);
         return ERROR_FAIL;
@@ -1273,14 +1275,14 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
     loader->set_params_priv = dwcssi_write_async_params_priv;
     LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
     dwcssi_config_clk(bank, flash_ops->clk_div);
-    retval = dwcssi_wr_qe(bank, 0);
+    retval = dwcssi_wr_qe(bank, ENABLE);
     if(retval != ERROR_OK)
         return ERROR_FAIL;
     // flash_ops->quad_en(bank);
 
     retval = loader_flash_write_async(loader, async_srcs, 
         buffer, offset, count);
-    dwcssi_wr_qe(bank, 1);
+    dwcssi_wr_qe(bank, DISABLE);
     // flash_ops->quad_dis(bank);
     return retval;
 }
