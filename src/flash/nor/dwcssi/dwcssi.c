@@ -1273,14 +1273,14 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
     loader->set_params_priv = dwcssi_write_async_params_priv;
     LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
     dwcssi_config_clk(bank, flash_ops->clk_div);
-    retval = dwcssi_wr_qe(bank, ENABLE);
+    retval = dwcssi_wr_qe(bank, 0);
     if(retval != ERROR_OK)
         return ERROR_FAIL;
     // flash_ops->quad_en(bank);
 
     retval = loader_flash_write_async(loader, async_srcs, 
         buffer, offset, count);
-    dwcssi_wr_qe(bank, DISABLE);
+    dwcssi_wr_qe(bank, 1);
     // flash_ops->quad_dis(bank);
     return retval;
 }
@@ -1359,11 +1359,15 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 
     count = flash_write_boundary_check(bank, offset, count);
     dwcssi_unset_protect(bank);
-    if(flash_ops != NULL)
+    if(flash_ops != NULL) {
+        LOG_INFO("use X4 mode");
         retval = dwcssi_write_async(bank, buffer, offset, count);
+    }
 
-    if(retval != ERROR_OK)
+    if(retval != ERROR_OK) {
+        LOG_INFO("use X1 mode");
         retval = dwcssi_write_async_x1(bank, buffer, offset, count);
+    }
 
     return retval;
 }
