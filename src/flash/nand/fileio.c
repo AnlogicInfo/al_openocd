@@ -122,12 +122,16 @@ COMMAND_HELPER(nand_fileio_parse_args, struct nand_fileio_state *state,
 {
 	int retval = ERROR_OK;
 	nand_fileio_init(state);
+	if (0 == CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
 	
 	if (!strcmp(CMD_ARGV[0], "erase")) {
 		CMD_ARGV++;
 		CMD_ARGC--;
 		state->erase = 1;
 	}
+	if (0 == CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	struct nand_device *nand;
 	if (strspn(CMD_ARGV[0], "0123456789") == strlen(CMD_ARGV[0])) {

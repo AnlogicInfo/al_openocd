@@ -147,6 +147,10 @@ static struct nand_manufacturer nand_manuf_ids[] = {
 	{NAND_MFR_STMICRO, "ST Micro"},
 	{NAND_MFR_HYNIX, "Hynix"},
 	{NAND_MFR_MICRON, "Micron"},
+	{NAND_MFR_ISSI, "issi"},
+	{NAND_MFR_MACRONIX, "Macronix"},
+	{NAND_MFR_WINBOND, "Winbond"},
+	{NAND_MFR_SPANSION, "Spansion"},
 	{0x0, NULL},
 };
 

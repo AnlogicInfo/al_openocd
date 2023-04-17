@@ -84,7 +84,10 @@ enum {
 	NAND_MFR_STMICRO = 0x20,
 	NAND_MFR_HYNIX = 0xad,
 	NAND_MFR_MICRON = 0x2c,
-	NAND_MFR_ESMT = 0xc8,
+	NAND_MFR_ISSI = 0xc8,
+	NAND_MFR_MACRONIX = 0xc2,
+	NAND_MFR_WINBOND = 0xef,
+	NAND_MFR_SPANSION = 0x01,
 };
 
 struct nand_manufacturer {

@@ -428,7 +428,7 @@ uint32_t smc35x_nand_init(struct nand_device *nand)
 	LOG_INFO("id: %x %x %x %x %x",
 		nand_size->device_id[0],nand_size->device_id[1],nand_size->device_id[2],nand_size->device_id[3],nand_size->device_id[4]);
 
-	if ((nand_size->device_id[0] != NAND_MFR_SAMSUNG) && (nand_size->device_id[0] != NAND_MFR_ESMT))
+	if ((nand_size->device_id[0] != NAND_MFR_SAMSUNG) && (nand_size->device_id[0] != NAND_MFR_ISSI))
 	{
 		status = smc35x_read_parameter(nand, nand_size);
 
