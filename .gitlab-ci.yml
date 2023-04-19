@@ -13,11 +13,6 @@
 #
 # For more information, see: https://docs.gitlab.com/ee/ci/yaml/index.html#stages
 
-stages:          # List of stages for jobs, and their order of execution
-  - build
-  - test
-  - deploy
-
 buildlin-job:       # This job runs in the build stage, which runs first.
   stage: build
   script:
@@ -60,3 +55,13 @@ deploy-job:      # This job runs in the deploy stage.
   script:
     - echo "This job deploys something from the $CI_COMMIT_BRANCH branch."
   environment: production
+
+release_job:
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  script:
+    - echo "running release_job"
+  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
+    tag_name: '$CI_COMMIT_TAG'
+    description: '$CI_COMMIT_TAG'
