@@ -4310,8 +4310,8 @@ static bool riscv013_is_halted(struct target *target)
 		 * message that a reset happened, that the target is running, and then
 		 * that it is halted again once the request goes through.
 		 */
-		if (target->state == TARGET_HALTED)
-			dmcontrol |= DM_DMCONTROL_HALTREQ;
+		// if (target->state == TARGET_HALTED)
+		// 	dmcontrol |= DM_DMCONTROL_HALTREQ;
 		dmi_write(target, DM_DMCONTROL, dmcontrol);
 	}
 	return get_field(dmstatus, DM_DMSTATUS_ALLHALTED);
