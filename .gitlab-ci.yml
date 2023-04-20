@@ -38,7 +38,7 @@ buildlin-job:       # This job runs in the build stage, which runs first.
     - make -j4
     - make install
     - cd ../binary-linux64
-    - tar -jcfv openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2 *
+    - tar -jcf openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2 *
     - echo ${CI_JOB_ID} | tee lin64_jobid.log
     - cd ..
 
@@ -79,18 +79,6 @@ buildwin-job:
     - echo ${CI_JOB_ID} | tee win64_jobid.log
     - cd ..
 
-presist-tag-artifacts:
-  stage: build
-  rules:
-    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
-  script:
-    - echo "running presist-tag-artifacts"
-  artifacts:
-    paths:
-      - binary-win64
-      - binary-lin64
-    expire_in: never
-
 test-job1:   # This job runs in the test stage.
   stage: test    # It only starts when the job in the build stage completes successfully.
   script:
@@ -107,14 +95,16 @@ deploy-job:      # This job runs in the deploy stage.
     - echo "This job deploys something from the $CI_COMMIT_BRANCH branch."
   environment: production
 
-release_win64:
+release_ci:
   stage: release
   rules:
     - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
   script:
-    - echo "running release_win64"
+    - echo "running release_ci"
   needs:
     - job: buildwin-job
+      artifacts: true
+    - job: buildlin-job
       artifacts: true
   release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
     tag_name: '$CI_COMMIT_TAG'
@@ -124,21 +114,7 @@ release_win64:
       links:
         - name: 'Windows 64-bit executable'
           url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-win64/win64_jobid.log`/artifacts/raw/binary-win64/openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip'
- 
-release_lin64:
-  stage: release
-  rules:
-    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
-  script:
-    - echo "running release_lin64"
-  needs:
-    - job: buildlin-job
-      artifacts: true
-  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
-    tag_name: '$CI_COMMIT_TAG'
-    description: '$CI_COMMIT_TAG'
-    name: 'Automatically generated release binary package'
-    assets:
-      links:
         - name: 'Linux 64-bit executable'
           url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-linux64/lin64_jobid.log`/artifacts/raw/binary-linux64/openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2'
+
+ 

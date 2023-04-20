@@ -888,8 +888,8 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 	}
 	uint64_t data_wa_address = data_wa->address;
 
-	LOG_INFO("work area algorithm address: %llx, data length: %d", algorithm_wa->address, algorithm_wa->size);
-	LOG_INFO("work area data address: %llx, data length: %d", data_wa->address, data_wa->size);
+	LOG_INFO("work area algorithm address: %" PRIx64 ", data length: %d", algorithm_wa->address, algorithm_wa->size);
+	LOG_INFO("work area data address: %" PRIx64 ", data length: %d", data_wa->address, data_wa->size);
 	if (algorithm_wa)
     {
         if (loader_target == RISCV)
@@ -933,7 +933,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 			}
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
 			if (algorithm_result != 0) {
-			    LOG_DEBUG("Algorithm returned error %llx", algorithm_result);
+			    LOG_DEBUG("Algorithm returned error %" PRIx64 "", algorithm_result);
 				retval = ERROR_FAIL;
 				goto err;
 			}
@@ -1355,8 +1355,8 @@ int smc35x_write_page_sync(struct nand_device *nand, uint32_t page, uint8_t *dat
 	if (raw_oob)
 		oob_wa_address = data_wa_address + nand_size->dataBytesPerPage;
 
-	LOG_INFO("work area algorithm address: %llx, data length: %d", algorithm_wa->address, algorithm_wa->size);
-	LOG_INFO("work area data address: %llx, data length: %d", data_wa->address, data_wa->size);
+	LOG_INFO("work area algorithm address: %" PRIx64 ", data length: %d", algorithm_wa->address, algorithm_wa->size);
+	LOG_INFO("work area data address: %" PRIx64 ", data length: %d", data_wa->address, data_wa->size);
 	if (algorithm_wa)
     {
         if (loader_target == RISCV)
@@ -1408,7 +1408,7 @@ int smc35x_write_page_sync(struct nand_device *nand, uint32_t page, uint8_t *dat
 
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
 			if (algorithm_result != 0) {
-			    LOG_DEBUG("Algorithm returned error %llx", algorithm_result);
+			    LOG_DEBUG("Algorithm returned error %" PRIx64 "", algorithm_result);
 				retval = ERROR_FAIL;
 				goto err;
 			}

@@ -344,11 +344,11 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t poll_flag)
 
     if(cmd_pkt->argu_en)
     {
-        LOG_DEBUG("emmc cmd addr %llx argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
+        LOG_DEBUG("emmc cmd addr %" PRIx64 " argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
         target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
     }
     target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, ((cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16));
-    LOG_DEBUG("emmc cmd addr %llx xfer %x", dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, ((cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16));
+    LOG_DEBUG("emmc cmd addr %" PRIx64 " xfer %x", dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, ((cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16));
     status = dwcmshc_emmc_poll_int(emmc, poll_flag, TIMEOUT_1S);
     dwcmshc_emmc_get_resp(emmc);
     return status;

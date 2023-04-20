@@ -114,7 +114,7 @@ COMMAND_HANDLER(handle_emmc_read_block_command)
 
 
 	byte_cnt = 512 * block_cnt;
-	LOG_INFO("emmc read block start addr %llx byte cnt %x", address, byte_cnt);
+	LOG_INFO("emmc read block start addr %" PRIx64 " byte cnt %x", address, byte_cnt);
 	buffer = calloc(byte_cnt, 1);
 	emmc = get_emmc_device_by_num(0);
 	if (!emmc)
