@@ -29,7 +29,7 @@ buildlin-job:       # This job runs in the build stage, which runs first.
     - ./bootstrap
     - mkdir build-linux64
     - cd build-linux64
-    - ./configure --prefix=${PWD}/../binary-linux64 --enable-ftdi --enable-ftdi-oscan1 
+    - ../configure --prefix=${PWD}/../binary-linux64 --enable-ftdi --enable-ftdi-oscan1 
     - make -j4
     - make install
     - cd ..
@@ -53,7 +53,7 @@ buildwin-job:
     - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
     - mkdir build-win64
     - cd build-win64
-    - ./configure --prefix=${PWD}/../binary-win64 --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
+    - ../configure --prefix=${PWD}/../binary-win64 --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
     - make -j4
     - make install
     - cd ..
