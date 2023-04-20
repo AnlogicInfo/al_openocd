@@ -26,6 +26,7 @@ buildlin-job:       # This job runs in the build stage, which runs first.
       - build-linux64
   script:
     - make distclean || true
+    - make distclean -C src/jtag/drivers/libjaylink || true
     - ./bootstrap
     - mkdir build-linux64
     - cd build-linux64
@@ -49,6 +50,7 @@ buildwin-job:
     - export libusb_LIBS="$LIBUSB1_LIBS"
     - make distclean || true
     - ./bootstrap
+    - make distclean -C src/jtag/drivers/libjaylink || true
     - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
     - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
     - mkdir build-win64
