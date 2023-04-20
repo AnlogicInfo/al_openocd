@@ -23,7 +23,7 @@ buildlin-job:       # This job runs in the build stage, which runs first.
   stage: build
   artifacts:
     paths:
-      - build-linux64
+      - binary-linux64
   script:
     - make distclean || true
     - make distclean -C src/jtag/drivers/libjaylink || true
@@ -39,7 +39,7 @@ buildwin-job:
   stage: build
   artifacts:
     paths:
-      - build-win64
+      - binary-win64
   script:
     - export OCDLIB_DIR=/home/ocdlib
     - export VER_LIBUSB="1.0.25"
