@@ -29,6 +29,7 @@ buildlin-job:       # This job runs in the build stage, which runs first.
     - make distclean -C src/jtag/drivers/libjaylink || true
     - ./bootstrap
     - rm -rf binary-linux64
+    - rm -rf build-linux64
     - mkdir build-linux64
     - cd build-linux64
     - ../configure --prefix=${PWD}/../binary-linux64 --enable-ftdi --enable-ftdi-oscan1 
@@ -53,6 +54,7 @@ buildwin-job:
     - export libusb_LIBS="$LIBUSB1_LIBS"
     - make distclean || true
     - rm -rf binary-win64
+    - rm -rf build-win64
     - ./bootstrap
     - make distclean -C src/jtag/drivers/libjaylink || true
     - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
@@ -64,8 +66,10 @@ buildwin-job:
     - make install
     - cd ../binary-win64
     - echo 'Copying dynamic libraries'
-    - find ${OCDLIB_DIR} -name '*.dll' -exec cp -v {} ${PWD}/bin \;
-    - find ${OCDLIB_DIR} -name '*.DLL' -exec cp -v {} ${PWD}/bin \;
+    - find $OCDLIB_DIR/libyaml_0_2_2/bin -name '*.dll' -exec cp -v {} ${PWD}/bin \;
+    - find $OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -name '*.DLL' -exec cp -v {} ${PWD}/bin \;
+    - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -name '*.DLL' -exec cp -v {} ${PWD}/bin \;
+    - find 
     - echo 'Packing...'
     - 7z a openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip *
     - cd ..
@@ -102,7 +106,7 @@ release_win64:
     assets:
       links:
         - name: 'Windows 64-bit executable'
-          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/${GE_JOB_ID}/artifacts/raw/binary-win64/openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip'
+          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/${CI_JOB_ID}/artifacts/raw/binary-win64/openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip'
  
 release_lin64:
   stage: release
@@ -120,4 +124,4 @@ release_lin64:
     assets:
       links:
         - name: 'Linux 64-bit executable'
-          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/${GE_JOB_ID}/artifacts/raw/binary-linux64/openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2'
+          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/${CI_JOB_ID}/artifacts/raw/binary-linux64/openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2'
