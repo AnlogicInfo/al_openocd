@@ -72,7 +72,7 @@ buildwin-job:
     - echo 'Copying dynamic libraries'
     - find $OCDLIB_DIR/libyaml_0_2_2/bin -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - find $OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -name '*.dll' -exec cp -v {} ${PWD}/bin \;
-    - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
+    - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - find 
     - echo 'Packing...'
     - 7z a openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip *
