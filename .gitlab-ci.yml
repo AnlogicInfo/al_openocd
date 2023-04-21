@@ -62,7 +62,7 @@ buildwin-job:
     - ./bootstrap
     - make distclean -C src/jtag/drivers/libjaylink || true
     - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
-    - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
+    - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 " #-L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386
     - mkdir build-win64
     - cd build-win64
     - ../configure --prefix=${PWD}/../binary-win64 --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1  --enable-ftd2xx
@@ -72,7 +72,7 @@ buildwin-job:
     - echo 'Copying dynamic libraries'
     - find $OCDLIB_DIR/libyaml_0_2_2/bin -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - find $OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -name '*.dll' -exec cp -v {} ${PWD}/bin \;
-    - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
+    - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - find 
     - echo 'Packing...'
     - 7z a openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip *
