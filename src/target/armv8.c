@@ -211,7 +211,7 @@ static int armv8_read_reg(struct armv8_common *armv8, int regnum, uint64_t *regv
 	if (retval == ERROR_OK && regval)
 	{
 		*regval = value_64;
-		LOG_DEBUG("rd arm reg %llx", value_64);
+		LOG_DEBUG("rd arm reg %" PRIx64 "", value_64);
 
 	}
 	else
@@ -1843,7 +1843,7 @@ int armv8_set_dbgreg_bits(struct armv8_common *armv8, unsigned int reg, unsigned
 	if (retval != ERROR_OK)
 		return retval;
 
-	LOG_DEBUG("pre-read addr %llx data %x",(armv8->debug_base + reg), tmp);
+	LOG_DEBUG("pre-read addr %" PRIx64 " data %x",(armv8->debug_base + reg), tmp);
 
 	/* clear bitfield */
 	tmp &= ~mask;
@@ -1851,7 +1851,7 @@ int armv8_set_dbgreg_bits(struct armv8_common *armv8, unsigned int reg, unsigned
 	tmp |= value & mask;
 
 	/* write new value */
-	LOG_DEBUG("set_dbgreg_bits addr %llx data %x mask %lx value %lx", (armv8->debug_base + reg), tmp, mask, value);
+	LOG_DEBUG("set_dbgreg_bits addr %" PRIx64 " data %x mask %lx value %lx", (armv8->debug_base + reg), tmp, mask, value);
 	retval = mem_ap_write_atomic_u32(armv8->debug_ap,
 			armv8->debug_base + reg, tmp);
 	return retval;

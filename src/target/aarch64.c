@@ -295,7 +295,7 @@ static int aarch64_check_state_one(struct target *target,
 	uint32_t prsr=0;
 	int retval;
 
-	// LOG_DEBUG("check state one addr %llx", (armv8->debug_base + CPUV8_DBG_PRSR));
+	// LOG_DEBUG("check state one addr %" PRIx64 "", (armv8->debug_base + CPUV8_DBG_PRSR));
 
 	retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 			armv8->debug_base + CPUV8_DBG_PRSR, &prsr);
@@ -677,7 +677,7 @@ static int aarch64_prepare_restart_one(struct target *target)
 		/* clear sticky bits in PRSR, SDR is now 0 */
 		retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 				armv8->debug_base + CPUV8_DBG_PRSR, &tmp);
-		// LOG_DEBUG("mem ap rd addr %llx val %08x", (armv8->debug_base + CPUV8_DBG_PRSR), tmp);		
+		// LOG_DEBUG("mem ap rd addr %" PRIx64 " val %08x", (armv8->debug_base + CPUV8_DBG_PRSR), tmp);		
 
 	}
 
@@ -3084,7 +3084,7 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 // 		}
 
 // 		saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
-// 		LOG_DEBUG("save %s val %llx", reg_params[i].reg_name, saved_regs[r->number]);
+// 		LOG_DEBUG("save %s val %" PRIx64 "", reg_params[i].reg_name, saved_regs[r->number]);
 
 // 		if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
 // 			if (r->type->set(r, reg_params[i].value) != ERROR_OK)
@@ -3117,18 +3117,18 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 // 	if (reg_pc->type->set(reg_pc, buf) != ERROR_OK)
 // 		return ERROR_FAIL;
 
-// 	LOG_DEBUG("restore pc val %llx",saved_pc);
+// 	LOG_DEBUG("restore pc val %" PRIx64 "",saved_pc);
 
 // 	// restore
 // 	for (i = 0; i < num_reg_params; i++) {
 // 		if (reg_params[i].direction != PARAM_OUT) {
 // 			struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-// 			LOG_DEBUG("update reg_parm %s val %llx", reg_params[i].reg_name, buf_get_u64(r->value, 0, r->size));
+// 			LOG_DEBUG("update reg_parm %s val %" PRIx64 "", reg_params[i].reg_name, buf_get_u64(r->value, 0, r->size));
 // 			buf_set_u64(reg_params[i].value, 0, 64, buf_get_u64(r->value, 0, 64));
 // 		}
 // 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
 // 		buf_set_u64(buf, 0, 64, saved_regs[r->number]);
-// 		LOG_DEBUG("restore %s val %llx", r->name, saved_regs[r->number]);
+// 		LOG_DEBUG("restore %s val %" PRIx64 "", r->name, saved_regs[r->number]);
 // 		r->valid = true;
 // 		r->dirty = true;
 // 		// if (r->type->set(r, buf) != ERROR_OK) {
@@ -3238,12 +3238,12 @@ COMMAND_HANDLER(aarch64_ap_rw_command)
 
 		COMMAND_PARSE_NUMBER(uint, CMD_ARGV[2], data);
 		retval = mem_ap_write_atomic_u32(armv8->debug_ap, address, data);
-		LOG_INFO("mem ap wr addr %llx val %x", address, data);		
+		LOG_INFO("mem ap wr addr %" PRIx64 " val %x", address, data);		
 	}
 	else if(strcmp(CMD_ARGV[0], "rd") == 0)
 	{
 		retval = mem_ap_read_atomic_u32(armv8->debug_ap, address, &rd_val);
-		LOG_INFO("mem ap rd addr %llx val %x", address, rd_val);
+		LOG_INFO("mem ap rd addr %" PRIx64 " val %x", address, rd_val);
 		if((address & 0xFFF) == 0x314)
 		{
 			LOG_INFO("CPUV8_DBG_PRSR 0x314 rd val %x", rd_val);
@@ -3288,7 +3288,7 @@ COMMAND_HANDLER(aarch64_dpm_rw)
 	else if(strcmp(CMD_ARGV[0], "rd") == 0)
 	{
 		retval = armv8->read_reg_u64(armv8, regnum, &rd_val);
-		LOG_INFO("dpm rd arm reg %d val %llx", regnum, rd_val);
+		LOG_INFO("dpm rd arm reg %d val %" PRIx64 "", regnum, rd_val);
 	}
 	else
 	{

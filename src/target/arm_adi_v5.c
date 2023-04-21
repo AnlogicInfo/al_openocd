@@ -264,7 +264,7 @@ int mem_ap_read_u32(struct adiv5_ap *ap, target_addr_t address,
 		return retval;	
 	// if((address & 0xFFF)!= 0x314)
 	// {
-	// LOG_DEBUG("mem ap rd addr %llx val %08x", address, *value);
+	// LOG_DEBUG("mem ap rd addr %" PRIx64 " val %08x", address, *value);
 	// }
 	
 	return retval;
@@ -312,7 +312,7 @@ int mem_ap_write_u32(struct adiv5_ap *ap, target_addr_t address,
 	/* Use banked addressing (REG_BDx) to avoid some link traffic
 	 * (updating TAR) when writing several consecutive addresses.
 	 */
-	// LOG_DEBUG("mem ap wr addr %llx val %08x", address, value);
+	// LOG_DEBUG("mem ap wr addr %" PRIx64 " val %08x", address, value);
 
 	retval = mem_ap_setup_transfer(ap,
 			CSW_32BIT | (ap->csw_value & CSW_ADDRINC_MASK),

@@ -856,8 +856,8 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 	}
 	uint64_t data_wa_address = data_wa->address;
 
-	LOG_INFO("work area algorithm address: %llx, data length: %d",(long long unsigned int) algorithm_wa->address, algorithm_wa->size);
-	LOG_INFO("work area data address: %llx, data length: %d", (long long unsigned int) data_wa->address, data_wa->size);
+	LOG_INFO("work area algorithm address: %" PRIx64 ", data length: %d", algorithm_wa->address, algorithm_wa->size);
+	LOG_INFO("work area data address: %" PRIx64 ", data length: %d",  data_wa->address, data_wa->size);
 	if (algorithm_wa)
     {
         if (loader_target == RISCV)
@@ -881,7 +881,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 		
 		while (data_size > 0)
         {
-			LOG_INFO("read page %d buffer adder %llx", page,(long long unsigned int)  data_wa_address);
+			LOG_INFO("read page %d buffer adder %" PRIx64 "", page,  data_wa_address);
 			
 			buf_set_u64(reg_params[0].value, 0, xlen, nand_size->dataBytesPerPage);
 			buf_set_u64(reg_params[1].value, 0, xlen, data_wa_address);
@@ -900,7 +900,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 			}
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
 			if (algorithm_result != 0) {
-			    LOG_DEBUG("Algorithm returned error %llx", (long long unsigned int) algorithm_result);
+			    LOG_DEBUG("Algorithm returned error %" PRIx64 "",  algorithm_result);
 				retval = ERROR_FAIL;
 				goto err;
 			}
@@ -1127,8 +1127,8 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 	}
 	uint64_t data_wa_address = data_wa->address;
 
-	LOG_INFO("work area algorithm address: %llx, data length: %d", (long long unsigned int) algorithm_wa->address, algorithm_wa->size);
-	LOG_INFO("work area data address: %llx, data length: %d", data_wa->address, data_wa->size);
+	LOG_INFO("work area algorithm address: %" PRIx64 ", data length: %d",  algorithm_wa->address, algorithm_wa->size);
+	LOG_INFO("work area data address: %" PRIx64 ", data length: %d", data_wa->address, data_wa->size);
 	if (algorithm_wa)
     {
         if (loader_target == RISCV)
@@ -1154,7 +1154,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 
 		while (data_size > 0)
         {
-			LOG_INFO("write page %d buffer adder %llx", page, (long long unsigned int) data_wa_address);
+			LOG_INFO("write page %d buffer adder %" PRIx64 "", page,  data_wa_address);
 			
 			retval = target_write_buffer(target, data_wa->address, count, data);
 			if (retval != ERROR_OK) {
@@ -1182,7 +1182,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
 			if (algorithm_result != 0) {
-			    LOG_DEBUG("Algorithm returned error %llx",(long long unsigned int) algorithm_result);
+			    LOG_DEBUG("Algorithm returned error %" PRIx64 "", algorithm_result);
 				retval = ERROR_FAIL;
 				goto err;
 			}
@@ -1343,7 +1343,7 @@ int smc35x_write_page_re(struct nand_device *nand, uint32_t page, uint8_t *data,
 			LOG_ERROR("error executing smc35x flash write algorithm");
 			uint64_t algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
 			if (algorithm_result != ERROR_OK) {
-				LOG_ERROR("algorithm returned error %lld", (long long unsigned int) algorithm_result);
+				LOG_ERROR("algorithm returned error %" PRIx64,  algorithm_result);
 			}
 		}
 		if (retval == ERROR_OK)

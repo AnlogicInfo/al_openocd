@@ -140,10 +140,10 @@ static int target_set_wa(struct target_emmc_loader *loader, uint8_t *data, targe
     buf_set_u64(loader->reg_params[3].value, 0, loader->xlen, loader->data_size);
 
 
-    // LOG_INFO("target set reg parm ctrl base %llx",*(uint64_t *) loader->reg_params[0].value);
-    // LOG_INFO("target set reg parm addr %llx", *(uint64_t *) loader->reg_params[1].value);
-    // LOG_INFO("target set reg parm buf base %llx", *(uint64_t *) loader->reg_params[2].value);
-    // LOG_INFO("target set reg parm size %llx", *(uint64_t *) loader->reg_params[3].value);
+    // LOG_INFO("target set reg parm ctrl base %" PRIx64 "",*(uint64_t *) loader->reg_params[0].value);
+    // LOG_INFO("target set reg parm addr %" PRIx64 "", *(uint64_t *) loader->reg_params[1].value);
+    // LOG_INFO("target set reg parm buf base %" PRIx64 "", *(uint64_t *) loader->reg_params[2].value);
+    // LOG_INFO("target set reg parm size %" PRIx64 "", *(uint64_t *) loader->reg_params[3].value);
 
     return ERROR_OK;
 }
@@ -196,8 +196,8 @@ static int target_set_wa_async(struct target_emmc_loader *loader, uint32_t block
     LOG_DEBUG("target set reg parm ctrl base " TARGET_ADDR_FMT ,loader->ctrl_base);
     LOG_DEBUG("target set reg parm img block cnt %x" , loader->image_block_cnt);
     LOG_DEBUG("target set reg parm buf start %x", loader->buf_start);
-    LOG_DEBUG("target set reg parm buf end %llx", fifo_end);
-    LOG_DEBUG("target set reg parm addr %llx", addr);
+    LOG_DEBUG("target set reg parm buf end %" PRIx64 "", fifo_end);
+    LOG_DEBUG("target set reg parm addr %" PRIx64 "", addr);
     return ERROR_OK;
 }
 

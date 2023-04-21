@@ -1077,7 +1077,7 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		retval = target_write_buffer(trans_target, fifo->wp, thisrun_bytes, buffer);
 		// now = timeval_ms();
 		// used_time = now - start;
-		// LOG_INFO("async trans cnt %x used time %llx", thisrun_block_cnt, used_time);
+		// LOG_INFO("async trans cnt %x used time %" PRIx64 "", thisrun_block_cnt, used_time);
 
 		if (retval != ERROR_OK)
 			break;

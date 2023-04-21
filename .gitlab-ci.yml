@@ -1,15 +1,53 @@
+# This file is a template, and might need editing before it works on your project.
+# To contribute improvements to CI/CD templates, please follow the Development guide at:
+# https://docs.gitlab.com/ee/development/cicd/templates.html
+# This specific template is located at:
+# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Getting-Started.gitlab-ci.yml
 
-buildlin-job:
+# This is a sample GitLab CI/CD configuration file that should run without any modifications.
+# It demonstrates a basic 3 stage CI/CD pipeline. Instead of real tests or scripts,
+# it uses echo commands to simulate the pipeline execution.
+#
+# A pipeline is composed of independent jobs that run scripts, grouped into stages.
+# Stages run in sequential order, but jobs within stages run in parallel.
+#
+# For more information, see: https://docs.gitlab.com/ee/ci/yaml/index.html#stages
+
+stages:          # List of stages for jobs, and their order of execution
+  - build
+  - test
+  - deploy
+  - release
+
+
+buildlin-job:       # This job runs in the build stage, which runs first.
   stage: build
+  artifacts:
+    paths:
+      - binary-linux64
+    expire_in: 30 days
   script:
     - make distclean || true
+    - make distclean -C src/jtag/drivers/libjaylink || true
     - ./bootstrap
-    - ./configure --prefix=${PWD}/../openocd_lin --enable-ftdi --enable-ftdi-oscan1 
+    - rm -rf binary-linux64
+    - rm -rf build-linux64
+    - mkdir build-linux64
+    - cd build-linux64
+    - ../configure --prefix=${PWD}/../binary-linux64 --enable-ftdi --enable-ftdi-oscan1
     - make -j4
     - make install
+    - cd ../binary-linux64
+    - tar -jcf openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2 *
+    - echo ${CI_JOB_ID} | tee lin64_jobid.log
+    - cd ..
 
 buildwin-job:
   stage: build
+  artifacts:
+    paths:
+      - binary-win64
+    expire_in: 30 days
   script:
     - export OCDLIB_DIR=/home/ocdlib
     - export VER_LIBUSB="1.0.25"
@@ -19,25 +57,64 @@ buildwin-job:
     - export libusb_CFLAGS="$LIBUSB1_CFLAGS"
     - export libusb_LIBS="$LIBUSB1_LIBS"
     - make distclean || true
+    - rm -rf binary-win64
+    - rm -rf build-win64
     - ./bootstrap
+    - make distclean -C src/jtag/drivers/libjaylink || true
     - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
     - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
-    - ./configure --prefix=${PWD}/../openocd_win --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
+    - mkdir build-win64
+    - cd build-win64
+    - ../configure --prefix=${PWD}/../binary-win64 --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1  --enable-ftd2xx
     - make -j4
     - make install
+    - cd ../binary-win64
+    - echo 'Copying dynamic libraries'
+    - find $OCDLIB_DIR/libyaml_0_2_2/bin -name '*.dll' -exec cp -v {} ${PWD}/bin \;
+    - find $OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -name '*.dll' -exec cp -v {} ${PWD}/bin \;
+    - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
+    - find 
+    - echo 'Packing...'
+    - 7z a openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip *
+    - echo ${CI_JOB_ID} | tee win64_jobid.log
+    - cd ..
 
-test-job1:
-  stage: test
+test-job1:   # This job runs in the test stage.
+  stage: test    # It only starts when the job in the build stage completes successfully.
   script:
     - sleep 1
 
-test-job2:
+test-job2:   # This job also runs in the test stage.
   stage: test
   script:
     - sleep 20
 
-deploy-prod:
-  stage: deploy
+deploy-job:      # This job runs in the deploy stage.
+  stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
   script:
     - echo "This job deploys something from the $CI_COMMIT_BRANCH branch."
   environment: production
+
+release_ci:
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG                 # Run this job when a tag is created
+  script:
+    - echo "running release_ci"
+  needs:
+    - job: buildwin-job
+      artifacts: true
+    - job: buildlin-job
+      artifacts: true
+  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
+    tag_name: '$CI_COMMIT_TAG'
+    description: '$CI_COMMIT_TAG'
+    name: 'Automatically generated release binary package'
+    assets:
+      links:
+        - name: 'Windows 64-bit executable'
+          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-win64/win64_jobid.log`/artifacts/raw/binary-win64/openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip'
+        - name: 'Linux 64-bit executable'
+          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-linux64/lin64_jobid.log`/artifacts/raw/binary-linux64/openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2'
+
+ 

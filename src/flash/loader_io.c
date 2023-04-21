@@ -210,8 +210,8 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
     // LOG_DEBUG("target set %s block size %x" , loader->reg_params[1].reg_name, loader->block_size);
     // LOG_DEBUG("target set %s img block cnt %x" , loader->reg_params[2].reg_name, loader->image_size);
     // LOG_DEBUG("target set %s buf start %x", loader->reg_params[3].reg_name, loader->buf_start);
-    // LOG_DEBUG("target set %s buf end %llx", loader->reg_params[4].reg_name, buf_end);
-    // LOG_DEBUG("target set %s addr %llx", loader->reg_params[5].reg_name, addr);
+    // LOG_DEBUG("target set %s buf end %" PRIx64 "", loader->reg_params[4].reg_name, buf_end);
+    // LOG_DEBUG("target set %s addr %" PRIx64 "", loader->reg_params[5].reg_name, addr);
 
     return ERROR_OK;
 }
