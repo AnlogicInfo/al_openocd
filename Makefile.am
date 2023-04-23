@@ -31,13 +31,15 @@ DIST_SUBDIRS += jimtcl
 endif
 
 # common flags used in openocd build
-AM_CFLAGS = $(GCC_WARNINGS)
+AM_CFLAGS = $(GCC_WARNINGS)\
+			  -DFD_SETSIZE=128
 
 AM_CPPFLAGS = $(HOST_CPPFLAGS)\
 			  -I$(top_srcdir)/src \
 			  -I$(top_builddir)/src \
 			  -DPKGDATADIR=\"$(pkgdatadir)\" \
-			  -DBINDIR=\"$(bindir)\"
+			  -DBINDIR=\"$(bindir)\"\
+			  -DFD_SETSIZE=128
 
 if INTERNAL_JIMTCL
 AM_CPPFLAGS += -I$(top_srcdir)/jimtcl \
@@ -125,6 +127,15 @@ uninstall-hook:
 distclean-local:
 	rm -rf Doxyfile doxygen
 	rm -f $(srcdir)/jimtcl/configure.gnu
+
+# We want every change to have Signed-off-by. This is tricky to enforce in
+# Travis, because it automatically makes temporary commits when merging. So
+# instead we have a hook that enforces this in each workspace. To make sure
+# that users actually use those hooks, we point git at them here.
+# If git fails for some reason, that's OK. It's probably because somebody is
+# building the source completely outside a git repo.
+all-local:
+	cd $(srcdir) && git config core.hooksPath ./git-hooks || true
 
 DISTCLEANFILES = doxygen.log
 

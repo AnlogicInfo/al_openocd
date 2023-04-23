@@ -132,9 +132,6 @@ static int emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 		LOG_ERROR("unknown EMMC device, cid: %" PRIx64 " mrf_id: %x", prd_name, mrf_id);
 		return ERROR_FAIL;
 	}
-	else{
-		LOG_INFO("found %s", emmc->device->name);
-	}
 
 	return ERROR_OK;
 }

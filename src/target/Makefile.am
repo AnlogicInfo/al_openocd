@@ -21,6 +21,7 @@ noinst_LTLIBRARIES += %D%/libtarget.la
 	$(INTEL_IA32_SRC) \
 	$(ESIRISC_SRC) \
         $(ARC_SRC) \
+	$(VEXRISCV_SRC) \
 	%D%/avrt.c \
 	%D%/dsp563xx.c \
 	%D%/dsp563xx_once.c \
@@ -45,6 +46,9 @@ TARGET_CORE_SRC = \
 	%D%/semihosting_common.c \
 	%D%/smp.c \
 	%D%/rtt.c
+
+VEXRISCV_SRC = \
+	%D%/vexriscv.c
 
 ARMV4_5_SRC = \
 	%D%/armv4_5.c \

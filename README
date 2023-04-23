@@ -1,3 +1,46 @@
+In very short, VexRiscv
+===================
+
+Dependencies on Ubuntu 14:
+
+```sh
+sudo apt-get install libtool automake libusb-1.0.0-dev texinfo libusb-dev libyaml-dev pkg-config
+```
+
+Build :
+
+```sh
+./bootstrap
+./configure --enable-ftdi --enable-dummy
+make
+#sudo make install
+```
+
+Added configuration files :
+- tcl/target/briey.cfg
+- tcl/target/vexriscv_sim.cfg
+- tcl/interface/jtag_tcp.cfg
+- tcl/interface/jtag/ft2232h_breakout.cfg
+
+
+Examples of usage :
+- sudo src/openocd -f tcl/interface/ftdi/ft2232h_breakout.cfg -c 'set BRIEY_CPU0_YAML ../VexRiscv/cpu0.yaml' -f tcl/target/briey.cfg
+- sudo src/openocd -f tcl/interface/ftdi/ft2232h_breakout.cfg -c 'set MURAX_CPU0_YAML ../VexRiscv/cpu0.yaml' -f tcl/target/murax.cfg
+- src/openocd -f tcl/interface/jtag_tcp.cfg -c 'set BRIEY_CPU0_YAML ../VexRiscv/cpu0.yaml' -f tcl/target/briey.cfg
+- src/openocd -f tcl/interface/jtag_tcp.cfg -c 'set MURAX_CPU0_YAML ../VexRiscv/cpu0.yaml' -f tcl/target/murax.cfg
+- src/openocd -c 'set VEXRISCV_YAML ../VexRiscv/cpu0.yaml' -f tcl/target/vexriscv_sim.cfg
+
+Example of RISC-V GDB usage :
+
+riscv32-unknown-elf-gdb myExecutable.elf
+target remote localhost:3333
+set remotetimeout 60
+set arch riscv:rv32
+monitor reset halt
+load
+continue
+
+
 Welcome to OpenOCD!
 ===================
 

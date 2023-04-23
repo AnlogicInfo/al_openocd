@@ -45,6 +45,7 @@ extern const struct flash_driver fm3_flash;
 extern const struct flash_driver fm4_flash;
 extern const struct flash_driver fespi_flash;
 extern const struct flash_driver dwcssi_flash;
+extern const struct flash_driver gd32vf103_flash;//TODO DID they just replace this with DWCSSI?
 extern const struct flash_driver jtagspi_flash;
 extern const struct flash_driver kinetis_flash;
 extern const struct flash_driver kinetis_ke_flash;
@@ -85,6 +86,7 @@ extern const struct flash_driver str9x_flash;
 extern const struct flash_driver str9xpec_flash;
 extern const struct flash_driver swm050_flash;
 extern const struct flash_driver tms470_flash;
+extern const struct flash_driver vexriscv_nor_spi;
 extern const struct flash_driver virtual_flash;
 extern const struct flash_driver w600_flash;
 extern const struct flash_driver xcf_flash;
@@ -121,10 +123,12 @@ static const struct flash_driver * const flash_drivers[] = {
 	&fm4_flash,
 	&fespi_flash,
 	&dwcssi_flash,
+	&gd32vf103_flash,//TODO DID they just replace this with DWCSSI?
 	&jtagspi_flash,
 	&kinetis_flash,
 	&kinetis_ke_flash,
 	&lpc2000_flash,
+	&vexriscv_nor_spi,
 	&lpc288x_flash,
 	&lpc2900_flash,
 	&lpcspifi_flash,

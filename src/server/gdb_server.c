@@ -435,6 +435,8 @@ static int gdb_put_packet_inner(struct connection *connection,
 	 * At this point we should have nothing in the input queue from GDB,
 	 * however sometimes '-' is sent even though we've already received
 	 * an ACK (+) for everything we've sent off.
+	 *
+	 * This code appears to sometimes eat a ^C coming from gdb.
 	 */
 	int gotdata;
 	for (;; ) {
@@ -453,7 +455,7 @@ static int gdb_put_packet_inner(struct connection *connection,
 			break;
 		}
 
-		LOG_WARNING("Discard unexpected char %c", reply);
+		LOG_DEBUG("Discard unexpected char %c", reply);
 	}
 #endif
 
@@ -801,9 +803,12 @@ static void gdb_signal_reply(struct target *target, struct connection *connectio
 		sig_reply_len = snprintf(sig_reply, sizeof(sig_reply), "W00");
 	} else {
 		struct target *ct;
-		if (target->rtos) {
-			target->rtos->current_threadid = target->rtos->current_thread;
-			target->rtos->gdb_target_for_threadid(connection, target->rtos->current_threadid, &ct);
+		struct rtos *rtos;
+
+		rtos = rtos_of_target(target);
+		if (rtos) {
+			rtos->current_threadid = rtos->current_thread;
+			rtos->gdb_target_for_threadid(connection, rtos->current_threadid, &ct);
 		} else {
 			ct = target;
 		}
@@ -840,9 +845,9 @@ static void gdb_signal_reply(struct target *target, struct connection *connectio
 		}
 
 		current_thread[0] = '\0';
-		if (target->rtos)
+		if (rtos)
 			snprintf(current_thread, sizeof(current_thread), "thread:%" PRIx64 ";",
-					target->rtos->current_thread);
+					rtos->current_thread);
 
 		sig_reply_len = snprintf(sig_reply, sizeof(sig_reply), "T%2.2x%s%s",
 				signal_var, stop_reason, current_thread);
@@ -1506,7 +1511,7 @@ static int gdb_read_memory_packet(struct connection *connection,
 	uint8_t *buffer;
 	char *hex_buffer;
 
-	int retval = ERROR_OK;
+	int retval;
 
 	/* skip command character */
 	packet++;
@@ -2611,6 +2616,7 @@ static int gdb_target_description_supported(struct target *target, int *supporte
 			&reg_list_size, REG_CLASS_ALL);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("get register list failed");
+		reg_list = NULL;
 		goto error;
 	}
 
@@ -2750,10 +2756,12 @@ static int gdb_query_packet(struct connection *connection,
 
 	if (strncmp(packet, "qRcmd,", 6) == 0) {
 		if (packet_size > 6) {
+			Jim_Interp *interp = cmd_ctx->interp;
 			char *cmd;
 			cmd = malloc((packet_size - 6) / 2 + 1);
 			size_t len = unhexify((uint8_t *)cmd, packet + 6, (packet_size - 6) / 2);
 			cmd[len] = 0;
+			LOG_DEBUG("qRcmd: %s", cmd);
 
 			/* We want to print all debug output to GDB connection */
 			gdb_connection->output_flag = GDB_OUTPUT_ALL;
@@ -2761,11 +2769,63 @@ static int gdb_query_packet(struct connection *connection,
 			/* some commands need to know the GDB connection, make note of current
 			 * GDB connection. */
 			current_gdb_connection = gdb_connection;
-			command_run_line(cmd_ctx, cmd);
+
+			struct target *saved_target_override = cmd_ctx->current_target_override;
+			cmd_ctx->current_target_override = NULL;
+
+			struct command_context *old_context = Jim_GetAssocData(interp, "context");
+			Jim_DeleteAssocData(interp, "context");
+			int retval = Jim_SetAssocData(interp, "context", NULL, cmd_ctx);
+			if (retval == JIM_OK) {
+				retval = Jim_EvalObj(interp, Jim_NewStringObj(interp, cmd, -1));
+				Jim_DeleteAssocData(interp, "context");
+			}
+			int inner_retval = Jim_SetAssocData(interp, "context", NULL, old_context);
+			if (retval == JIM_OK)
+				retval = inner_retval;
+
+			cmd_ctx->current_target_override = saved_target_override;
+
 			current_gdb_connection = NULL;
 			target_call_timer_callbacks_now();
 			gdb_connection->output_flag = GDB_OUTPUT_NO;
 			free(cmd);
+			if (retval == JIM_RETURN)
+				retval = interp->returnCode;
+			int lenmsg;
+			const char *cretmsg = Jim_GetString(Jim_GetResult(interp), &lenmsg);
+			char *retmsg;
+			if (lenmsg && cretmsg[lenmsg - 1] != '\n') {
+				retmsg = alloc_printf("%s\n", cretmsg);
+				lenmsg++;
+			} else {
+				retmsg = strdup(cretmsg);
+			}
+			if (!retmsg)
+				return ERROR_GDB_BUFFER_TOO_SMALL;
+
+			if (retval == JIM_OK) {
+				if (lenmsg) {
+					char *hex_buffer = malloc(lenmsg * 2 + 1);
+					if (!hex_buffer) {
+						free(retmsg);
+						return ERROR_GDB_BUFFER_TOO_SMALL;
+					}
+
+					size_t pkt_len = hexify(hex_buffer, (const uint8_t *)retmsg, lenmsg,
+											lenmsg * 2 + 1);
+					gdb_put_packet(connection, hex_buffer, pkt_len);
+					free(hex_buffer);
+				} else {
+					gdb_put_packet(connection, "OK", 2);
+				}
+			} else {
+				if (lenmsg)
+					gdb_output_con(connection, retmsg);
+				gdb_send_error(connection, retval);
+			}
+			free(retmsg);
+			return ERROR_OK;
 		}
 		gdb_put_packet(connection, "OK", 2);
 		return ERROR_OK;
@@ -2990,7 +3050,23 @@ static bool gdb_handle_vcont_packet(struct connection *connection, const char *p
 
 			if (target->rtos) {
 				/* FIXME: why is this necessary? rtos state should be up-to-date here already! */
-				rtos_update_threads(target);
+
+				/* Sometimes this results in picking a different thread than
+				 * gdb just requested to step. Then we fake it, and now there's
+				 * a different thread selected than gdb expects, so register
+				 * accesses go to the wrong one!
+				 * E.g.:
+				 * Hg1$
+				 * P8=72101ce197869329$		# write r8 on thread 1
+				 * g$
+				 * vCont?$
+				 * vCont;s:1;c$				# rtos_update_threads changes to other thread
+				 * g$
+				 * qXfer:threads:read::0,fff$
+				 * P8=cc060607eb89ca7f$		# write r8 on other thread
+				 * g$
+				 * */
+				/* rtos_update_threads(target); */
 
 				target->rtos->gdb_target_for_threadid(connection, thread_id, &ct);
 
@@ -2998,8 +3074,7 @@ static bool gdb_handle_vcont_packet(struct connection *connection, const char *p
 				 * check if the thread to be stepped is the current rtos thread
 				 * if not, we must fake the step
 				 */
-				if (target->rtos->current_thread != thread_id)
-					fake_step = true;
+				fake_step = rtos_needs_fake_step(target, thread_id);
 			}
 
 			if (parse[0] == ';') {
@@ -3037,19 +3112,15 @@ static bool gdb_handle_vcont_packet(struct connection *connection, const char *p
 			gdb_connection->output_flag = GDB_OUTPUT_ALL;
 			target_call_event_callbacks(ct, TARGET_EVENT_GDB_START);
 
-			/*
-			 * work around an annoying gdb behaviour: when the current thread
-			 * is changed in gdb, it assumes that the target can follow and also
-			 * make the thread current. This is an assumption that cannot hold
-			 * for a real target running a multi-threading OS. We just fake
-			 * the step to not trigger an internal error in gdb. See
-			 * https://sourceware.org/bugzilla/show_bug.cgi?id=22925 for details
-			 */
 			if (fake_step) {
+				/* We just fake the step to not trigger an internal error in
+				 * gdb. See https://sourceware.org/bugzilla/show_bug.cgi?id=22925
+				 * for details. */
 				int sig_reply_len;
 				char sig_reply[128];
 
 				LOG_DEBUG("fake step thread %"PRIx64, thread_id);
+				target->rtos->current_threadid = thread_id;
 
 				sig_reply_len = snprintf(sig_reply, sizeof(sig_reply),
 										 "T05thread:%016"PRIx64";", thread_id);
@@ -4043,6 +4114,12 @@ int gdb_register_commands(struct command_context *cmd_ctx)
 	gdb_port = strdup("3333");
 	gdb_port_next = strdup("3333");
 	return register_commands(cmd_ctx, NULL, gdb_command_handlers);
+}
+
+void gdb_set_frontend_state_running(struct connection *connection)
+{
+	struct gdb_connection *gdb_con = connection->priv;
+	gdb_con->frontend_state = TARGET_RUNNING;
 }
 
 void gdb_service_free(void)

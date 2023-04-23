@@ -134,7 +134,7 @@ COMMAND_HANDLER(handle_emmc_read_block_command)
 	retval = emmc_read_data_block(emmc, (uint32_t*) buffer, address);
 
 	if(retval == ERROR_OK)
-		target_handle_md_output(CMD, target, address, 1, byte_cnt, (uint8_t*) buffer);
+		target_handle_md_output(CMD, target, address, 1, byte_cnt, (uint8_t*) buffer,false);
 
 fail:
 	free(buffer);

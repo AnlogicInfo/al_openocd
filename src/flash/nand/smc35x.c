@@ -1382,6 +1382,8 @@ int smc35x_write_page_sync(struct nand_device *nand, uint32_t page, uint8_t *dat
 
 		while (data_size > 0)
         {
+			LOG_INFO("write page %d buffer adder %" PRIx64 "", page,  data_wa_address);
+			
 			retval = target_write_buffer(target, data_wa->address, count, data);
 			if (retval != ERROR_OK) {
 				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",

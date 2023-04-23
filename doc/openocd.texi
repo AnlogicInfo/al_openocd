@@ -2582,6 +2582,35 @@ minimal impact on the target system. Avoid floating inputs, conflicting outputs
 and initially asserted reset signals.
 @end deffn
 
+@deffn {Command} {ftdi oscan1_mode} on|off
+Enable or disable OScan1 mode. This mode is intended for use with an adapter,
+such as the ARM-JTAG-SWD by Olimex, that sits in between the FTDI chip and the
+target. The cJTAG prococol is composed of two wires: TCKC (clock) and TMSC (data).
+TMSC is a bidirectional signal which is time-multiplexed alternating TDI, TMS and
+TDO. The multiplexing is achieved by a tri-state buffer which puts TMSC in Hi-Z
+when the device is supposed to take the control of the line (TDO phase).
+
+The ARM-JTAG-SWD adapter uses standard TRST and TMS signals to control TMSC
+direction. TRST is used by the adapter as selector for the multiplexers which set
+the JTAG probe in 2-wire mode. Whatever signal is used for this purpose, it must
+be defined with the name JTAG_SEL using @command{ftdi layout_signal}. JTAG_SEL is
+set to 0 during OScan1 initialization.
+
+Some JTAG probes like the Digilent JTAG-HS2, support cJTAG by using a
+separate pin to control when TMS is driven onto TMSC. You can use such
+probes by defining the signal TMSC_EN using
+@command{ftdi layout_signal TMSC_EN -data <mask>}.
+@end deffn
+
+@deffn {Command} {ftdi jscan3_mode} on|off
+Enable or disable JScan3 mode. This mode uses the classic 4-wire JTAG protocol
+in chips whose JTAG port is only compliant with the cJTAG standard (IEEE 1149.7).
+
+Since cJTAG needs a 2-wire escape sequence to select the operating mode,
+a cJTAG adapter like ARM-JTAG-SWD by Olimex is still required. This means
+that a cJTAG probe configuration script must be used too.
+@end deffn
+
 @deffn {Command} {ftdi layout_signal} name [@option{-data}|@option{-ndata} data_mask] [@option{-input}|@option{-ninput} input_mask] [@option{-oe}|@option{-noe} oe_mask] [@option{-alias}|@option{-nalias} name]
 Creates a signal with the specified @var{name}, controlled by one or more FTDI
 GPIO pins via a range of possible buffer connections. The masks are FTDI GPIO
@@ -4714,6 +4743,8 @@ compact Thumb2 instruction set. Supports also ARMv6-M and ARMv8-M cores
 @item @code{dsp5680xx} -- implements Freescale's 5680x DSP.
 @item @code{esirisc} -- this is an EnSilica eSi-RISC core.
 The current implementation supports eSi-32xx cores.
+@item @code{esp32c2} -- this is an Espressif SoC with single RISC-V core.
+@item @code{esp32c3} -- this is an Espressif SoC with single RISC-V core.
 @item @code{fa526} -- resembles arm920 (w/o Thumb).
 @item @code{feroceon} -- resembles arm926.
 @item @code{hla_target} -- a Cortex-M alternative to work with HL adapters like ST-Link.
@@ -4728,9 +4759,9 @@ specified, @xref{gdbportoverride,,option -gdb-port}.), and a fake ARM core will
 be emulated to comply to GDB remote protocol.
 @item @code{mips_m4k} -- a MIPS core.
 @item @code{mips_mips64} -- a MIPS64 core.
-@item @code{nds32_v2} -- this is an Andes NDS32 v2 core.
-@item @code{nds32_v3} -- this is an Andes NDS32 v3 core.
-@item @code{nds32_v3m} -- this is an Andes NDS32 v3m core.
+@item @code{nds32_v2} -- this is an Andes NDS32 v2 core (deprecated; would be removed in v0.13.0).
+@item @code{nds32_v3} -- this is an Andes NDS32 v3 core (deprecated; would be removed in v0.13.0).
+@item @code{nds32_v3m} -- this is an Andes NDS32 v3m core (deprecated; would be removed in v0.13.0).
 @item @code{or1k} -- this is an OpenRISC 1000 core.
 The current implementation supports three JTAG TAP cores:
 @itemize @minus
@@ -7293,6 +7324,7 @@ applied to all of them.
 All members of the STM32F0, STM32F1 and STM32F3 microcontroller families
 from STMicroelectronics and all members of the GD32F1x0, GD32F3x0 and GD32E23x microcontroller
 families from GigaDevice include internal flash and use ARM Cortex-M0/M3/M4/M23 cores.
+The driver also works with GD32VF103 powered by RISC-V core.
 The driver automatically recognizes a number of these chips using
 the chip identification register, and autoconfigures itself.
 
@@ -10466,6 +10498,13 @@ follows:
 
 @subsection RISC-V Debug Configuration Commands
 
+@deffn {Command} {riscv dump_sample_buf} [base64]
+Dump and clear the contents of the sample buffer. Which samples are collected
+is configured with @code{riscv memory_sample}. If the optional base64
+argument is passed, the raw buffer is dumped in base64 format, so that
+external tools can gather the data efficiently.
+@end deffn
+
 @deffn {Config Command} {riscv expose_csrs} n[-m|=name] [...]
 Configure which CSRs to expose in addition to the standard ones. The CSRs to expose
 can be specified as individual register numbers or register ranges (inclusive). For the
@@ -10512,6 +10551,22 @@ $_TARGETNAME expose_custom 16-24
 # user-defined name "custom_myregister":
 $_TARGETNAME expose_custom 32=myregister
 @end example
+@end deffn
+
+@deffn {Command} {riscv memory_sample} bucket address|clear [size=4]
+Configure OpenOCD to frequently read size bytes at the given addresses.
+Execute the command with no arguments to see the current configuration. Use
+clear to stop using a given bucket.
+
+OpenOCD will allocate a 1MB sample buffer, and when it fills up no more
+samples will be collected until it is emptied with @code{riscv
+dump_sample_buf}.
+@end deffn
+
+@deffn {Command} {riscv repeat_read} count address [size=4]
+Quickly read count words of the given size from address. This can be useful
+to read out a buffer that's memory-mapped to be accessed through a single
+address, or to sample a changing value in a memory-mapped device.
 @end deffn
 
 @deffn {Command} {riscv set_command_timeout_sec} [seconds]
@@ -10582,8 +10637,35 @@ and DBUS registers, respectively.
 @end deffn
 
 @deffn {Command} {riscv use_bscan_tunnel} value
-Enable or disable use of a BSCAN tunnel to reach DM.  Supply the width of
-the DM transport TAP's instruction register to enable.  Supply a value of 0 to disable.
+Enable or disable use of a BSCAN tunnel to reach the Debug Module. Supply the
+width of the DM transport TAP's instruction register to enable. Supply a
+value of 0 to disable.
+
+This BSCAN tunnel interface is specific to SiFive IP. Anybody may implement
+it, but currently there is no good documentation on it. In a nutshell, this
+feature scans USER4 into a Xilinx TAP to select the tunnel device (assuming
+hardware is present and it is hooked up to the Xilinx USER4 IR) and
+encapsulates a tunneled scan directive into a DR scan into the Xilinx TAP. A
+tunneled DR scan consists of:
+@enumerate
+@item 1 bit that selects IR when 0, or DR when 1
+@item 7 bits that encode the width of the desired tunneled scan
+@item A width+1 stream of bits for the tunneled TDI. The plus one is because there is a one-clock skew between TDI of Xilinx chain and TDO from tunneled chain.
+@item 3 bits of zero that the tunnel uses to go back to idle state.
+@end enumerate
+
+@end deffn
+
+@deffn {Command} {riscv set_bscan_tunnel_ir} value
+Allows the use_bscan_tunnel feature to target non Xilinx device by
+specifying the JTAG TAP IR used to access the bscan tunnel.
+@end deffn
+
+@deffn {Command} {riscv set_maskisr} [@option{off}|@option{steponly}]
+Selects whether interrupts will be disabled when single stepping. The default configuration is @option{off}.
+This feature is only useful on hardware that always steps into interrupts and doesn't support dcsr.stepie=0.
+Keep in mind, disabling the option does not guarantee that single stepping will go into interrupt handlers.
+To make that happen, dcsr.stepie would have to be written to 1 as well.
 @end deffn
 
 @deffn {Command} {riscv set_ebreakm} on|off
@@ -10611,12 +10693,14 @@ set challenge [riscv authdata_read]
 riscv authdata_write [expr @{$challenge + 1@}]
 @end example
 
-@deffn {Command} {riscv authdata_read}
-Return the 32-bit value read from authdata.
+@deffn {Command} {riscv authdata_read} [index=0]
+Return the 32-bit value read from authdata or authdata0 (index=0), or
+authdata1 (index=1).
 @end deffn
 
-@deffn {Command} {riscv authdata_write} value
-Write the 32-bit value to authdata.
+@deffn {Command} {riscv authdata_write} [index=0] value
+Write the 32-bit value to authdata or authdata0 (index=0), or authdata1
+(index=1).
 @end deffn
 
 @subsection RISC-V DMI Commands
