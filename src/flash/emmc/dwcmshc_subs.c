@@ -221,7 +221,6 @@ static int dwcmshc_emmc_poll_int(struct emmc_device *emmc, uint8_t flag_offset, 
     uint16_t clear_reg = 0;
     uint8_t done_flag = 0;
 
-
     while(1)
     {
         target_read_u16(target, dwcmshc_emmc->ctrl_base + OFFSET_NORMAL_INT_STAT_R, &normal_int_stat.d16);
@@ -374,6 +373,7 @@ int dwcmshc_emmc_cmd_reset(struct emmc_device *emmc, uint32_t argument)
 static int dwcmshc_emmc_cmd_setop(struct emmc_device *emmc)
 {
     struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    int status = ERROR_OK;
     dwcmshc_cmd_pkt_t* cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
     OCR_R oc;
     int64_t start= timeval_ms();
@@ -394,7 +394,9 @@ static int dwcmshc_emmc_cmd_setop(struct emmc_device *emmc)
 
     while(1)
     {
-        dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+        status = dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+        if(status != ERROR_OK)
+            break;
         if(cmd_pkt->resp_buf[0] >> 31)
             break;
         int64_t now = timeval_ms();
@@ -402,7 +404,7 @@ static int dwcmshc_emmc_cmd_setop(struct emmc_device *emmc)
             return ERROR_TIMEOUT_REACHED;
     }
 
-    return ERROR_OK;
+    return status;
 }
 
 static int dwcmshc_emmc_cmd_ra(struct emmc_device *emmc)
@@ -638,7 +640,9 @@ int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* buf)
     int status = ERROR_OK;
 
     // LOG_INFO("card reset");
-    dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
+    status = dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
+    if(status != ERROR_OK)
+        return ERROR_FAIL;
 
     // LOG_INFO("card setop");
     status = dwcmshc_emmc_cmd_setop(emmc);

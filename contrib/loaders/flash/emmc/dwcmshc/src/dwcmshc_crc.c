@@ -92,6 +92,7 @@ int emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, in
         count -= cur_count;
         block_addr += 1;
     }
+
     return crc;
 
 }

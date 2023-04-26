@@ -95,6 +95,8 @@ $(IMAGE).inc: $(IMAGE).bin
 
 image: $(IMAGE).inc
 	rm -rf $(DST_DIR)
+	rm $(WORK_DIR)/build/*.elf
+	rm $(WORK_DIR)/build/*.bin
 
 clean:
 	rm -rf $(WORK_DIR)/build

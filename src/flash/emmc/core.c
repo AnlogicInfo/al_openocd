@@ -172,7 +172,7 @@ int emmc_probe(struct emmc_device *emmc)
 		LOG_ERROR("unknown EMMC flash device found");
 		return ERROR_EMMC_OPERATION_FAILED;
 	}
-    // LOG_INFO("found %s", emmc->device->name);
+    LOG_INFO("found %s", emmc->device->name);
 	free(in_field);
     return status;
 }
