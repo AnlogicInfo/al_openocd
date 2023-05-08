@@ -25,7 +25,7 @@ buildlin-job:       # This job runs in the build stage, which runs first.
   artifacts:
     paths:
       - binary-linux64
-    expire_in: 30 days
+    # expire_in: 30 days
   script:
     - make distclean || true
     - make distclean -C src/jtag/drivers/libjaylink || true
@@ -38,7 +38,7 @@ buildlin-job:       # This job runs in the build stage, which runs first.
     - make -j4
     - make install
     - cd ../binary-linux64
-    - tar -jcf openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2 *
+    - tar -jcf openocd_linux64.tar.bz2 *
     - echo ${CI_JOB_ID} | tee lin64_jobid.log
     - cd ..
 
@@ -47,7 +47,7 @@ buildwin-job:
   artifacts:
     paths:
       - binary-win64
-    expire_in: 30 days
+    # expire_in: 30 days
   script:
     - export OCDLIB_DIR=/home/ocdlib
     - export VER_LIBUSB="1.0.25"
@@ -75,7 +75,7 @@ buildwin-job:
     - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - find 
     - echo 'Packing...'
-    - 7z a openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip *
+    - 7z a openocd_win64.zip *
     - echo ${CI_JOB_ID} | tee win64_jobid.log
     - cd ..
 
@@ -113,8 +113,10 @@ release_ci:
     assets:
       links:
         - name: 'Windows 64-bit executable'
-          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-win64/win64_jobid.log`/artifacts/raw/binary-win64/openocd_win64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.zip'
+          filepath: "/binary-win64/openocd_win64.zip"
+          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-win64/win64_jobid.log`/artifacts/raw/binary-win64/openocd_win64.zip'
         - name: 'Linux 64-bit executable'
-          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-linux64/lin64_jobid.log`/artifacts/raw/binary-linux64/openocd_linux64_${CI_COMMIT_TAG}_${CI_COMMIT_SHORT_SHA}.tar.bz2'
+          filepath: "/binary-linux64/openocd_linux64.tar.bz2"
+          url: 'http://10.8.1.57:9000/xiaoyu_hong/al_openocd/-/jobs/`cat binary-linux64/lin64_jobid.log`/artifacts/raw/binary-linux64/openocd_linux64.tar.bz2'
 
  
