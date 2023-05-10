@@ -96,9 +96,9 @@ const flash_ops_t sp_s25fl_ops = {
     .wrsr2_cmd = 0,
     .wrsr1n2_cmd = 0x01,
 
-    .qread_cmd = 0x6B,
+	.qread_cmd = 0x6B,
     .rd_trans_type = TRANS_TYPE_TT0,
-    .qprog_cmd = 0x32,
+	.qprog_cmd = 0x32,
     .wr_trans_type = TRANS_TYPE_TT0,
 };
 
