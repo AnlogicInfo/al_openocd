@@ -872,7 +872,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
         dwcssi_wr_qe(bank, DISABLE);
         // flash_ops->quad_dis(bank);
     dwcssi_unset_protect(bank);
-    if((first == 0) && (last == bank->num_sectors))
+    if((first == 0) && (last == (bank->num_sectors - 1)))
         dwcssi_erase_bulk(bank);
     else
     {

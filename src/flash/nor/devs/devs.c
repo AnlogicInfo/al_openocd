@@ -41,7 +41,7 @@ const flash_ops_t gd_gd25q_ops = {
 // SR
 //|BIT 7 | BIT 6| BIT 5| BIT 4| BIT 3 | BIT 2| BIT 1| BIT 0|
 // SRWD    QE     BP3    BP2    BP1     BP1   WEL    WIP 
-const flash_ops_t issi_ops = {
+const flash_ops_t issi_24_ops = {
     .clk_div = 4,
     .wait_cycle  = 6,
 
@@ -56,6 +56,24 @@ const flash_ops_t issi_ops = {
     .qread_cmd = 0xEB,
     .rd_trans_type = TRANS_TYPE_TT1,
     .qprog_cmd = 0x32,
+    .wr_trans_type = TRANS_TYPE_TT0,
+};
+
+const flash_ops_t issi_32_ops = {
+    .clk_div = 4,
+    .wait_cycle  = 6,
+
+    .qe_index = 6,
+    .rdsr1_cmd = 0x05,
+    .rdsr2_cmd = 0,
+    .rdsr1n2_cmd = 0,
+
+    .wrsr1_cmd = 0x01,
+    .wrsr2_cmd = 0,
+    .wrsr1n2_cmd = 0,
+    .qread_cmd = 0xEC,
+    .rd_trans_type = TRANS_TYPE_TT1,
+    .qprog_cmd = 0x34,
     .wr_trans_type = TRANS_TYPE_TT0,
 };
 
@@ -84,7 +102,7 @@ const flash_ops_t mc_ops = {
     .unset_protect_cmd = 0x98
 };
 
-const flash_ops_t sp_s25fl_ops = {
+const flash_ops_t sp_s25fl_24_ops = {
     .clk_div = 2,
     .wait_cycle = 8,
     
@@ -96,9 +114,27 @@ const flash_ops_t sp_s25fl_ops = {
     .wrsr2_cmd = 0,
     .wrsr1n2_cmd = 0x01,
 
-	.qread_cmd = 0x6B,
+    .qread_cmd = 0x6B,
     .rd_trans_type = TRANS_TYPE_TT0,
-	.qprog_cmd = 0x32,
+    .qprog_cmd = 0x32,
+    .wr_trans_type = TRANS_TYPE_TT0,
+};
+
+const flash_ops_t sp_s25fl_32_ops = {
+    .clk_div = 2,
+    .wait_cycle = 8,
+    
+    .qe_index = 9,
+    .rdsr1_cmd = 0x05,
+    .rdsr2_cmd = 0x35,
+    .rdsr1n2_cmd = 0,
+    .wrsr1_cmd = 0x01,
+    .wrsr2_cmd = 0,
+    .wrsr1n2_cmd = 0x01,
+
+	.qread_cmd = 0x6C,
+    .rd_trans_type = TRANS_TYPE_TT0,
+	.qprog_cmd = 0x34,
     .wr_trans_type = TRANS_TYPE_TT0,
 };
 
