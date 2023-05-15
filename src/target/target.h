@@ -442,6 +442,7 @@ struct target *get_target_by_num(int num);
 struct target *get_current_target(struct command_context *cmd_ctx);
 struct target *get_current_target_or_null(struct command_context *cmd_ctx);
 struct target *get_target(const char *id);
+struct target *get_first_target(const char *type);
 
 /**
  * Get the target type name.

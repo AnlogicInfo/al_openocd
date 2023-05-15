@@ -845,7 +845,7 @@ int smc35x_read_page(struct nand_device *nand, uint32_t page, uint8_t *data, uin
 	uint8_t loader_target;
 	void *arch_info = NULL;
 
-	if (strncmp(target_name(target), "riscv", 4) == 0) {
+	if (strcmp(target_type_name(target), "riscv") == 0) {
 		loader_target = RISCV;
 		xlen = riscv_xlen(target);
 		if (xlen == 32) {
@@ -1043,7 +1043,7 @@ int smc35x_checksum(struct nand_device *nand, uint32_t page, uint8_t *data, uint
 	uint8_t loader_target;
 	void *arch_info = NULL;
 
-	if (strncmp(target_name(target), "riscv", 4) == 0) {
+	if (strcmp(target_type_name(target), "riscv") == 0) {
 		loader_target = RISCV;
 		xlen = riscv_xlen(target);
 		if (xlen == 32) {
@@ -1310,7 +1310,7 @@ int smc35x_write_page_sync(struct nand_device *nand, uint32_t page, uint8_t *dat
 			nand->blocks[index].is_erased = 0;
 	}
 
-	if (strncmp(target_name(target), "riscv", 4) == 0) {
+	if (strcmp(target_type_name(target), "riscv") == 0) {
 		loader_target = RISCV;
 		xlen = riscv_xlen(target);
 		if (xlen == 32) {
