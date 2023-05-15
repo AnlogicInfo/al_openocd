@@ -62,10 +62,10 @@ buildwin-job:
     - ./bootstrap
     - make distclean -C src/jtag/drivers/libjaylink || true
     - export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/"
-    - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/i386 "
+    - export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64"
     - mkdir build-win64
     - cd build-win64
-    - ../configure --prefix=${PWD}/../binary-win64 --build=x86_64-w64-mingw64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 
+    - ../configure --prefix=${PWD}/../binary-win64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 --enable-cmsis-dap=no --enable-kitprog=no --enable-nulink=no
     - make -j4
     - make install
     - cd ../binary-win64
