@@ -13,7 +13,7 @@
 char *rv_reg_params[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"};
 char *aarch_reg_params[] = {"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"};
 
-struct target *loader_init_trans_target(char* name)
+struct target *loader_init_trans_target(const char* name)
 {
     struct target *trans_target;
     int retval = ERROR_OK;
@@ -40,16 +40,20 @@ static int loader_init_arch(struct flash_loader *loader)
 {
     struct target *target = loader->exec_target;
     int retval = ERROR_OK;
-    if(strncmp(target_name(target), "riscv", 4) == 0)
+	if (strcmp(target_type_name(target), "riscv") == 0)
     {
-        loader->trans_target = loader_init_trans_target("riscv.cpu");
+		loader->trans_target = loader_init_trans_target(target_name(target));
         loader->xlen = riscv_xlen(target);
         loader->arch_info = (struct riscv_algorithm *)malloc(sizeof(struct riscv_algorithm));
     }
     else
     {
-        loader->trans_target = loader_init_trans_target("al9000.a35.0");
-        loader->xlen = 64;
+		target = get_first_target("aarch64");
+		if (target == NULL)
+			return ERROR_FAIL;
+
+		loader->trans_target = loader_init_trans_target(target_name(target));
+		loader->xlen = 64;
         loader->arch_info = (struct aarch64_algorithm *) malloc(sizeof(struct aarch64_algorithm));
         ((struct aarch64_algorithm *) loader->arch_info)->common_magic = AARCH64_COMMON_MAGIC;
         ((struct aarch64_algorithm *) loader->arch_info)->core_mode = ARMV8_64_EL0T;
@@ -103,11 +107,10 @@ static int loader_init_code(struct flash_loader *loader, struct code_src *srcs)
 {
     struct target *trans_target = loader->trans_target;
 
-    if(strncmp(target_name(trans_target), "riscv", 4) == 0)
-    {
-        loader_init_rv_code(loader, srcs);
-        loader_init_reg_params(loader, rv_reg_params);
-    }
+	if (strcmp(target_type_name(trans_target), "riscv") == 0) {
+		loader_init_rv_code(loader, srcs);
+		loader_init_reg_params(loader, rv_reg_params);
+	}
     else
     {
         loader_init_aarch64_code(loader, srcs);

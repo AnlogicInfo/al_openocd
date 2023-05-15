@@ -525,6 +525,18 @@ struct target *get_target(const char *id)
 	return NULL;
 }
 
+struct target *get_first_target(const char *type)
+{
+	struct target *target;
+
+	/* Get the first target of the specified type */
+	for (target = all_targets; target; target = target->next) {
+		if (strcmp(type, target_type_name(target)) == 0)
+			return target;
+	}
+	return NULL;
+}
+
 /* returns a pointer to the n-th configured target */
 struct target *get_target_by_num(int num)
 {
