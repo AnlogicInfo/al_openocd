@@ -1361,9 +1361,11 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 
     count = flash_write_boundary_check(bank, offset, count);
     dwcssi_unset_protect(bank);
-    if(flash_ops != NULL) {
-        LOG_INFO("use X4 mode");
-        retval = dwcssi_write_async(bank, buffer, offset, count);
+    if (0) {
+        if (flash_ops != NULL) {
+            LOG_INFO("use X4 mode");
+            retval = dwcssi_write_async(bank, buffer, offset, count);
+        }
     }
 
     if(retval != ERROR_OK) {
