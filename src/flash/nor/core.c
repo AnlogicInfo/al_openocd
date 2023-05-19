@@ -742,7 +742,7 @@ static bool flash_write_check_gap(struct flash_bank *bank,
 
 
 int flash_write_unlock_verify(struct target *target, struct image *image,
-	uint32_t *written, bool erase, bool unlock, bool write, bool verify)
+	uint32_t *written, bool erase, bool unlock, bool write, bool quad_en, bool verify)
 {
 	int retval = ERROR_OK;
 
@@ -805,6 +805,7 @@ int flash_write_unlock_verify(struct target *target, struct image *image,
 			continue;
 		}
 
+		c->x4_write_en = quad_en;
 		/* collect consecutive sections which fall into the same bank */
 		section_last = section;
 		padding[section] = 0;
@@ -1010,7 +1011,7 @@ done:
 int flash_write(struct target *target, struct image *image,
 	uint32_t *written, bool erase)
 {
-	return flash_write_unlock_verify(target, image, written, erase, false, true, false);
+	return flash_write_unlock_verify(target, image, written, erase, false, true, false, false);
 }
 
 struct flash_sector *alloc_block_array(uint32_t offset, uint32_t size,

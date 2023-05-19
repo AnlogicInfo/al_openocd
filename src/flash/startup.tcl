@@ -19,7 +19,7 @@ proc program_error {description exit} {
 proc program {media filename args} {
 	set exit 0
 	set needsflash 1
-
+	set quad_en ""
 	foreach arg $args {
 		if {[string equal $arg "preverify"]} {
 			set preverify 1
@@ -29,6 +29,12 @@ proc program {media filename args} {
 			set reset 1
 		} elseif {[string equal $arg "exit"]} {
 			set exit 1
+		} elseif {[string equal $arg "quad_en"]} {
+			if {[string equal $media "flash"]} {
+				set quad_en $arg
+			} else {
+				program_error "** quad mode supports flash only**" $exit
+			}
 		} else {
 			set address $arg
 		}
@@ -42,7 +48,6 @@ proc program {media filename args} {
 	} else {
 		set flash_args "$filename"
 	}
-
 
 	# make sure init is called
 	if {[catch {init}] != 0} {
@@ -69,7 +74,7 @@ proc program {media filename args} {
 	if {$needsflash == 1} {
 		echo "** Programming Started **"
 
-		if {[catch {eval $media write_image erase $flash_args}] == 0} {
+		if {[catch {eval $media write_image erase $quad_en $flash_args}] == 0} {
 			echo "** Programming Finished **"
 			if {[info exists verify]} {
 				# verify phase
@@ -77,6 +82,7 @@ proc program {media filename args} {
 				if {[catch {eval $media verify_image $flash_args}] == 0} {
 					echo "** Verified OK **"
 				} else {
+					echo $flash_args
 					program_error "** Verify Failed **" $exit
 				}
 			}

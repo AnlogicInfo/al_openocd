@@ -494,8 +494,7 @@ int dwcssi_read_page_x1(volatile uint32_t *ctrl_base, uint8_t *buffer, uint32_t 
     // dwcssi_tx(ctrl_base, offset >> 16);
     // dwcssi_tx(ctrl_base, offset >> 8);
     // dwcssi_tx(ctrl_base, offset);    
-    for(i = (addr_size-1); i >= 0; i--)
-    {
+    for (i = (addr_size-1); i >= 0; i--) {
         offset_shift = i<<3;
         addr_byte = (offset >> offset_shift) & 0xff;
         dwcssi_tx(ctrl_base, addr_byte);

@@ -1357,18 +1357,30 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 {
     int retval = ERROR_FAIL;
     struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;    
+    const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;   
+    uint32_t page_size, page_offset;
+ 
+    page_size = driver_priv->dev->pagesize ? 
+                driver_priv->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
     count = flash_write_boundary_check(bank, offset, count);
+    page_offset = offset % page_size;
     dwcssi_unset_protect(bank);
-    if (0) {
-        if (flash_ops != NULL) {
+    if ((bank->x4_write_en))
+    {
+        if (flash_ops == NULL) {
+            LOG_ERROR("x4 write not supported for %s", driver_priv->dev->name);
+            return ERROR_FAIL;
+        }
+
+        if (page_offset != 0) {
+            LOG_ERROR("address should be page aligned");
+            return ERROR_FAIL;
+        } else {
             LOG_INFO("use X4 mode");
             retval = dwcssi_write_async(bank, buffer, offset, count);
         }
-    }
-
-    if(retval != ERROR_OK) {
+    } else if (retval != ERROR_OK) {
         LOG_INFO("use X1 mode");
         retval = dwcssi_write_async_x1(bank, buffer, offset, count);
     }

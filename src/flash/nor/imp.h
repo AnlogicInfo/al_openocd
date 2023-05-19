@@ -50,6 +50,6 @@ int flash_driver_verify(struct flash_bank *bank,
 
 /* write (optional verify) an image to flash memory of the given target */
 int flash_write_unlock_verify(struct target *target, struct image *image,
-		uint32_t *written, bool erase, bool unlock, bool write, bool verify);
+		uint32_t *written, bool erase, bool unlock, bool write, bool quad_en, bool verify);
 
 #endif /* OPENOCD_FLASH_NOR_IMP_H */

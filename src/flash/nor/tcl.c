@@ -412,7 +412,7 @@ COMMAND_HANDLER(handle_flash_write_image_command)
 	/* flash auto-erase is disabled by default*/
 	int auto_erase = 0;
 	bool auto_unlock = false;
-
+	bool quad_en = false;
 	while (CMD_ARGC) {
 		if (strcmp(CMD_ARGV[0], "erase") == 0) {
 			auto_erase = 1;
@@ -424,6 +424,11 @@ COMMAND_HANDLER(handle_flash_write_image_command)
 			CMD_ARGV++;
 			CMD_ARGC--;
 			command_print(CMD, "auto unlock enabled");
+		} else if (strcmp(CMD_ARGV[0], "quad_en") == 0) {
+			quad_en = true;
+			CMD_ARGV++;
+			CMD_ARGC--;
+			command_print(CMD, "quad write enabled");
 		} else
 			break;
 	}
@@ -454,7 +459,7 @@ COMMAND_HANDLER(handle_flash_write_image_command)
 		return retval;
 
 	retval = flash_write_unlock_verify(target, &image, &written, auto_erase,
-		auto_unlock, true, false);
+		auto_unlock, true, quad_en, false);
 	if (retval != ERROR_OK) {
 		image_close(&image);
 		return retval;
@@ -506,7 +511,7 @@ COMMAND_HANDLER(handle_flash_verify_image_command)
 		return retval;
 
 	retval = flash_write_unlock_verify(target, &image, &verified, false,
-		false, false, true);
+		false, false, false, true);
 	if (retval != ERROR_OK) {
 		image_close(&image);
 		return retval;
@@ -1193,7 +1198,7 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.name = "write_image",
 		.handler = handle_flash_write_image_command,
 		.mode = COMMAND_EXEC,
-		.usage = "[erase] [unlock] filename [offset [file_type]]",
+		.usage = "[erase] [unlock] [quad_en] filename [offset [file_type]]",
 		.help = "Write an image to flash.  Optionally first unprotect "
 			"and/or erase the region to be used. Allow optional "
 			"offset from beginning of bank (defaults to zero)",
