@@ -128,7 +128,8 @@ enum
     EMMC_MFR_FORESEE = 0xD6,
     EMMC_MFR_HYNIX = 0x90,
     EMMC_MFR_SANDISK = 0x45,
-    EMMC_MFR_XINCUN = 0xAD
+    EMMC_MFR_XINCUN0 = 0xAD,
+    EMMC_MFR_XINCUN1 = 0xE1
 };
 
 struct emmc_manufacture {

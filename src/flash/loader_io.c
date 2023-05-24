@@ -1,5 +1,5 @@
 /*
- * File: target_io.c
+ * File: loader_io.c
  * Author: Tianyi Wang (tianyi.wang@anlogic.com)
  * Date:  2023-01-12
  * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)

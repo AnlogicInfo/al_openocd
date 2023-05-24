@@ -42,9 +42,9 @@ static struct emmc_info emmc_flash_ids[] =
 	{EMMC_MFR_HYNIX,   0x4a4838473461, 0x200,       8,            "Hynix H26M41208HPR 8GB EMMC "},
 	{EMMC_MFR_SANDISK, 0x004447343030, 0x200,       8,            "Sandisk SDINBDG4-8G 8GB EMMC "},
 	{EMMC_MFR_SANDISK, 0x004441343132, 0x200,       128,          "Sandisk SDINBDA4-128G 128GB EMMC "},
-	{EMMC_MFR_XINCUN,  0x00654d4d4320, 0x200,       8,            "Xincun XC08MAAJ-NTS 8GB EMMC "},
-	{EMMC_MFR_XINCUN,  0x164b4d4d5244, 0x200,       32,           "Xincun XC32MAAJ-NTS 32GB EMMC "},
-	{EMMC_MFR_XINCUN,  0x160000930051, 0x200,       64,           "Xincun XC64MAAJ-NTS 64GB EMMC "},
+	{EMMC_MFR_XINCUN0,  0x00654d4d4320, 0x200,       8,            "Xincun XC08MAAJ-NTS 8GB EMMC "},
+	{EMMC_MFR_XINCUN1,  0x164b4d4d5244, 0x200,       32,           "Xincun XC32MAAJ-NTS 32GB EMMC "},
+	{EMMC_MFR_XINCUN1,  0x160000930051, 0x200,       64,           "Xincun XC64MAAJ-NTS 64GB EMMC "},
 
     {0, 0, 0, 0, NULL},
 };
