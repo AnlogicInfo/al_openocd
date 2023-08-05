@@ -20,6 +20,7 @@ proc program {media filename args} {
 	set exit 0
 	set needsflash 1
 	set quad_en ""
+	set type ""
 	foreach arg $args {
 		if {[string equal $arg "preverify"]} {
 			set preverify 1
@@ -35,6 +36,8 @@ proc program {media filename args} {
 			} else {
 				program_error "** quad mode supports flash only**" $exit
 			}
+		} elseif {[string equal $arg "bin"]} {
+			set type "bin"
 		} else {
 			set address $arg
 		}
@@ -44,7 +47,7 @@ proc program {media filename args} {
 	set media  \{$media\}
 	set filename \{$filename\}
 	if {[info exists address]} {
-		set flash_args "$filename $address"
+		set flash_args "$filename $address $type"
 	} else {
 		set flash_args "$filename"
 	}

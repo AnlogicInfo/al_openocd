@@ -20,6 +20,8 @@
 
 // qspi flash mio defines
 #define     MIO_BASE                                  0xF8803000
+#define     GPIO_CONFIG                               0xF8411004
+#define     GPIO_OUT                                  0xF8411000
 
 /*Register offsets*/
 #define     DWCSSI_REG_CTRLR0                         0x0
@@ -196,6 +198,9 @@ struct dwcssi_trans_config {
 
 #define RISCV     0
 #define ARM       1
+
+#define HIGH      1
+#define LOW       0
 
 int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr);
 void dwcssi_config_tx(struct flash_bank *bank, uint8_t frf, uint32_t tx_total_len, uint32_t tx_start_lv);

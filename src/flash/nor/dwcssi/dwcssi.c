@@ -72,6 +72,23 @@ static int qspi_mio_init(struct flash_bank *bank)
 	return ERROR_OK;
 }
 
+static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
+{
+	struct target *target = bank->target;
+	uint8_t mio_func;
+	if(lev == HIGH)
+		mio_func = 0x4;
+	else
+		mio_func = 0x1;
+	LOG_INFO("mio pull %d", lev);
+	if(target_write_u32(target, MIO_BASE + (0x5 << 2), mio_func) != ERROR_OK)
+		return ERROR_FAIL;
+	if(lev == HIGH)	{
+		target_write_u32(target, GPIO_CONFIG, 1<<5);
+		target_write_u32(target, GPIO_OUT, 1<<5);
+	}
+	return ERROR_OK;
+}
 
 static int dwcssi_read_reg(struct flash_bank *bank, uint32_t *value, target_addr_t address)
 {
@@ -803,6 +820,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 	if (flash_ops != NULL)
 		dwcssi_wr_qe(bank, DISABLE);
 	dwcssi_unset_protect(bank);
+	qspi_mio5_pull(bank, HIGH);
 	if ((first == 0) && (last == (bank->num_sectors - 1)))
 		dwcssi_erase_bulk(bank);
 	else {
@@ -814,6 +832,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 			keep_alive();
 		}
 	}
+	qspi_mio5_pull(bank, LOW);
 
 	return retval;
 }
@@ -928,7 +947,11 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 	if (flash_ops != NULL)
 		dwcssi_read_x4(bank, buffer, offset, count);
 	else
+	{
+		qspi_mio5_pull(bank, HIGH);
 		dwcssi_read_x1(bank, buffer, offset, count);
+		qspi_mio5_pull(bank, LOW);
+	}
 
 	return ERROR_OK;
 }
@@ -1039,7 +1062,11 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 		retval = dwcssi_checksum_x4(bank, offset, count, &target_crc);
 
 	if (retval != ERROR_OK)
+	{
+		qspi_mio5_pull(bank, HIGH);
 		retval = dwcssi_checksum_x1(bank, offset, count, &target_crc);
+		qspi_mio5_pull(bank, LOW);
+	}
 
 	if (retval != ERROR_OK)
 		return retval;
@@ -1277,7 +1304,9 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 		}
 	} else if (retval != ERROR_OK) {
 		LOG_INFO("use X1 mode");
+		qspi_mio5_pull(bank, HIGH);
 		retval = dwcssi_write_async_x1(bank, buffer, offset, count);
+		qspi_mio5_pull(bank, LOW);
 	}
 
 	return retval;
@@ -1350,9 +1379,11 @@ static int dwcssi_read_id(struct flash_bank *bank)
 */
 
 	for (int i = 0; i < 3; i++) {
+		qspi_mio5_pull(bank, HIGH);
 		if (dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE) == ERROR_OK)
 			break;
 		else {
+			qspi_mio5_pull(bank, LOW);
 			if (dwcssi_read_id_reset(bank, reset_methods[i], QPI_MODE) == ERROR_OK)
 				break;
 		}
@@ -1384,9 +1415,9 @@ static int dwcssi_probe(struct flash_bank *bank)
 		return ERROR_FAIL;
 	}
 
-	dwcssi_config_init(bank, 2);
-
-	return dwcssi_read_id(bank);
+	dwcssi_config_init(bank, 20);
+	dwcssi_read_id(bank);
+	return ERROR_OK;
 }
 
 
