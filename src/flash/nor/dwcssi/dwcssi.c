@@ -76,14 +76,14 @@ static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
 {
 	struct target *target = bank->target;
 	uint8_t mio_func;
-	if(lev == HIGH)
+	if (lev == HIGH)
 		mio_func = 0x4;
 	else
 		mio_func = 0x1;
 	LOG_INFO("mio pull %d", lev);
-	if(target_write_u32(target, MIO_BASE + (0x5 << 2), mio_func) != ERROR_OK)
+	if (target_write_u32(target, MIO_BASE + (0x5 << 2), mio_func) != ERROR_OK)
 		return ERROR_FAIL;
-	if(lev == HIGH)	{
+	if (lev == HIGH)	{
 		target_write_u32(target, GPIO_CONFIG, 1<<5);
 		target_write_u32(target, GPIO_OUT, 1<<5);
 	}
@@ -946,8 +946,7 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 
 	if (flash_ops != NULL)
 		dwcssi_read_x4(bank, buffer, offset, count);
-	else
-	{
+	else {
 		qspi_mio5_pull(bank, HIGH);
 		dwcssi_read_x1(bank, buffer, offset, count);
 		qspi_mio5_pull(bank, LOW);
@@ -1061,8 +1060,7 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 	if (flash_ops != NULL)
 		retval = dwcssi_checksum_x4(bank, offset, count, &target_crc);
 
-	if (retval != ERROR_OK)
-	{
+	if (retval != ERROR_OK) {
 		qspi_mio5_pull(bank, HIGH);
 		retval = dwcssi_checksum_x1(bank, offset, count, &target_crc);
 		qspi_mio5_pull(bank, LOW);

@@ -1,7 +1,6 @@
 #include <flash/nor/dwcssi/dwcssi.h>
 
 const flash_ops_t gd_gd25b512_ops = {
-	// .clk_div   = 8,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -21,7 +20,6 @@ const flash_ops_t gd_gd25b512_ops = {
 
 
 const flash_ops_t gd_gd25q_ops = {
-	// .clk_div   = 8,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -46,7 +44,6 @@ SRWD    QE     BP3    BP2    BP1     BP1   WEL    WIP
 */
 
 const flash_ops_t issi_24_ops = {
-	// .clk_div = 4,
 	.clk_div    = 20,
 	.wait_cycle  = 6,
 
@@ -65,7 +62,6 @@ const flash_ops_t issi_24_ops = {
 };
 
 const flash_ops_t issi_32_ops = {
-	// .clk_div = 4,
 	.clk_div    = 20,
 	.wait_cycle  = 6,
 
@@ -92,7 +88,6 @@ const flash_ops_t issi_32_ops = {
 */
 
 const flash_ops_t mc_ops = {
-	// .clk_div = 2,
 	.clk_div    = 20,
 	.wait_cycle  = 8,
 
@@ -112,7 +107,6 @@ const flash_ops_t mc_ops = {
 };
 
 const flash_ops_t sp_s25fl_24_ops = {
-	// .clk_div = 2,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -131,7 +125,6 @@ const flash_ops_t sp_s25fl_24_ops = {
 };
 
 const flash_ops_t sp_s25fl_32_ops = {
-	// .clk_div = 2,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -159,7 +152,6 @@ const flash_ops_t sp_s25fl_32_ops = {
 */
 
 const flash_ops_t win_ops = {
-	// .clk_div = 8,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -179,7 +171,6 @@ const flash_ops_t win_ops = {
 };
 
 const flash_ops_t zetta_zd25q_ops = {
-	// .clk_div = 8,
 	.clk_div    = 20,
 	.qe_index = 9,
 	.rdsr1_cmd = 0x05,
@@ -197,7 +188,6 @@ const flash_ops_t zetta_zd25q_ops = {
 };
 
 const flash_ops_t zb_ops = {
-	// .clk_div = 8,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -216,7 +206,6 @@ const flash_ops_t zb_ops = {
 };
 
 const flash_ops_t puya_ops = {
-	// .clk_div = 8,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -235,7 +224,6 @@ const flash_ops_t puya_ops = {
 };
 
 const flash_ops_t mksv_ops = {
-	// .clk_div = 8,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
@@ -255,7 +243,6 @@ const flash_ops_t mksv_ops = {
 
 /* Nonvolatile Configuration Register */
 const flash_ops_t micron_n25q_ops = {
-	// .clk_div = 8,
 	.clk_div    = 20,
 	.wait_cycle  = 8,
 
@@ -275,7 +262,6 @@ const flash_ops_t micron_n25q_ops = {
 };
 
 const flash_ops_t mac_25l_ops = {
-	// .clk_div = 8,
 	.clk_div    = 20,
 	.wait_cycle = 8,
 
