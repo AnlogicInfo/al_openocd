@@ -3321,7 +3321,7 @@ COMMAND_HANDLER(aarch64_instr_rd)
 	LOG_INFO("offset %"PRIx32, offset);
 	instr = ARMV8_MRS(offset & 0xFFFF, 0);
 	LOG_INFO("instr rd %"PRIx32, instr);
-	
+
 	retval = dpm->instr_read_data_r0_64(dpm, instr, &value_64);
 	if(retval == ERROR_OK)
 		LOG_INFO("result %"PRIx64, value_64);

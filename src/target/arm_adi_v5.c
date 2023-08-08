@@ -262,9 +262,8 @@ int mem_ap_read_u32(struct adiv5_ap *ap, target_addr_t address,
 	retval = dap_run(ap->dap);
 	if (retval != ERROR_OK)
 		return retval;	
-	if((address & 0xFFF)!= 0x314) {
+	if((address & 0xFFF) != 0x314)
 		LOG_DEBUG("mem ap rd addr %" PRIx64 " val %08x", address, *value);
-	}
 	
 	return retval;
 }
