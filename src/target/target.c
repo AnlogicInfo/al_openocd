@@ -3281,8 +3281,8 @@ static int handle_target(void *priv)
 			target_call_event_callbacks(target, TARGET_EVENT_GDB_HALT);
 		}
 		target->backoff.next_attempt = timeval_ms() + target->backoff.interval;
-		LOG_TARGET_DEBUG(target, "target_poll() -> %d, next attempt in %dms",
-				 retval, target->backoff.interval);
+		// LOG_TARGET_DEBUG(target, "target_poll() -> %d, next attempt in %dms",
+		// 		 retval, target->backoff.interval);
 
 		if (retval != ERROR_OK && examine_attempted) {
 			target_reset_examined(target);

@@ -3308,6 +3308,31 @@ done:
 
 }
 
+COMMAND_HANDLER(aarch64_instr_rd)
+{
+	struct target *target = get_current_target(CMD_CTX);
+	struct armv8_common *armv8 = target_to_armv8(target);
+	struct arm_dpm *dpm = &armv8->dpm;
+	uint32_t instr, offset;
+	uint64_t value_64;
+	int retval = ERROR_OK;
+
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], offset);
+	LOG_INFO("offset %"PRIx32, offset);
+	instr = ARMV8_MRS(offset & 0xFFFF,0),
+	LOG_INFO("instr rd %"PRIx32, instr);
+	if(0)
+	{
+	retval = dpm->instr_read_data_r0_64(dpm, instr, &value_64);
+	if(retval == ERROR_OK)
+		LOG_INFO("result %"PRIx64, value_64);
+	else
+		retval = ERROR_FAIL;
+	}
+	
+	return retval;
+}
+
 static int jim_mcrmrc(Jim_Interp *interp, int argc, Jim_Obj * const *argv)
 {
 	struct command *c = jim_to_command(interp);
@@ -3531,7 +3556,13 @@ static const struct command_registration aarch64_command_handlers[] = {
 		.help = "aarch64 dpm wr",
 		.usage = "regnum [value]",
 	},
-
+	{
+		.name = "instr_rd",
+		.handler = aarch64_instr_rd,
+		.mode = COMMAND_ANY,
+		.help = "aarch64 instr read reg",
+		.usage = "offset",
+	},
 
 	COMMAND_REGISTRATION_DONE
 };
