@@ -119,15 +119,15 @@ enum OnfiCmdArrayOffset{
 #define ONFI_CMD_READ_PARAMETER_CYCLES				1		/* ONFI Read ID command total address cycles*/
 #define ONFI_CMD_READ_PARAMETER_END_TIMING			ONFI_END_CMD_INVALID /* READ_ID End Cmd Invalid */
 
-#define ONFI_CMD_SET_FEATURES1						0xEF	/* ONFI Read ID command Start */
-#define ONFI_CMD_SET_FEATURES2						ONFI_END_CMD_NONE	/* ONFI Read ID command End */
-#define ONFI_CMD_SET_FEATURES_CYCLES				0		/* ONFI Read ID command total address cycles*/
-#define ONFI_CMD_SET_FEATURES_END_TIMING			ONFI_END_CMD_INVALID /* READ_ID End Cmd Invalid */
+#define ONFI_CMD_SET_FEATURES1						0xEF	/* ONFI set features start command */
+#define ONFI_CMD_SET_FEATURES2						ONFI_END_CMD_NONE	/* ONFI set features end command */
+#define ONFI_CMD_SET_FEATURES_CYCLES				1		/* ONFI set features command address total cycles*/
+#define ONFI_CMD_SET_FEATURES_END_TIMING			ONFI_END_CMD_INVALID /* set features end command invalid */
 
-#define ONFI_CMD_GET_FEATURES1						0xEE	/* ONFI Read ID command Start */
-#define ONFI_CMD_GET_FEATURES2						ONFI_END_CMD_NONE	/* ONFI Read ID command End */
-#define ONFI_CMD_GET_FEATURES_CYCLES				0		/* ONFI Read ID command total address cycles*/
-#define ONFI_CMD_GET_FEATURES_END_TIMING			ONFI_END_CMD_INVALID /* READ_ID End Cmd Invalid */
+#define ONFI_CMD_GET_FEATURES1						0xEE	/* ONFI get features start command */
+#define ONFI_CMD_GET_FEATURES2						ONFI_END_CMD_NONE	/* ONFI get features end command */
+#define ONFI_CMD_GET_FEATURES_CYCLES				1		/* ONFI get features command address total cycles*/
+#define ONFI_CMD_GET_FEATURES_END_TIMING			ONFI_END_CMD_INVALID /* get features end command invalid */
 
 #define ONFI_CMD_READ_PAGE1							0x00	/* ONFI Read ID command Start */
 #define ONFI_CMD_READ_PAGE2							0x30	/* ONFI Read ID command End */
