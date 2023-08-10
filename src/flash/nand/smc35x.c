@@ -162,14 +162,14 @@ int smc35x_command(struct nand_device* nand, uint8_t command)
 		break;
 
 	case ONFI_CMD_GET_FEATURES1:
-		smc35x_info->cmd_phase_addr = NAND_BASE | (ONFI_CMD_GET_FEATURES1 << 3);
+		smc35x_info->cmd_phase_addr = NAND_BASE | (ONFI_CMD_GET_FEATURES_CYCLES << 21) | (ONFI_CMD_GET_FEATURES1 << 3);
 		smc35x_info->cmd_phase_data = 0x90;
 		target_write_u32(target, smc35x_info->cmd_phase_addr, smc35x_info->cmd_phase_data);
 		smc35x_info->data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG;
 		break;
 	
 	case ONFI_CMD_SET_FEATURES1:
-		smc35x_info->cmd_phase_addr = NAND_BASE | (ONFI_CMD_SET_FEATURES1 << 3);
+		smc35x_info->cmd_phase_addr = NAND_BASE | (ONFI_CMD_SET_FEATURES_CYCLES << 21) | (ONFI_CMD_SET_FEATURES1 << 3);
 		smc35x_info->cmd_phase_data = 0x90;
 		target_write_u32(target, smc35x_info->cmd_phase_addr, smc35x_info->cmd_phase_data);
 		smc35x_info->data_phase_addr = NAND_BASE | NAND_DATA_PHASE_FLAG;
@@ -354,7 +354,7 @@ uint32_t smc35x_ecc1_init(struct nand_device *nand, nand_size_type *nand_size)
 }
 uint32_t smc35x_internalecc_init(struct nand_device *nand)
 {
-	uint8_t index, temp;
+	uint8_t state, index, temp;
 	struct target *target = nand->target;
 	struct smc35x_nand_controller *smc35x_info = nand->controller_priv;
 	nand_size_type *nand_size = &smc35x_info->nand_size;
@@ -370,10 +370,14 @@ uint32_t smc35x_internalecc_init(struct nand_device *nand)
 
 	smc35x_command(nand, ONFI_CMD_SET_FEATURES1);
 	for (index = 0; index < 4; ++index) {
-		target_write_u32(target, smc35x_info->data_phase_addr, ecc_set[index]);
+		target_write_u8(target, smc35x_info->data_phase_addr, ecc_set[index]);
 	}
 
 	smc35x_command(nand, ONFI_CMD_GET_FEATURES1);
+	do {
+		smc35x_command(nand, NAND_CMD_STATUS);
+		target_read_u8(target, (smc35x_info->data_phase_addr), &state);
+	} while (!(state & ONFI_STATUS_RDY));
 	target_write_u8(target, NAND_BASE, 0x00);
 	for (index = 0; index < 4; ++index) {
 		target_read_u8(target, smc35x_info->data_phase_addr, &ecc_get[index]);
@@ -1507,7 +1511,7 @@ int smc35x_write_page(struct nand_device *nand, uint32_t page, uint8_t *data, ui
 
 static int smc35x_init(struct nand_device *nand)
 {
-	// uint32_t retval;
+	uint32_t retval;
 	struct target *target = nand->target;
 
 	if (target->state != TARGET_HALTED) {
@@ -1530,12 +1534,11 @@ static int smc35x_init(struct nand_device *nand)
 	target_write_u32(target, PS_MIO13, 0x02);
 	target_write_u32(target, PS_MIO14, 0x02);
 
-	smc35x_nand_init(nand);
-	// retval = smc35x_nand_init(nand);
-	// if (retval != ERROR_OK) {
-	//  LOG_INFO(unsupported nand, err code: retval);
-	// 	return retval;
-	// }
+	retval = smc35x_nand_init(nand);
+	if (retval != ERROR_OK) {
+		LOG_INFO("unsupported nand, err code: %d", retval);
+		return retval;
+	}
 	
 	return ERROR_OK;
 }
