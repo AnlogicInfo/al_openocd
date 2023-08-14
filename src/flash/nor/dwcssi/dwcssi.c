@@ -993,6 +993,7 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
 	struct flash_loader *loader = &driver_priv->loader;
 
 	loader->work_mode = CRC_CHECK;
+	loader->block_size = driver_priv->dev->pagesize;
 	loader->image_size = count;
 	loader->param_cnt = 6;
 
