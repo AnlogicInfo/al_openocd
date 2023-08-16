@@ -32,6 +32,22 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
     return status;
 }
 
+int dwcmshc_fast_mode(struct emmc_device *emmc)
+{
+    struct target *target = emmc->target;
+    target_addr_t addr;
+    uint32_t status = ERROR_OK;
+    uint8_t num;
+    for (num = 0; num < 10; num = num + 1)
+    {
+        addr =FAST_MODE_BASE + (num << 3);
+        status = target_write_u32(target,  addr, 0x88000007);
+        if(status != ERROR_OK)
+            return status;
+    }
+
+    return status;
+}
 
 static int dwcmshc_wait_clk(struct emmc_device *emmc)
 {

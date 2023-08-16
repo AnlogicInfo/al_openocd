@@ -60,6 +60,36 @@ COMMAND_HANDLER(handle_emmc_probe_command)
 	return retval;
 }
 
+COMMAND_HANDLER(handle_emmc_write_block_command)
+{
+	uint32_t addr=0;
+	uint8_t *buffer;
+
+	// struct duration bench;
+	// duration_start(&bench);
+
+	struct emmc_device *emmc;
+	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &emmc);
+	if (retval != ERROR_OK)
+		return retval;
+
+	buffer = malloc(2048);
+	for(int i=0; i<1024; i++)
+	{
+		*(buffer+i) = 0xaa;
+	}
+
+	if (!buffer) {
+		// fileio_close(fileio);
+		LOG_ERROR("Out of memory");
+		return ERROR_FAIL;
+	}
+
+	retval = emmc_write_data_block(emmc, (uint32_t*) buffer, addr);
+
+	free(buffer);
+	return retval;
+}
 
 COMMAND_HANDLER(handle_emmc_write_image_command)
 {
@@ -187,6 +217,14 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id",
 		.help = "identify EMMC flash device",
+	},
+	{
+		.name = "write_block",
+		.handler = handle_emmc_write_block_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id filename [offset]",
+		.help = "Write binary data from file to flash bank. Allow optional "
+			"offset from beginning of the bank (defaults to zero).",
 	},	
 	{
 		.name = "write_image",

@@ -56,23 +56,24 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
         return ERROR_TARGET_NOT_HALTED;
     }
 
-    // LOG_INFO("emmc mio init");
+    LOG_DEBUG("emmc mio init");
     status = dwcmshc_mio_init(emmc);
-    // LOG_INFO("emmc ctl init");
+    LOG_DEBUG("emmc ctl init");
     dwcmshc_emmc_ctl_init(emmc);
-    // LOG_INFO("emmc interrupt init");
+    LOG_DEBUG("emmc interrupt init");
     dwcmshc_emmc_interrupt_init(emmc);
 
-    // LOG_INFO("emmc card init");
+    LOG_DEBUG("emmc card init");
     status = dwcmshc_emmc_card_init(emmc, in_field);
     if(status != ERROR_OK)
         return ERROR_FAIL;
 
-    // LOG_INFO("emmc rd ext csd");
+    LOG_DEBUG("emmc rd ext csd");
     status = dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
 
-    // LOG_INFO("emmc set clk");
-    dwcmshc_emmc_set_clk_ctrl(emmc, MMC_CC_CLK_CARD_OPER, 0);
+    LOG_DEBUG("emmc set clk");
+    dwcmshc_emmc_set_clk_ctrl(emmc, MMC_CC_CLK_CARD_OPER, 1);
+    dwcmshc_fast_mode(emmc);
     return status;
 }
 
@@ -81,8 +82,17 @@ static int dwcmshc_emmc_reset(struct emmc_device *emmc)
 {
     return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
-static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
 
+static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
+{
+    int retval;
+
+    retval = slow_dwcmshc_emmc_write_block(emmc, buffer, addr);
+    return retval;
+}
+
+
+static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
 {
     int retval = ERROR_OK;
 
@@ -142,6 +152,7 @@ const struct emmc_flash_controller dwcmshc_emmc_controller = {
     .command = dwcmshc_emmc_command,
     .reset = dwcmshc_emmc_reset,
     .write_image = dwcmshc_emmc_write_image,
+    .write_block_data = dwcmshc_emmc_write_block,
     .read_block_data = dwcmshc_emmc_read_block,
     .verify_image = dwcmshc_emmc_verify,
     .emmc_ready = dwcmshc_emmc_ready,

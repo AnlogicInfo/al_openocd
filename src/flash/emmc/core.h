@@ -139,7 +139,7 @@ struct emmc_manufacture {
 
 struct emmc_info {
     int mfr_id;
-    size_t prd_name;
+    size_t pnm;
     int block_size;
     int chip_size;
     const char *name;

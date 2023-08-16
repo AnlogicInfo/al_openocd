@@ -51,6 +51,7 @@ struct dwcmshc_emmc_controller {
 #define EMIO_SEL11                           0xF880342CULL
 #define CFG_CTRL_SDIO1                       0xF8800150ULL
 #define IO_BANK1_REF                         0xF8803C04ULL
+#define FAST_MODE_BASE                       0xF8803940ULL
 
 #define MMC_IO_BANK1_SUPPORT_1V8(reg)	     (reg & 0x1)
 #define MMC_IO_BANK1_SUPPORT_2V5(reg)	     ((reg & 0x2) >> 1)
@@ -59,6 +60,7 @@ struct dwcmshc_emmc_controller {
 
 // dwcmshc apis
 int dwcmshc_mio_init(struct emmc_device *emmc);
+int dwcmshc_fast_mode(struct emmc_device *emmc);
 int dwcmshc_emmc_ctl_init(struct emmc_device *emmc);
 int dwcmshc_emmc_cmd_reset(struct emmc_device *emmc, uint32_t argument);
 int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc);
