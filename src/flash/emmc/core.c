@@ -34,20 +34,21 @@ static struct emmc_info emmc_flash_ids[] =
 	// mfr             prd_cid         block_size   chip_size     name
     {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200,       16,           "Samsung KLMAG1JETD-B041 16GB EMMC "},
     {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200,       64,           "Samsung KLMCG8GEAC-B031 64GB EMMC "},
-	{EMMC_MFR_MICRON,  0x4e53304a3536, 0x200,       16,           "Micron MTFC16GAPALBH-IT 16GB EMMC "},
-	{EMMC_MFR_MICRON,  0x4e52314a3536, 0x200,       16,           "Micron MTFC16GAKAEJP-4MIT 16GB EMMC "},
-	{EMMC_MFR_MICRON,  0x4e51324a3535, 0x200,       8,            "Micron MTFC8GAKAJCN-4MIT 8GB EMMC "},
-	{EMMC_MFR_MICRON,  0x4e53304a3335, 0x200,       8,            "Micron MTFC8GAMALBH-AIT 8GB EMMC "},
-	{EMMC_MFR_FORESEE, 0x033538413436, 0x200,       16,           "Foresee FEMDNN016G-58A46 16GB EMMC "},
-	{EMMC_MFR_FORESEE, 0x034133413536, 0x200,       128,          "Foresee FEMDNN128G-A3A56 128GB EMMC "},
-	{EMMC_MFR_HYNIX,   0x4a4838473461, 0x200,       8,            "Hynix H26M41208HPR 8GB EMMC "},
-	{EMMC_MFR_SANDISK, 0x004447343030, 0x200,       8,            "Sandisk SDINBDG4-8G 8GB EMMC "},
-	{EMMC_MFR_SANDISK, 0x004441343132, 0x200,       128,          "Sandisk SDINBDA4-128G 128GB EMMC "},
-	{EMMC_MFR_XINCUN0,  0x00654d4d4320, 0x200,      8,            "Xincun XC08MAAJ-NTS 8GB EMMC "},
-	{EMMC_MFR_XINCUN1,  0x164b4d4d5244, 0x200,      32,           "Xincun XC32MAAJ-NTS 32GB EMMC "},
-	{EMMC_MFR_XINCUN1,  0x160000930051, 0x200,      64,           "Xincun XC64MAAJ-NTS 64GB EMMC "},
+	{EMMC_MFR_MICRON,  0x53304a353658, 0x200,       16,           "Micron MTFC16GAPALBH-IT 16GB EMMC "},
+	{EMMC_MFR_MICRON,  0x52314a35364c, 0x200,       16,           "Micron MTFC16GAKAEJP-4MIT 16GB EMMC "},
+	{EMMC_MFR_MICRON,  0x51324a35354c, 0x200,       8,            "Micron MTFC8GAKAJCN-4MIT 8GB EMMC "},
+	{EMMC_MFR_MICRON,  0x53304a333541, 0x200,       8,            "Micron MTFC8GAMALBH-AIT 8GB EMMC "},
+	{EMMC_MFR_FORESEE, 0x353841343631, 0x200,       16,           "Foresee FEMDNN016G-58A46 16GB EMMC "},
+	{EMMC_MFR_FORESEE, 0x413341353632, 0x200,       128,          "Foresee FEMDNN128G-A3A56 128GB EMMC "},
+	{EMMC_MFR_HYNIX,   0x483847346132, 0x200,       8,            "Hynix H26M41208HPR 8GB EMMC "},
+	{EMMC_MFR_SANDISK, 0x444734303038, 0x200,       8,            "Sandisk SDINBDG4-8G 8GB EMMC "},
+	{EMMC_MFR_SANDISK, 0x444134313238, 0x200,       128,          "Sandisk SDINBDA4-128G 128GB EMMC "},
+	{EMMC_MFR_XINCUN0, 0x654d4d432020, 0x200,       8,            "Xincun XC08MAAJ-NTS 8GB EMMC "},
+	{EMMC_MFR_XINCUN1, 0x4b4d4d524441, 0x200,       32,           "Xincun XC32MAAJ-NTS 32GB EMMC "},
+	{EMMC_MFR_XINCUN1, 0x000093005100, 0x200,       64,           "Xincun XC64MAAJ-NTS 64GB EMMC "},
 
     {0, 0, 0, 0, NULL},
+	{0, 0, 0x200, 0, "Compatible Mode"},
 };
 /**
  * Returns the flash bank specified by @a name, which matches the
@@ -113,27 +114,25 @@ COMMAND_HELPER(emmc_command_auto_probe, unsigned name_index, struct emmc_device 
 
 static int emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 {
+	int i = 0;
 	int mrf_id = 0;
 	size_t pnm;
 	mrf_id = (cid_buf[3] >> 16) & 0xff;
 	pnm = ((size_t) cid_buf[2] << 16) | (cid_buf[1] >> 16);
 
-    for (int i = 0; emmc_flash_ids[i].name; i++)
-    {
-	    if(emmc_flash_ids[i].pnm == pnm && (emmc_flash_ids[i].mfr_id == mrf_id))
-		{
-            emmc->device = &emmc_flash_ids[i];
+	for (i = 0; emmc_flash_ids[i].name; i++) {
+		if (emmc_flash_ids[i].pnm == pnm && (emmc_flash_ids[i].mfr_id == mrf_id)) {
+			emmc->device = &emmc_flash_ids[i];
 			emmc->device->block_size = emmc_flash_ids[i].block_size;
-	        break;
+			break;
 		}
-    }
+	}
 	
-	if(!emmc->device)
-	{
+	if (!emmc->device) {
 		LOG_ERROR("unknown EMMC device, pid: %" PRIx64 " mrf_id: %x", pnm, mrf_id);
-		for(int i = 0; i < 4; i++)
+		emmc->device = &emmc_flash_ids[i + 1];
+		for (i = 0; i < 4; i++)
 			LOG_ERROR("cid %d %"PRIx32 , i, cid_buf[i]);
-		return ERROR_FAIL;
 	}
 
 	return ERROR_OK;
@@ -164,8 +163,6 @@ int emmc_probe(struct emmc_device *emmc)
 		return ERROR_FAIL;
 
 	status = emmc_cid_parse(emmc, in_field);
-	if(status != ERROR_OK)
-		return ERROR_FAIL;
 
 	if(emmc->device->chip_size == 0)
 		emmc_csd_parse(emmc, in_field + 4);
@@ -175,6 +172,7 @@ int emmc_probe(struct emmc_device *emmc)
 		LOG_ERROR("unknown EMMC flash device found");
 		return ERROR_EMMC_OPERATION_FAILED;
 	}
+
     LOG_INFO("found %s", emmc->device->name);
 	free(in_field);
     return status;
