@@ -21,7 +21,7 @@ static int (*reset_methods[3])(struct flash_bank*, uint8_t cmd_mode) = {
 	general_reset_f0,
 	general_reset_66_99
 };
-
+static struct flash_device custom_device;
 FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 {
 	struct dwcssi_flash_bank *driver_priv;
@@ -1419,6 +1419,23 @@ static int dwcssi_probe(struct flash_bank *bank)
 	return ERROR_OK;
 }
 
+static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t chiperase_cmd,
+			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+
+	custom_device.read_cmd = read_cmd;
+	custom_device.pprog_cmd = pprog_cmd;
+	custom_device.chip_erase_cmd = chiperase_cmd;
+	custom_device.pagesize = pagesize;
+	custom_device.sectorsize = sectorsize;
+	custom_device.size_in_bytes = size_in_bytes;
+	custom_device.flash_ops = NULL;
+	driver_priv->dev = &custom_device;
+	driver_priv->probed = true;
+
+	return ERROR_OK;
+}
 
 static int dwcssi_auto_probe(struct flash_bank *bank)
 {
@@ -1461,6 +1478,7 @@ const struct flash_driver dwcssi_flash = {
 	.read = dwcssi_read,
 	.verify = dwcssi_verify,
 	.probe = dwcssi_probe,
+	.customize = dwcssi_customize,
 	.auto_probe = dwcssi_auto_probe,
 	.erase_check = default_flash_blank_check,
 	.protect_check = dwcssi_protect_check,

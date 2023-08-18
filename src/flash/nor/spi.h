@@ -47,7 +47,7 @@ typedef struct flash_ops_t
 	uint8_t qprog_cmd;
 	uint8_t wr_trans_type;
 
-	uint8_t unset_protect_cmd;
+uint8_t unset_protect_cmd;
 } flash_ops_t;
 
 /* data structure to maintain flash ids from different vendors */

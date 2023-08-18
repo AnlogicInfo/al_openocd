@@ -337,8 +337,6 @@ int mem_ap_write_atomic_u32(struct adiv5_ap *ap, target_addr_t address,
 		uint32_t value)
 {
 	int retval = mem_ap_write_u32(ap, address, value);
-/* 	LOG_DEBUG("mem ap wr addr %" PRIx64 " val %"PRIx32, address, value);
- */	
 	if (retval != ERROR_OK)
 		return retval;
 

@@ -25,11 +25,11 @@
 #include <helper/time_support.h>
 #include <target/image.h>
 
+
 /**
  * @file
  * Implements Tcl commands used to access NOR flash facilities.
  */
-
 static COMMAND_HELPER(flash_command_get_bank_maybe_probe, unsigned name_index,
 	       struct flash_bank **bank, bool do_probe)
 {
@@ -185,6 +185,32 @@ COMMAND_HANDLER(handle_flash_probe_command)
 	}
 
 	return retval;
+}
+
+COMMAND_HANDLER(handler_flash_customize_command)
+{
+	struct flash_bank *p;
+	uint8_t read_cmd, pprog_cmd, chiperase_cmd;
+	uint32_t pagesize, sectorsize, size_in_bytes;
+	int retval;
+	if (CMD_ARGC != 7)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
+	if (retval != ERROR_OK)
+		return retval;
+
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[1], read_cmd);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[2], pprog_cmd);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], chiperase_cmd);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[4], pagesize);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[5], sectorsize);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[6], size_in_bytes);
+
+	if (p)
+		p->driver->customize(p, read_cmd, pprog_cmd, chiperase_cmd,
+			pagesize, sectorsize, size_in_bytes);
+	return ERROR_OK;
 }
 
 COMMAND_HANDLER(handle_flash_erase_check_command)
@@ -1096,6 +1122,13 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id",
 		.help = "Identify a flash bank.",
+	},
+	{
+		.name = "customize",
+		.handler = handler_flash_customize_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id read_cmd pprog_cmd erase_cmd page_size sector_size chip_size",
+		.help = "Customize flash with user input",
 	},
 	{
 		.name = "info",
