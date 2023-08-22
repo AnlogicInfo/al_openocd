@@ -181,7 +181,7 @@ struct flash_driver {
 	/*
 	 * Customize flash
 	 */
-	int (*customize)(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t chiperase_cmd,
+	int (*customize)(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
 			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes);
 
 	/**

@@ -794,8 +794,14 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 
 	LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
-		return ERROR_TARGET_NOT_HALTED;
+
+		target_halt(target);
+		retval = target_wait_state(target, TARGET_HALTED, 500);		
+
+		if (retval != ERROR_OK) {
+			LOG_ERROR("Target not halted");
+			return retval;
+		}
 	}
 
 	if ((last < first) || (last >= bank->num_sectors)) {
@@ -815,7 +821,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 		}
 	}
 
-	if (driver_priv->dev->erase_cmd == 0x00)
+	if ((driver_priv->dev->erase_cmd == 0x00) && (driver_priv->dev->chip_erase_cmd == 0x00))
 		return ERROR_FLASH_OPER_UNSUPPORTED;
 	if (flash_ops != NULL)
 		dwcssi_wr_qe(bank, DISABLE);
@@ -944,6 +950,8 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
+	LOG_INFO("read cmd %"PRIx32, driver_priv->dev->read_cmd);
+	LOG_INFO("dev id %"PRIx32, driver_priv->dev->device_id);
 	if (flash_ops != NULL)
 		dwcssi_read_x4(bank, buffer, offset, count);
 	else {
@@ -1419,14 +1427,17 @@ static int dwcssi_probe(struct flash_bank *bank)
 	return ERROR_OK;
 }
 
-static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t chiperase_cmd,
+static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
 			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 
+	dwcssi_config_init(bank, 20);
+
+	custom_device.device_id = 0xdeadbeef;
 	custom_device.read_cmd = read_cmd;
 	custom_device.pprog_cmd = pprog_cmd;
-	custom_device.chip_erase_cmd = chiperase_cmd;
+	custom_device.erase_cmd = erase_cmd;
 	custom_device.pagesize = pagesize;
 	custom_device.sectorsize = sectorsize;
 	custom_device.size_in_bytes = size_in_bytes;
@@ -1434,6 +1445,11 @@ static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t p
 	driver_priv->dev = &custom_device;
 	driver_priv->probed = true;
 
+	if (driver_priv->probed == true) {
+		flash_sector_init(bank, driver_priv);
+		/*flash_ops->quad_dis(bank); */
+		return ERROR_OK;
+	}
 	return ERROR_OK;
 }
 

@@ -190,25 +190,25 @@ COMMAND_HANDLER(handle_flash_probe_command)
 COMMAND_HANDLER(handler_flash_customize_command)
 {
 	struct flash_bank *p;
-	uint8_t read_cmd, pprog_cmd, chiperase_cmd;
+	uint8_t read_cmd, pprog_cmd, erase_cmd;
 	uint32_t pagesize, sectorsize, size_in_bytes;
 	int retval;
 	if (CMD_ARGC != 7)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank_maybe_probe, 0, &p, false);
 	if (retval != ERROR_OK)
 		return retval;
 
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[1], read_cmd);
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[2], pprog_cmd);
-	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], chiperase_cmd);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], erase_cmd);
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[4], pagesize);
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[5], sectorsize);
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[6], size_in_bytes);
 
 	if (p)
-		p->driver->customize(p, read_cmd, pprog_cmd, chiperase_cmd,
+		p->driver->customize(p, read_cmd, pprog_cmd, erase_cmd,
 			pagesize, sectorsize, size_in_bytes);
 	return ERROR_OK;
 }
@@ -1124,13 +1124,6 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.help = "Identify a flash bank.",
 	},
 	{
-		.name = "customize",
-		.handler = handler_flash_customize_command,
-		.mode = COMMAND_EXEC,
-		.usage = "bank_id read_cmd pprog_cmd erase_cmd page_size sector_size chip_size",
-		.help = "Customize flash with user input",
-	},
-	{
 		.name = "info",
 		.handler = handle_flash_info_command,
 		.mode = COMMAND_EXEC,
@@ -1437,6 +1430,13 @@ static const struct command_registration flash_config_command_handlers[] = {
 		.help = "Define a new bank with the given name, "
 			"using the specified NOR flash driver.",
 	},
+	{
+		.name = "customize",
+		.handler = handler_flash_customize_command,
+		.mode = COMMAND_ANY,
+		.usage = "bank_id read_cmd pprog_cmd erase_cmd page_size sector_size chip_size",
+		.help = "Customize flash with user input",
+	},	
 	{
 		.name = "init",
 		.mode = COMMAND_CONFIG,
