@@ -160,6 +160,26 @@ COMMAND_HANDLER(handle_flash_info_command)
 	return retval;
 }
 
+
+COMMAND_HANDLER(hanlder_flash_reset_command)
+{
+	struct flash_bank *p;
+	int retval;
+
+	if (CMD_ARGC != 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank_maybe_probe, 0, &p, false);
+	if (retval != ERROR_OK)
+		return retval;
+	if(p) {
+		retval = p->driver->reset(p);
+	}
+
+	return retval;
+}
+
+
 COMMAND_HANDLER(handle_flash_probe_command)
 {
 	struct flash_bank *p;
@@ -1129,6 +1149,13 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id ['sectors']",
 		.help = "Print information about a flash bank.",
+	},
+	{
+		.name = "reset",
+		.handler = hanlder_flash_reset_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id",
+		.help = "Reset a flash bank",
 	},
 	{
 		.name = "erase_check",

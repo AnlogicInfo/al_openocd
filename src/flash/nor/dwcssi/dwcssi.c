@@ -1349,6 +1349,15 @@ int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_p
 	return ERROR_OK;
 }
 
+static int dwcssi_flash_reset(struct flash_bank *bank)
+{
+	qspi_mio5_pull(bank, HIGH);
+	general_reset_f0(bank, STANDARD_SPI_MODE);
+	general_reset_66_99(bank, STANDARD_SPI_MODE);
+	qspi_mio5_pull(bank, LOW);
+	return ERROR_OK;
+}
+
 static int dwcssi_read_id_reset(struct flash_bank *bank,
 		int (*reset)(struct flash_bank*, uint8_t cmd_mode), uint8_t cmd_mode)
 {
@@ -1493,6 +1502,7 @@ const struct flash_driver dwcssi_flash = {
 	.write = dwcssi_write,
 	.read = dwcssi_read,
 	.verify = dwcssi_verify,
+	.reset = dwcssi_flash_reset,
 	.probe = dwcssi_probe,
 	.customize = dwcssi_customize,
 	.auto_probe = dwcssi_auto_probe,

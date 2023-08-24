@@ -178,6 +178,12 @@ struct flash_driver {
 	 */
 	int (*probe)(struct flash_bank *bank);
 
+	
+	/* 
+	 * Reset flash
+	 */
+	int (*reset)(struct flash_bank *bank);
+	
 	/*
 	 * Customize flash
 	 */
