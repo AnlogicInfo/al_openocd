@@ -420,16 +420,15 @@ int dwcssi_tx(struct flash_bank *bank, uint32_t in)
 	return ERROR_OK;
 }
 
-/*
+
 static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32_t in_cnt)
 {
 	uint32_t i;
-	uint8_t sr;
 	for (i = 0; i < in_cnt; i++)
 		dwcssi_tx(bank, *(in_buf+i));
 	return (dwcssi_txwm_wait(bank));
 }
-*/
+
 static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
 {
 	uint32_t value;
@@ -585,6 +584,7 @@ static int dwcssi_unset_protect(struct flash_bank *bank)
 
 	if (unset_cmd != 0) {
 		retval = dwcssi_flash_tx_cmd(bank, &unset_cmd, 1, STANDARD_SPI_MODE);
+		LOG_INFO("unset protect");
 	} else {
 		uint8_t unset_protect[2] = {0x01, 0};
 		retval = dwcssi_wr_flash_reg(bank, unset_protect, 2, STANDARD_SPI_MODE);
@@ -952,7 +952,7 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 
 	LOG_INFO("read cmd %"PRIx32, driver_priv->dev->read_cmd);
 	LOG_INFO("dev id %"PRIx32, driver_priv->dev->device_id);
-	if (flash_ops != NULL)
+	if (flash_ops != NULL && bank->x4_write_en)
 		dwcssi_read_x4(bank, buffer, offset, count);
 	else {
 		qspi_mio5_pull(bank, HIGH);
@@ -1082,25 +1082,31 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 	if (retval != ERROR_OK)
 		return retval;
 
+	LOG_INFO("checksum image %x", image_crc);
 	if (~image_crc != ~target_crc) {
-		LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
+		LOG_ERROR("target %x", target_crc);
 		retval = ERROR_FAIL;
 	}
 
 	return retval;
 }
 
-/* static int dwcssi_write_partial_page(struct flash_bank *bank,
+static int dwcssi_write_partial_page(struct flash_bank *bank,
 		const uint8_t *buffer, uint32_t offset, uint32_t len, uint8_t wr_cmd)
 {
-	struct dwcssi_trans_config trans_config;
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	uint8_t addr_size = driver_priv->addr_len >> 1;
+	uint8_t flash_sr;
+	int retval = ERROR_FAIL;
+
 	LOG_INFO("slow write cnt %d start val %x", len, *buffer);
+	LOG_INFO("cmd %x addr size %d", driver_priv->dev->pprog_cmd, addr_size);
 
 	dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
 
 	dwcssi_disable(bank);
 	dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
-	dwcssi_config_TXFTLR(bank, 0, len+3);
+	dwcssi_config_TXFTLR(bank, 0, len + addr_size);
 	dwcssi_enable(bank);
 
 	dwcssi_tx(bank, wr_cmd);
@@ -1111,13 +1117,19 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 	dwcssi_tx(bank, offset);
 
 	dwcssi_tx_buf(bank, buffer, len);
-	return ERROR_OK;
-} */
+
+	retval = dwcssi_wait_flash_idle(bank, DWCSSI_MAX_TIMEOUT, &flash_sr);
+
+	if (retval != ERROR_OK)
+		LOG_ERROR("slow write sr %x", flash_sr);
+	return retval;
+}
 
 
-/* static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	uint32_t page_offset, page_size, cur_count;
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	int retval = ERROR_FAIL;
 
 	page_size = X1_PAGE_SIZE;
@@ -1127,16 +1139,18 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 		else
 			cur_count = count;
 
-		retval = dwcssi_write_partial_page(bank, buffer, offset, cur_count, 0x02);
-		if (retval != ERROR_OK)
+		retval = dwcssi_write_partial_page(bank, buffer, offset, cur_count, driver_priv->dev->pprog_cmd);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("slow write fail");
 			return ERROR_FAIL;
+		}
 		page_offset = 0;
 		buffer += cur_count;
 		offset += cur_count;
 		count -= cur_count;
 	}
 	 return retval;
-} */
+}
 
 
 static const uint8_t riscv32_async_bin[] = {
@@ -1299,7 +1313,8 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 	if ((bank->x4_write_en)) {
 		if (flash_ops == NULL) {
 			LOG_ERROR("x4 write not supported for %s", driver_priv->dev->name);
-			return ERROR_FAIL;
+			retval = ERROR_FAIL;
+			goto x1_write;
 		}
 
 		if (page_offset != 0) {
@@ -1309,10 +1324,16 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 			LOG_INFO("use X4 mode");
 			retval = dwcssi_write_async(bank, buffer, offset, count);
 		}
-	} else if (retval != ERROR_OK) {
+	}
+
+x1_write:
+	if (retval != ERROR_OK) {
 		LOG_INFO("use X1 mode");
 		qspi_mio5_pull(bank, HIGH);
-		retval = dwcssi_write_async_x1(bank, buffer, offset, count);
+		if (1)
+			retval = slow_dwcssi_write(bank, buffer, offset, count);
+		if (0)
+			retval = dwcssi_write_async_x1(bank, buffer, offset, count);
 		qspi_mio5_pull(bank, LOW);
 	}
 
