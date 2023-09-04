@@ -18,8 +18,24 @@
 #include <flash/loader_io.h>
 #include "dwcssi_flash.h"
 
+typedef enum mio_speed_t
+{
+    MIO_SPEED_SLOW = 0x0, 
+    MIO_SPEED_MEDI = 0x2,
+    MIO_SPEED_FAST = 0x7
+} mio_speed_t;
+
+typedef enum mio_pull_t
+{
+    MIO_PULL_DIS = 0x0,
+    MIO_PULL_25K_EN = 0x4,
+    MIO_PULL_10K_EN = 0x5
+} mio_pull_t;
+
+
 // qspi flash mio defines
 #define     MIO_BASE                                  0xF8803000
+#define     MIO_PARA_BASE                             0xF8803800
 #define     GPIO_CONFIG                               0xF8411004
 #define     GPIO_OUT                                  0xF8411000
 

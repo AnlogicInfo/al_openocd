@@ -55,11 +55,19 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 	return ERROR_OK;
 }
 
+static uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t pull_dw)
+{
+    uint32_t val = speed | (0x8U << 24) | (pull_dw << 28) | (pull_up << 29);
+    return val;
+}
+
 static int qspi_mio_init(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
 	uint8_t mio_num;
 	uint32_t value = 0;
+	uint32_t mio_parm = mio_pad_ctrl0(MIO_SPEED_FAST, MIO_PULL_10K_EN, MIO_PULL_DIS);
+
 	for (mio_num = 0; mio_num < 28; mio_num = mio_num + 4) {
 		if (target_read_u32(target, MIO_BASE + mio_num, &value) != ERROR_OK)
 			return ERROR_FAIL;
@@ -68,25 +76,11 @@ static int qspi_mio_init(struct flash_bank *bank)
 			if (target_write_u32(target,  MIO_BASE + mio_num, 1) != ERROR_OK)
 				return ERROR_FAIL;
 		}
-	}
-	return ERROR_OK;
-}
 
-static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
-{
-	struct target *target = bank->target;
-	uint8_t mio_func;
-	if (lev == HIGH)
-		mio_func = 0x4;
-	else
-		mio_func = 0x1;
-	LOG_INFO("mio pull %d", lev);
-	if (target_write_u32(target, MIO_BASE + (0x5 << 2), mio_func) != ERROR_OK)
-		return ERROR_FAIL;
-	if (lev == HIGH)	{
-		target_write_u32(target, GPIO_CONFIG, 1<<5);
-		target_write_u32(target, GPIO_OUT, 1<<5);
+		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK) 
+			return ERROR_FAIL;
 	}
+
 	return ERROR_OK;
 }
 
@@ -713,6 +707,153 @@ int dwcssi_wr_qe(struct flash_bank *bank, uint8_t enable)
 	return ERROR_OK;
 }
 
+static int dwcssi_flash_reset(struct flash_bank *bank)
+{
+	general_reset_f0(bank, STANDARD_SPI_MODE);
+	general_reset_66_99(bank, STANDARD_SPI_MODE);
+	bank->x4_write_en = false;
+	return ERROR_OK;
+}
+
+static int dwcssi_read_id_reset(struct flash_bank *bank,
+		int (*reset)(struct flash_bank*, uint8_t cmd_mode), uint8_t cmd_mode)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	uint8_t id[4] = {0};
+
+	if (reset != NULL)
+		reset(bank, cmd_mode);
+	else {
+		if (cmd_mode == QPI_MODE)
+			return ERROR_FAIL;
+	}
+
+	dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
+	return flash_id_parse(driver_priv, (uint32_t *)id);
+}
+
+static int dwcssi_read_id(struct flash_bank *bank)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	const flash_ops_t *flash_ops = NULL;
+
+/*	uint8_t config_reg[3] = {0x01, 0, 0};
+	dwcssi_wr_flash_reg(bank, config_reg, 3, STANDARD_SPI_MODE);
+
+	uint8_t sr_byte1 = 0;
+	uint8_t qpi_seq[2] = {0x31, 0}, qpi_enable = 0x38;
+	dwcssi_rd_flash_reg(bank, &sr_byte1, 0x35, 1);
+	LOG_INFO("sr_byte1 %x", sr_byte1);
+	qpi_seq[1]= sr_byte1 | 0x2;
+	dwcssi_wr_flash_reg(bank, qpi_seq, 2, STANDARD_SPI_MODE);
+
+	LOG_INFO("send qpi cmd");
+	dwcssi_flash_tx_cmd(bank, &qpi_enable, 1, STANDARD_SPI_MODE);
+*/
+
+	for (int i = 0; i < 3; i++) {
+		if (dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE) == ERROR_OK)
+			break;
+		else {
+			if (dwcssi_read_id_reset(bank, reset_methods[i], QPI_MODE) == ERROR_OK)
+				break;
+		}
+	}
+
+	if (driver_priv->probed == true) {
+		flash_sector_init(bank, driver_priv);
+		flash_ops = driver_priv->dev->flash_ops;
+		if (flash_ops != NULL)
+			dwcssi_wr_qe(bank, DISABLE);
+		/*flash_ops->quad_dis(bank); */
+		return ERROR_OK;
+	} else
+		return ERROR_FAIL;
+
+	return ERROR_OK;
+
+}
+
+int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_priv)
+{
+	const struct dwcssi_target *target_device;
+	struct target *target = bank->target;
+	/*reset probe state*/
+	if (driver_priv->probed)
+		free(bank->sectors);
+	driver_priv->probed = false;
+
+	/*init ctrl_base*/
+	if (driver_priv->ctrl_base == 0) {
+		for (target_device = target_devices; target_device->name; ++target_device) {
+			if (target_device->tap_idcode == target->tap->idcode)
+				break;
+		}
+
+		if (!target_device->name) {
+			LOG_ERROR("Device ID 0x%" PRIx32 " is not known as DWCSSPI capable", target->tap->idcode);
+			return ERROR_FAIL;
+		}
+
+		driver_priv->ctrl_base = target_device->ctrl_base;
+		LOG_DEBUG("Valid DWCSSI on device %s at address" TARGET_ADDR_FMT, target_device->name, bank->base);
+	} else {
+		LOG_DEBUG("Assuming DWCSSI as specified at address " TARGET_ADDR_FMT "with ctrl at" TARGET_ADDR_FMT,
+		 driver_priv->ctrl_base, bank->base);
+	}
+	return ERROR_OK;
+}
+
+static int dwcssi_probe(struct flash_bank *bank)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+
+	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
+	driver_priv_init(bank, driver_priv);
+	if (qspi_mio_init(bank) != ERROR_OK) {
+		LOG_ERROR("mio init fail");
+		return ERROR_FAIL;
+	}
+
+	dwcssi_config_init(bank, 20);
+	dwcssi_read_id(bank);
+	return ERROR_OK;
+}
+
+static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
+			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+
+	dwcssi_config_init(bank, 20);
+
+	custom_device.device_id = 0xdeadbeef;
+	custom_device.read_cmd = read_cmd;
+	custom_device.pprog_cmd = pprog_cmd;
+	custom_device.erase_cmd = erase_cmd;
+	custom_device.pagesize = pagesize;
+	custom_device.sectorsize = sectorsize;
+	custom_device.size_in_bytes = size_in_bytes;
+	custom_device.flash_ops = NULL;
+	driver_priv->dev = &custom_device;
+	driver_priv->probed = true;
+
+	if (driver_priv->probed == true) {
+		flash_sector_init(bank, driver_priv);
+		/*flash_ops->quad_dis(bank); */
+		return ERROR_OK;
+	}
+	return ERROR_OK;
+}
+
+static int dwcssi_auto_probe(struct flash_bank *bank)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	if (driver_priv->probed)
+		return ERROR_OK;
+	return dwcssi_probe(bank);
+}
+
 static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
@@ -826,7 +967,6 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 	if (flash_ops != NULL)
 		dwcssi_wr_qe(bank, DISABLE);
 	dwcssi_unset_protect(bank);
-	qspi_mio5_pull(bank, HIGH);
 	if ((first == 0) && (last == (bank->num_sectors - 1)))
 		dwcssi_erase_bulk(bank);
 	else {
@@ -838,7 +978,6 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 			keep_alive();
 		}
 	}
-	qspi_mio5_pull(bank, LOW);
 
 	return retval;
 }
@@ -955,9 +1094,7 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 	if (flash_ops != NULL && bank->x4_write_en)
 		dwcssi_read_x4(bank, buffer, offset, count);
 	else {
-		qspi_mio5_pull(bank, HIGH);
 		dwcssi_read_x1(bank, buffer, offset, count);
-		qspi_mio5_pull(bank, LOW);
 	}
 
 	return ERROR_OK;
@@ -1070,9 +1207,7 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 		retval = dwcssi_checksum_x4(bank, offset, count, &target_crc);
 
 	if (retval != ERROR_OK) {
-		qspi_mio5_pull(bank, HIGH);
 		retval = dwcssi_checksum_x1(bank, offset, count, &target_crc);
-		qspi_mio5_pull(bank, LOW);
 	}
 
 	if (retval != ERROR_OK)
@@ -1321,175 +1456,24 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 			LOG_ERROR("address should be page aligned");
 			return ERROR_FAIL;
 		} else {
-			LOG_INFO("use X4 mode");
 			retval = dwcssi_write_async(bank, buffer, offset, count);
+			if(retval != ERROR_OK)
+				LOG_INFO("X4 write fail");
 		}
 	}
 
 x1_write:
 	if (retval != ERROR_OK) {
 		LOG_INFO("use X1 mode");
-		qspi_mio5_pull(bank, HIGH);
-		if (1)
-			retval = slow_dwcssi_write(bank, buffer, offset, count);
 		if (0)
+			retval = slow_dwcssi_write(bank, buffer, offset, count);
+		if (1)
 			retval = dwcssi_write_async_x1(bank, buffer, offset, count);
-		qspi_mio5_pull(bank, LOW);
 	}
 
 	return retval;
 }
 
-int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_priv)
-{
-	const struct dwcssi_target *target_device;
-	struct target *target = bank->target;
-	/*reset probe state*/
-	if (driver_priv->probed)
-		free(bank->sectors);
-	driver_priv->probed = false;
-
-	/*init ctrl_base*/
-	if (driver_priv->ctrl_base == 0) {
-		for (target_device = target_devices; target_device->name; ++target_device) {
-			if (target_device->tap_idcode == target->tap->idcode)
-				break;
-		}
-
-		if (!target_device->name) {
-			LOG_ERROR("Device ID 0x%" PRIx32 " is not known as DWCSSPI capable", target->tap->idcode);
-			return ERROR_FAIL;
-		}
-
-		driver_priv->ctrl_base = target_device->ctrl_base;
-		LOG_DEBUG("Valid DWCSSI on device %s at address" TARGET_ADDR_FMT, target_device->name, bank->base);
-	} else {
-		LOG_DEBUG("Assuming DWCSSI as specified at address " TARGET_ADDR_FMT "with ctrl at" TARGET_ADDR_FMT,
-		 driver_priv->ctrl_base, bank->base);
-	}
-	return ERROR_OK;
-}
-
-static int dwcssi_flash_reset(struct flash_bank *bank)
-{
-	qspi_mio5_pull(bank, HIGH);
-	general_reset_f0(bank, STANDARD_SPI_MODE);
-	general_reset_66_99(bank, STANDARD_SPI_MODE);
-	qspi_mio5_pull(bank, LOW);
-	return ERROR_OK;
-}
-
-static int dwcssi_read_id_reset(struct flash_bank *bank,
-		int (*reset)(struct flash_bank*, uint8_t cmd_mode), uint8_t cmd_mode)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	uint8_t id[4] = {0};
-
-	if (reset != NULL)
-		reset(bank, cmd_mode);
-	else {
-		if (cmd_mode == QPI_MODE)
-			return ERROR_FAIL;
-	}
-
-	dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
-	return flash_id_parse(driver_priv, (uint32_t *)id);
-}
-
-static int dwcssi_read_id(struct flash_bank *bank)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = NULL;
-
-/*	uint8_t config_reg[3] = {0x01, 0, 0};
-	dwcssi_wr_flash_reg(bank, config_reg, 3, STANDARD_SPI_MODE);
-
-	uint8_t sr_byte1 = 0;
-	uint8_t qpi_seq[2] = {0x31, 0}, qpi_enable = 0x38;
-	dwcssi_rd_flash_reg(bank, &sr_byte1, 0x35, 1);
-	LOG_INFO("sr_byte1 %x", sr_byte1);
-	qpi_seq[1]= sr_byte1 | 0x2;
-	dwcssi_wr_flash_reg(bank, qpi_seq, 2, STANDARD_SPI_MODE);
-
-	LOG_INFO("send qpi cmd");
-	dwcssi_flash_tx_cmd(bank, &qpi_enable, 1, STANDARD_SPI_MODE);
-*/
-
-	for (int i = 0; i < 3; i++) {
-		qspi_mio5_pull(bank, HIGH);
-		if (dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE) == ERROR_OK)
-			break;
-		else {
-			qspi_mio5_pull(bank, LOW);
-			if (dwcssi_read_id_reset(bank, reset_methods[i], QPI_MODE) == ERROR_OK)
-				break;
-		}
-	}
-
-	if (driver_priv->probed == true) {
-		flash_sector_init(bank, driver_priv);
-		flash_ops = driver_priv->dev->flash_ops;
-		if (flash_ops != NULL)
-			dwcssi_wr_qe(bank, DISABLE);
-		/*flash_ops->quad_dis(bank); */
-		return ERROR_OK;
-	} else
-		return ERROR_FAIL;
-
-	return ERROR_OK;
-
-}
-
-
-static int dwcssi_probe(struct flash_bank *bank)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-
-	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
-	driver_priv_init(bank, driver_priv);
-	if (qspi_mio_init(bank) != ERROR_OK) {
-		LOG_ERROR("mio init fail");
-		return ERROR_FAIL;
-	}
-
-	dwcssi_config_init(bank, 20);
-	dwcssi_read_id(bank);
-	return ERROR_OK;
-}
-
-static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
-			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-
-	dwcssi_config_init(bank, 20);
-
-	custom_device.device_id = 0xdeadbeef;
-	custom_device.read_cmd = read_cmd;
-	custom_device.pprog_cmd = pprog_cmd;
-	custom_device.erase_cmd = erase_cmd;
-	custom_device.pagesize = pagesize;
-	custom_device.sectorsize = sectorsize;
-	custom_device.size_in_bytes = size_in_bytes;
-	custom_device.flash_ops = NULL;
-	driver_priv->dev = &custom_device;
-	driver_priv->probed = true;
-
-	if (driver_priv->probed == true) {
-		flash_sector_init(bank, driver_priv);
-		/*flash_ops->quad_dis(bank); */
-		return ERROR_OK;
-	}
-	return ERROR_OK;
-}
-
-static int dwcssi_auto_probe(struct flash_bank *bank)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	if (driver_priv->probed)
-		return ERROR_OK;
-	return dwcssi_probe(bank);
-}
 
 static int dwcssi_protect_check(struct flash_bank *bank)
 {
