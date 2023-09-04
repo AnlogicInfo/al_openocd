@@ -82,7 +82,7 @@ proc program {media filename args} {
 			if {[info exists verify]} {
 				# verify phase
 				echo "** Verify Started **"
-				if {[catch {eval $media verify_image $flash_args}] == 0} {
+				if {[catch {eval $media verify_image $quad_en $flash_args}] == 0} {
 					echo "** Verified OK **"
 				} else {
 					echo $flash_args
