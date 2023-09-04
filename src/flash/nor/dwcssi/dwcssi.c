@@ -1203,7 +1203,7 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
-	if (flash_ops != NULL)
+	if ((flash_ops != NULL) && (bank->x4_write_en)) {
 		retval = dwcssi_checksum_x4(bank, offset, count, &target_crc);
 
 	if (retval != ERROR_OK) {

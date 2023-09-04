@@ -328,3 +328,21 @@ const flash_ops_t mac_25l_ops = {
 	.wr_trans_type = TRANS_TYPE_TT1
 };
 
+const flash_ops_t xtx_25_ops = {
+	.clk_div    = 20,
+	.wait_cycle = 8,
+
+	.qe_index = 0x9,
+	.rdsr1_cmd = 0x05,
+	.rdsr2_cmd = 0x35,
+	.rdsr1n2_cmd = 0,
+	.wrsr1_cmd = 0x01,
+	.wrsr2_cmd = 0,
+	.wrsr1n2_cmd = 0x01,
+
+	.qread_cmd = 0x6B,
+	.rd_trans_type = TRANS_TYPE_TT0,
+	.qprog_cmd = 0x32,
+	.wr_trans_type = TRANS_TYPE_TT0,
+};
+

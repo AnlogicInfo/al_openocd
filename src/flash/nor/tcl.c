@@ -528,6 +528,7 @@ COMMAND_HANDLER(handle_flash_verify_image_command)
 
 	struct image image;
 	uint32_t verified;
+	bool quad_en = 0;
 
 	int retval;
 
@@ -541,6 +542,13 @@ COMMAND_HANDLER(handle_flash_verify_image_command)
 
 	struct duration bench;
 	duration_start(&bench);
+
+	if (strcmp(CMD_ARGV[0], "quad_en") == 0) {
+		quad_en = true;
+		CMD_ARGV++;
+		CMD_ARGC--;
+		command_print(CMD, "quad write enabled");
+	}
 
 	if (CMD_ARGC >= 2) {
 		image.base_address_set = 1;
@@ -557,7 +565,7 @@ COMMAND_HANDLER(handle_flash_verify_image_command)
 		return retval;
 
 	retval = flash_write_unlock_verify(target, &image, &verified, false,
-		false, false, false, true);
+		false, false, quad_en, true);
 	if (retval != ERROR_OK) {
 		image_close(&image);
 		return retval;
@@ -1260,7 +1268,7 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.name = "verify_image",
 		.handler = handle_flash_verify_image_command,
 		.mode = COMMAND_EXEC,
-		.usage = "filename [offset [file_type]]",
+		.usage = "[quad_en] filename [offset [file_type]]",
 		.help = "Verify an image against flash. Allow optional "
 			"offset from beginning of bank (defaults to zero)",
 	},

@@ -48,6 +48,7 @@ extern const flash_ops_t mksv_ops;
 extern const flash_ops_t micron_n25q_ops;
 extern const flash_ops_t micron_n25q256_ops;
 extern const flash_ops_t mac_25l_ops;
+extern const flash_ops_t xtx_25_ops;
 
  /* Shared table of known SPI flash devices for SPI-based flash drivers. Taken
   * from device datasheets and Linux SPI flash drivers. */
@@ -160,7 +161,7 @@ FLASH_ID("mksv mksv064a",       0x03, 0x6b, 0x02, 0x20, 0xc7, 0x0017408f, 0x100,
 FLASH_ID("puya p25q32sh",       0x03, 0x6b, 0x02, 0x20, 0xc7, 0x00166085, 0x100, 0x1000,  0x400000, &puya_ops),
 FLASH_ID("zd zd25q16",          0x03, 0x6b, 0x02, 0xd8, 0xc7, 0x001560ba, 0x100, 0x10000, 0x200000,  &zetta_zd25q_ops),
 FLASH_ID("zb zb25vq64",         0x03, 0x6b, 0x02, 0x20, 0xc7, 0x0017405e, 0x100, 0x1000,  0x800000, &zb_ops),
-FLASH_ID("xtx xt25f128b",       0x03, 0x6b, 0x02, 0x20, 0xc7, 0x0018400b, 0x100, 0x1000,  0x1000000, NULL),
+FLASH_ID("xtx xt25f128b",       0x03, 0x6b, 0x02, 0x20, 0xc7, 0x0018400b, 0x100, 0x1000,  0x1000000, &xtx_25_ops),
 
 /* FRAM, no erase commands, no write page or sectors */
 FRAM_ID("fu mb85rs16n",         0x03, 0,    0x02, 0x00010104, 0x800),
