@@ -1218,6 +1218,7 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 
 	LOG_INFO("checksum image %x", image_crc);
 	if (~image_crc != ~target_crc) {
+		LOG_DEBUG("X4 verify fail, try X1 verify");
 		dwcssi_checksum_x1(bank, offset, count, &target_crc);
 		if (~image_crc != ~target_crc) {
 			LOG_ERROR("target %x", target_crc);
