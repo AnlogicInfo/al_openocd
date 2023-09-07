@@ -61,6 +61,25 @@ static uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t 
     return val;
 }
 
+static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
+{
+	struct target *target = bank->target;
+	uint8_t mio_func;
+	if (lev == HIGH)
+		mio_func = 0x4;
+	else
+		mio_func = 0x1;
+	LOG_DEBUG("mio pull %d", lev);
+	if (target_write_u32(target, MIO_BASE + (0x5 << 2), mio_func) != ERROR_OK)
+		return ERROR_FAIL;
+	if (lev == HIGH)	{
+		target_write_u32(target, GPIO_CONFIG, 1<<5);
+		target_write_u32(target, GPIO_OUT, 1<<5);
+	}
+
+	return ERROR_OK;
+}
+
 static int qspi_mio_init(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
@@ -711,7 +730,7 @@ static int dwcssi_flash_reset(struct flash_bank *bank)
 {
 	general_reset_f0(bank, STANDARD_SPI_MODE);
 	general_reset_66_99(bank, STANDARD_SPI_MODE);
-	bank->x4_write_en = false;
+	bank->x4_mode = false;
 	return ERROR_OK;
 }
 
@@ -807,7 +826,7 @@ int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_p
 static int dwcssi_probe(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-
+	int retval = ERROR_FAIL;
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
 	if (qspi_mio_init(bank) != ERROR_OK) {
@@ -816,8 +835,17 @@ static int dwcssi_probe(struct flash_bank *bank)
 	}
 
 	dwcssi_config_init(bank, 20);
-	dwcssi_read_id(bank);
-	return ERROR_OK;
+	if(dwcssi_read_id(bank) != ERROR_OK) {
+		LOG_INFO("x4 mode disabled due to HOLD# signal");
+		qspi_mio5_pull(bank, HIGH);
+		retval = dwcssi_read_id(bank);
+		qspi_mio5_pull(bank, LOW);
+		bank->x4_en = false;
+	}
+	else
+		bank->x4_en = true;
+
+	return retval;
 }
 
 static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
@@ -1091,10 +1119,12 @@ static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset
 
 	LOG_INFO("read cmd %"PRIx32, driver_priv->dev->read_cmd);
 	LOG_INFO("dev id %"PRIx32, driver_priv->dev->device_id);
-	if (flash_ops != NULL && bank->x4_write_en)
+	if ((flash_ops != NULL) && (bank->x4_mode) && (bank->x4_en))
 		dwcssi_read_x4(bank, buffer, offset, count);
 	else {
+		qspi_mio5_pull(bank, HIGH);
 		dwcssi_read_x1(bank, buffer, offset, count);
+		qspi_mio5_pull(bank, LOW);
 	}
 
 	return ERROR_OK;
@@ -1203,11 +1233,14 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
-	if ((flash_ops != NULL) && (bank->x4_write_en))
+	if ((flash_ops != NULL) && (bank->x4_mode) && (bank->x4_en))
 		retval = dwcssi_checksum_x4(bank, offset, count, &target_crc);
 
-	if (retval != ERROR_OK)
+	if (retval != ERROR_OK) {
+		qspi_mio5_pull(bank, HIGH);
 		retval = dwcssi_checksum_x1(bank, offset, count, &target_crc);
+		qspi_mio5_pull(bank, LOW);
+	}
 
 	if (retval != ERROR_OK)
 		return retval;
@@ -1448,7 +1481,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 	count = flash_write_boundary_check(bank, offset, count);
 	page_offset = offset % page_size;
 	dwcssi_unset_protect(bank);
-	if ((bank->x4_write_en)) {
+	if ((bank->x4_mode) && (bank->x4_en)) {
 		if (flash_ops == NULL) {
 			LOG_ERROR("x4 write not supported for %s", driver_priv->dev->name);
 			retval = ERROR_FAIL;
@@ -1470,8 +1503,9 @@ x1_write:
 		LOG_INFO("use X1 mode");
 		if (0)
 			retval = slow_dwcssi_write(bank, buffer, offset, count);
-		if (1)
-			retval = dwcssi_write_async_x1(bank, buffer, offset, count);
+		qspi_mio5_pull(bank, HIGH);
+		retval = dwcssi_write_async_x1(bank, buffer, offset, count);
+		qspi_mio5_pull(bank, LOW);
 	}
 
 	return retval;

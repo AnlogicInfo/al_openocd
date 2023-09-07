@@ -119,7 +119,8 @@ struct flash_bank {
      * Can be size in bytes or FLASH_WRITE_CONTINUOUS */
 	uint32_t minimal_write_gap;
 
-	bool x4_write_en;
+	bool x4_mode;
+	bool x4_en;
 	/**
 	 * The number of sectors on this chip.  This value will
 	 * be set initially to 0, and the flash driver must set this to

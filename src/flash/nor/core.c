@@ -805,7 +805,7 @@ int flash_write_unlock_verify(struct target *target, struct image *image,
 			continue;
 		}
 
-		c->x4_write_en = quad_en;
+		c->x4_mode = quad_en;
 		/* collect consecutive sections which fall into the same bank */
 		section_last = section;
 		padding[section] = 0;

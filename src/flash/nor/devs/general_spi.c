@@ -29,7 +29,7 @@ void general_spi_quad_rd_config(struct flash_bank *bank, uint8_t addr_len)
 int general_reset_f0(struct flash_bank *bank, uint8_t cmd_mode)
 {
     uint8_t flash_reset[] = {0xF0};
-    LOG_INFO("flash reset F0");
+    LOG_DEBUG("flash reset F0");
     dwcssi_flash_tx_cmd(bank, flash_reset, 1, cmd_mode);
     return ERROR_OK;
 }
@@ -38,7 +38,7 @@ int general_reset_66_99(struct flash_bank *bank, uint8_t cmd_mode)
 {
     uint8_t flash_reset[] = {0x66, 0x99};
 
-    LOG_INFO("flash reset 66 99");
+    LOG_DEBUG("flash reset 66 99");
     dwcssi_flash_tx_cmd(bank, &flash_reset[0], 1, cmd_mode);
     dwcssi_flash_tx_cmd(bank, &flash_reset[1], 1, cmd_mode);
 
