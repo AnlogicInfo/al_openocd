@@ -20,7 +20,6 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
             return status;
         if(value != 0xb)
         {
-            LOG_DEBUG("mio reg %x init ", mio_num);
             status = target_write_u32(target,  mio_addr, 0xb);
             if(status != ERROR_OK)
                 return status;

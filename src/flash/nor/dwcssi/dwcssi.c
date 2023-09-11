@@ -69,7 +69,6 @@ static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
 		mio_func = 0x4;
 	else
 		mio_func = 0x1;
-	LOG_DEBUG("mio pull %d", lev);
 	if (target_write_u32(target, MIO_BASE + (0x5 << 2), mio_func) != ERROR_OK)
 		return ERROR_FAIL;
 	if (lev == HIGH)	{
@@ -91,7 +90,6 @@ static int qspi_mio_init(struct flash_bank *bank)
 		if (target_read_u32(target, MIO_BASE + mio_num, &value) != ERROR_OK)
 			return ERROR_FAIL;
 		if (value != 1)	{
-			LOG_DEBUG("mio reg %x init ", (MIO_BASE + mio_num));
 			if (target_write_u32(target,  MIO_BASE + mio_num, 1) != ERROR_OK)
 				return ERROR_FAIL;
 		}
@@ -830,7 +828,6 @@ static int dwcssi_probe(struct flash_bank *bank)
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
 	if (qspi_mio_init(bank) != ERROR_OK) {
-		LOG_ERROR("mio init fail");
 		return ERROR_FAIL;
 	}
 

@@ -56,22 +56,16 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
         return ERROR_TARGET_NOT_HALTED;
     }
 
-    LOG_DEBUG("emmc mio init");
     status = dwcmshc_mio_init(emmc);
-    LOG_DEBUG("emmc ctl init");
     dwcmshc_emmc_ctl_init(emmc);
-    LOG_DEBUG("emmc interrupt init");
     dwcmshc_emmc_interrupt_init(emmc);
 
-    LOG_DEBUG("emmc card init");
     status = dwcmshc_emmc_card_init(emmc, in_field);
     if(status != ERROR_OK)
         return ERROR_FAIL;
 
-    LOG_DEBUG("emmc rd ext csd");
     status = dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
 
-    LOG_DEBUG("emmc set clk");
     dwcmshc_emmc_set_clk_ctrl(emmc, MMC_CC_CLK_CARD_OPER, 1);
     dwcmshc_fast_mode(emmc);
     return status;
