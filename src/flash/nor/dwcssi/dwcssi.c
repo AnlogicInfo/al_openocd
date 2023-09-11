@@ -992,6 +992,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 	if (flash_ops != NULL)
 		dwcssi_wr_qe(bank, DISABLE);
 	dwcssi_unset_protect(bank);
+	qspi_mio5_pull(bank, HIGH);
 	if ((first == 0) && (last == (bank->num_sectors - 1)))
 		dwcssi_erase_bulk(bank);
 	else {
@@ -1003,7 +1004,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 			keep_alive();
 		}
 	}
-
+	qspi_mio5_pull(bank, LOW);
 	return retval;
 }
 
