@@ -74,7 +74,7 @@ buildwin-job:
     - find $OCDLIB_DIR/libyaml_0_2_2/bin -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - find $OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - find $OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
-    - find 
+    - find $OCDLIB_DIR/libftdi1-$VER_LIBFTDI1/bin64 -name '*.dll' -exec cp -v {} ${PWD}/bin \;
     - echo 'Packing...'
     - 7z a openocd_win64.zip *
     - echo ${CI_JOB_ID} | tee win64_jobid.log
