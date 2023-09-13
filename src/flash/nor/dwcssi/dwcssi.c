@@ -18,8 +18,8 @@ static const struct dwcssi_target target_devices[] = {
 
 static int (*reset_methods[3])(struct flash_bank*, uint8_t cmd_mode) = {
 	NULL,
-	general_reset_f0,
-	general_reset_66_99
+	general_reset_66_99,
+	general_reset_f0
 };
 static struct flash_device custom_device;
 FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
@@ -746,7 +746,10 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 	}
 
 	dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
-	return flash_id_parse(driver_priv, (uint32_t *)id);
+	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0xFFFFFFFF))
+		return ERROR_FAIL;
+	else
+		return flash_id_parse(driver_priv, (uint32_t *)id);
 }
 
 static int dwcssi_read_id(struct flash_bank *bank)
