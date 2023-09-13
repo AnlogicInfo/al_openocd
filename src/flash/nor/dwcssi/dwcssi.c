@@ -757,20 +757,6 @@ static int dwcssi_read_id(struct flash_bank *bank)
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = NULL;
 
-/*	uint8_t config_reg[3] = {0x01, 0, 0};
-	dwcssi_wr_flash_reg(bank, config_reg, 3, STANDARD_SPI_MODE);
-
-	uint8_t sr_byte1 = 0;
-	uint8_t qpi_seq[2] = {0x31, 0}, qpi_enable = 0x38;
-	dwcssi_rd_flash_reg(bank, &sr_byte1, 0x35, 1);
-	LOG_INFO("sr_byte1 %x", sr_byte1);
-	qpi_seq[1]= sr_byte1 | 0x2;
-	dwcssi_wr_flash_reg(bank, qpi_seq, 2, STANDARD_SPI_MODE);
-
-	LOG_INFO("send qpi cmd");
-	dwcssi_flash_tx_cmd(bank, &qpi_enable, 1, STANDARD_SPI_MODE);
-*/
-
 	for (int i = 0; i < 3; i++) {
 		if (dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE) == ERROR_OK)
 			break;
