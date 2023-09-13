@@ -746,7 +746,7 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 	}
 
 	dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
-	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0xFFFFFFFF))
+	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0x00FFFFFF))
 		return ERROR_FAIL;
 	else
 		return flash_id_parse(driver_priv, (uint32_t *)id);
@@ -827,9 +827,10 @@ static int dwcssi_probe(struct flash_bank *bank)
 		retval = dwcssi_read_id(bank);
 		qspi_mio5_pull(bank, LOW);
 		bank->x4_en = false;
-	}
-	else
+	} else {
 		bank->x4_en = true;
+		retval = ERROR_OK;
+	}
 
 	return retval;
 }
@@ -851,6 +852,7 @@ static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t p
 	custom_device.flash_ops = NULL;
 	driver_priv->dev = &custom_device;
 	driver_priv->probed = true;
+	bank->x4_en = false;
 
 	if (driver_priv->probed == true) {
 		flash_sector_init(bank, driver_priv);
