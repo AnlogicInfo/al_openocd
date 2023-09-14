@@ -272,7 +272,7 @@ const flash_ops_t mksv_ops = {
 };
 
 /* Nonvolatile Configuration Register */
-const flash_ops_t micron_n25q_ops = {
+const flash_ops_t micron_24_ops = {
 	.clk_div    = 20,
 	.wait_cycle  = 8,
 
@@ -291,7 +291,7 @@ const flash_ops_t micron_n25q_ops = {
 	.wr_trans_type = TRANS_TYPE_TT0,
 };
 
-const flash_ops_t micron_n25q256_ops = {
+const flash_ops_t micron_32_ops = {
 	.clk_div    = 20,
 	.wait_cycle  = 8,
 

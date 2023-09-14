@@ -52,7 +52,6 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
 	bank->sectors = sectors;
 	dwcssi_info->probed = true;
 
-	LOG_INFO("init bank size %d sector num %d", bank->size, bank->num_sectors);
 	return ERROR_OK;
 }
 
