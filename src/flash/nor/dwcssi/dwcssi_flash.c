@@ -27,7 +27,6 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
 	uint32_t sectorsize;
 	unsigned int sector;
 	struct flash_sector *sectors;
-
 	bank->size = dwcssi_info->dev->size_in_bytes;
 	sectorsize = dwcssi_info->dev->sectorsize ? dwcssi_info->dev->sectorsize : dwcssi_info->dev->size_in_bytes;
 	bank->num_sectors = dwcssi_info->dev->size_in_bytes / sectorsize;
@@ -52,6 +51,8 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
 
 	bank->sectors = sectors;
 	dwcssi_info->probed = true;
+
+	LOG_INFO("init bank size %d sector num %d", bank->size, bank->num_sectors);
 	return ERROR_OK;
 }
 

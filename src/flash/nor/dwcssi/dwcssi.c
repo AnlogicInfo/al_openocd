@@ -754,30 +754,19 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 
 static int dwcssi_read_id(struct flash_bank *bank)
 {
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = NULL;
-
+	int retval = ERROR_FAIL;
 	for (int i = 0; i < 3; i++) {
-		if (dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE) == ERROR_OK)
+		retval = dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE);
+		if (retval == ERROR_OK)
 			break;
 		else {
-			if (dwcssi_read_id_reset(bank, reset_methods[i], QPI_MODE) == ERROR_OK)
+			retval = dwcssi_read_id_reset(bank, reset_methods[i], QPI_MODE);
+			if (retval == ERROR_OK)
 				break;
 		}
 	}
 
-	if (driver_priv->probed == true) {
-		flash_sector_init(bank, driver_priv);
-		flash_ops = driver_priv->dev->flash_ops;
-		if (flash_ops != NULL)
-			dwcssi_wr_qe(bank, DISABLE);
-		/*flash_ops->quad_dis(bank); */
-		return ERROR_OK;
-	} else
-		return ERROR_FAIL;
-
-	return ERROR_OK;
-
+	return retval;
 }
 
 int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_priv)
@@ -813,24 +802,40 @@ int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_p
 static int dwcssi_probe(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	const flash_ops_t *flash_ops = NULL;
 	int retval = ERROR_FAIL;
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
+
 	if (qspi_mio_init(bank) != ERROR_OK) {
 		return ERROR_FAIL;
 	}
-
 	dwcssi_config_init(bank, 20);
-	if(dwcssi_read_id(bank) != ERROR_OK) {
-		LOG_INFO("x4 mode disabled due to HOLD# signal");
-		qspi_mio5_pull(bank, HIGH);
-		retval = dwcssi_read_id(bank);
-		qspi_mio5_pull(bank, LOW);
-		bank->x4_en = false;
-	} else {
-		bank->x4_en = true;
-		retval = ERROR_OK;
+
+	if (!bank->customize) {
+		if(dwcssi_read_id(bank) != ERROR_OK) {
+			LOG_INFO("x4 mode disabled due to HOLD# signal");
+			qspi_mio5_pull(bank, HIGH);
+			retval = dwcssi_read_id(bank);
+			qspi_mio5_pull(bank, LOW);
+			bank->x4_en = false;
+		} else {
+			bank->x4_en = true;
+			retval = ERROR_OK;
+		}
 	}
+	else
+		driver_priv->probed = true;
+
+	if (driver_priv->probed == true) {
+		flash_sector_init(bank, driver_priv);
+		flash_ops = driver_priv->dev->flash_ops;
+		if (flash_ops != NULL)
+			dwcssi_wr_qe(bank, DISABLE);
+		/*flash_ops->quad_dis(bank); */
+		return ERROR_OK;
+	} else
+		return ERROR_FAIL;
 
 	return retval;
 }
@@ -839,9 +844,8 @@ static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t p
 			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-
-	dwcssi_config_init(bank, 20);
-
+	bank->customize = true;
+	bank->x4_en = false;
 	custom_device.device_id = 0xdeadbeef;
 	custom_device.read_cmd = read_cmd;
 	custom_device.pprog_cmd = pprog_cmd;
@@ -851,14 +855,7 @@ static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t p
 	custom_device.size_in_bytes = size_in_bytes;
 	custom_device.flash_ops = NULL;
 	driver_priv->dev = &custom_device;
-	driver_priv->probed = true;
-	bank->x4_en = false;
 
-	if (driver_priv->probed == true) {
-		flash_sector_init(bank, driver_priv);
-		/*flash_ops->quad_dis(bank); */
-		return ERROR_OK;
-	}
 	return ERROR_OK;
 }
 

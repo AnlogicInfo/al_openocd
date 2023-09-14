@@ -76,7 +76,6 @@ proc program {media filename args} {
 	# start programming phase
 	if {$needsflash == 1} {
 		echo "** Programming Started **"
-
 		if {[catch {eval $media write_image erase $quad_en $flash_args}] == 0} {
 			echo "** Programming Finished **"
 			if {[info exists verify]} {

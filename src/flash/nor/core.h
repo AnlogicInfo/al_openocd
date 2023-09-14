@@ -119,6 +119,7 @@ struct flash_bank {
      * Can be size in bytes or FLASH_WRITE_CONTINUOUS */
 	uint32_t minimal_write_gap;
 
+	bool customize;
 	bool x4_mode;
 	bool x4_en;
 	/**
