@@ -1017,15 +1017,33 @@ static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32
 	return retval;
 }
 
+static void print_process(int progress, int total, int barWidth) {
+    float percentage = (float)progress / total;
+    int progressBarWidth = (int)(percentage * barWidth);
+
+    printf("[");
+    for (int i = 0; i < barWidth; i++) {
+        if (i < progressBarWidth) {
+            printf("#");
+        } else {
+            printf(" ");
+        }
+    }
+    printf("] %.1f%%\r", percentage * 100);
+    fflush(stdout);
+}
 
 static int target_async_algorithm_trans_data(struct target *trans_target, const uint8_t *buffer, int count, uint32_t block_size, struct async_fifo *fifo)
 {
 	int retval = ERROR_OK;
 	int timeout = 0;
 	const uint8_t *buffer_orig = buffer;
-
+	int total_cnt = count;
+	int cur_cnt = 0;
 	while(count >0)
 	{
+		cur_cnt = total_cnt - count;
+		print_process(cur_cnt, total_cnt, 100);
 		retval = target_read_u32(trans_target, fifo->rp_addr, &fifo->rp);
 		if (retval != ERROR_OK) {
 			LOG_ERROR("failed to get read pointer");
@@ -1114,7 +1132,8 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 	if (retval != ERROR_OK) {
 		/* abort flash write algorithm on target */
 		target_write_u32(trans_target, fifo->wp_addr, 0);
-	}
+	} else
+		print_process(total_cnt, total_cnt, 100);
 
 	return retval;
 
