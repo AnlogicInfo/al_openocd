@@ -204,6 +204,23 @@ void log_printf_lf(enum log_levels level,
 	va_end(ap);
 }
 
+void log_printf_proc(int progress, int total)
+{
+	float percentage = (float)progress / total;
+	int progressBarWidth = (int)(percentage * BAR_WIDTH);
+
+	printf("[");
+	for (int i = 0; i < BAR_WIDTH; i++) {
+		if (i < progressBarWidth)
+			printf("#");
+		else
+			printf(" ");
+	}
+	printf("] %.1f%%\r", percentage * 100);
+	fflush(stdout);
+}
+
+
 COMMAND_HANDLER(handle_debug_level_command)
 {
 	if (CMD_ARGC == 1) {

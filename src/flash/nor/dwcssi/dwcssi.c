@@ -946,7 +946,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 	unsigned int sector;
 	int retval = ERROR_OK;
 
-	LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
+	LOG_INFO("Erase: from sector %u to sector %u", first, last);
 	if (target->state != TARGET_HALTED) {
 
 		target_halt(target);
@@ -985,6 +985,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 		dwcssi_erase_bulk(bank);
 	else {
 		for (sector = first; sector <= last; sector++) {
+			LOG_PROC(sector, last);
 			retval = dwcssi_erase_sector(bank, sector);
 			if (retval != ERROR_OK)
 				break;

@@ -15,7 +15,7 @@ int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t* id)
 
 	if (!dwcssi_info->dev) {
 		LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", *id);
-		LOG_ERROR("Try customize command to enable flash device:");
+		LOG_ERROR("Try below command to customize flash device:");
 		LOG_ERROR("flash customize bank_id read_cmd page_prog_cmd page_erase_cmd page_size sector_size chip_size");
 	}
 

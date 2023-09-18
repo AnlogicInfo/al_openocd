@@ -59,6 +59,8 @@ enum log_levels {
 	LOG_LVL_DEBUG_IO = 4,
 };
 
+#define BAR_WIDTH 100
+
 void log_printf(enum log_levels level, const char *file, unsigned line,
 		const char *function, const char *format, ...)
 __attribute__ ((format (PRINTF_ATTRIBUTE_FORMAT, 5, 6)));
@@ -67,6 +69,7 @@ void log_vprintf_lf(enum log_levels level, const char *file, unsigned line,
 void log_printf_lf(enum log_levels level, const char *file, unsigned line,
 		const char *function, const char *format, ...)
 __attribute__ ((format (PRINTF_ATTRIBUTE_FORMAT, 5, 6)));
+void log_printf_proc(int progress, int total);
 
 /**
  * Initialize logging module.  Call during program startup.
@@ -107,6 +110,11 @@ extern int debug_level;
 
 /* Avoid fn call and building parameter list if we're not outputting the information.
  * Matters on feeble CPUs for DEBUG/INFO statements that are involved frequently */
+
+#define LOG_PROC(expr ...) \
+	do { \
+		log_printf_proc(expr); \
+	} while (0)
 
 #define LOG_LEVEL_IS(FOO)  ((debug_level) >= (FOO))
 
