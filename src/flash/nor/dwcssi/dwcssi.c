@@ -746,8 +746,11 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 	}
 
 	dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
-	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0x00FFFFFF))
+	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0x00FFFFFF)) 
+	{
+		LOG_ERROR("read id fail %"PRIx32, *(uint32_t *)id);
 		return ERROR_FAIL;
+	}
 	else
 		return flash_id_parse(driver_priv, (uint32_t *)id);
 }
