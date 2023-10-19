@@ -116,7 +116,7 @@
 [0][0x6e - 1] = "Altera",
 [0][0x6f - 1] = "NEXCOM",
 [0][0x70 - 1] = "Qualcomm",
-[0][0x71 - 1] = "Sony",
+[0][0x71 - 1] = "Anlogic",
 [0][0x72 - 1] = "Cray Research",
 [0][0x73 - 1] = "AMS(Austria Micro)",
 [0][0x74 - 1] = "Vitesse",
