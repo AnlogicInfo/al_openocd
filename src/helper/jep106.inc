@@ -1316,7 +1316,6 @@
 [10][0x33 - 1] = "Trek Technology (S) PTE Ltd",
 [10][0x34 - 1] = "Xiamen Kingblaze Technology Co Ltd",
 [10][0x35 - 1] = "Shenzhen Lomica Technology Co Ltd",
-[10][0x36 - 1] = "Nuclei System Technology Co Ltd",
 [10][0x37 - 1] = "Wuhan Xun Zhan Electronic Technology",
 [10][0x38 - 1] = "Shenzhen Ingacom Semiconductor Ltd",
 [10][0x39 - 1] = "Zotac Technology Ltd",
