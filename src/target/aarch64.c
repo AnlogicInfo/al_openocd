@@ -147,6 +147,9 @@ static int aarch64_mmu_modify(struct target *target, int enable)
 		}
 		if (!(aarch64->system_control_reg_curr & 0x1U))
 			aarch64->system_control_reg_curr |= 0x1U;
+		/* flush data cache armv8 function to be called */
+		if (armv8->armv8_mmu.armv8_cache.flush_all_data_cache)
+			armv8->armv8_mmu.armv8_cache.flush_all_data_cache(target);
 	} else {
 		if (aarch64->system_control_reg_curr & 0x4U) {
 			/*  data cache is active */
