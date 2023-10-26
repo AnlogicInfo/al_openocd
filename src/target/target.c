@@ -113,6 +113,7 @@ extern struct target_type mem_ap_target;
 extern struct target_type esirisc_target;
 extern struct target_type arcv2_target;
 extern struct target_type pstap_target;
+extern struct target_type dwcphy_target;
 extern struct target_type vexriscv_target;
 
 static struct target_type *target_types[] = {
@@ -153,6 +154,7 @@ static struct target_type *target_types[] = {
 	&aarch64_target,
 	&mips_mips64_target,
 	&pstap_target,
+	&dwcphy_target,
 	&vexriscv_target,
 	NULL,
 };
@@ -3948,6 +3950,9 @@ COMMAND_HANDLER(handle_load_image_command)
 
 		free(buffer);
 	}
+
+	if (target->type->flush_cache)
+		target->type->flush_cache(target);
 
 	if ((retval == ERROR_OK) && (duration_measure(&bench) == ERROR_OK)) {
 		command_print(CMD, "downloaded %" PRIu32 " bytes "

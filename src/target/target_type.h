@@ -149,6 +149,8 @@ struct target_type {
 			struct target_memory_check_block *blocks, int num_blocks,
 			uint8_t erased_value);
 
+	int (*flush_cache)(struct target *target);
+
 	/*
 	 * target break-/watchpoint control
 	 * rw: 0 = write, 1 = read, 2 = access

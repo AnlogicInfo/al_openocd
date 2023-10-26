@@ -147,9 +147,6 @@ static int aarch64_mmu_modify(struct target *target, int enable)
 		}
 		if (!(aarch64->system_control_reg_curr & 0x1U))
 			aarch64->system_control_reg_curr |= 0x1U;
-		/* flush data cache armv8 function to be called */
-		if (armv8->armv8_mmu.armv8_cache.flush_all_data_cache)
-			armv8->armv8_mmu.armv8_cache.flush_all_data_cache(target);
 	} else {
 		if (aarch64->system_control_reg_curr & 0x4U) {
 			/*  data cache is active */
@@ -2525,6 +2522,22 @@ static int aarch64_write_memory(struct target *target, target_addr_t address,
 	return aarch64_write_cpu_memory(target, address, size, count, buffer);
 }
 
+static int aarch64_flush_cache(struct target *target)
+{
+	struct armv8_common *armv8 = target_to_armv8(target);
+	int mmu_enabled = 0;
+	int retval;
+	retval = aarch64_mmu(target, &mmu_enabled);
+
+	if (mmu_enabled) {
+		/* flush data cache armv8 function to be called */
+		LOG_DEBUG("flush d-cache after write");
+		if (armv8->armv8_mmu.armv8_cache.flush_all_data_cache)
+			armv8->armv8_mmu.armv8_cache.flush_all_data_cache(target);
+	}
+	return retval;
+}
+
 static int aarch64_handle_target_request(void *priv)
 {
 	struct target *target = priv;
@@ -3590,6 +3603,7 @@ struct target_type aarch64_target = {
 
 	.read_memory = aarch64_read_memory,
 	.write_memory = aarch64_write_memory,
+	.flush_cache = aarch64_flush_cache,
 
 	.start_algorithm = aarch64_start_algorithm,
 	.wait_algorithm = aarch64_wait_algorithm,
