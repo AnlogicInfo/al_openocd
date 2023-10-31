@@ -106,7 +106,7 @@ static int dwcphy_deassert_reset(struct target *target)
 static void dwcphy_set_instr(struct jtag_tap *tap, uint32_t new_instr)
 {
 
-	LOG_INFO("set ir %x len %d", new_instr, tap->ir_length);
+	LOG_DEBUG("set ir %x len %d", new_instr, tap->ir_length);
 
 	struct scan_field field;
 	field.num_bits = tap->ir_length;
@@ -129,7 +129,7 @@ static void dwcphy_memory_cmd_addr(struct jtag_tap *tap, size_t address)
 	field[0].num_bits = 32;
 	field[0].out_value = addr_buf;
 	buf_set_u32(addr_buf, 0, 32, address);
-	LOG_INFO("addr buf %x", (*(uint32_t *)addr_buf));
+	LOG_DEBUG("addr buf %x", (*(uint32_t *)addr_buf));
 	field[0].in_value = NULL;
 	field[0].check_value = NULL;
 	field[0].check_mask = NULL;
@@ -149,8 +149,6 @@ static void dwcphy_memory_cmd_data(struct jtag_tap *tap, const uint8_t* data, ui
 	struct scan_field field[2];
 	uint8_t instr_buf;
 	uint8_t data_buf[4] = {0};
-
-	LOG_INFO("cmd data");
 
 	dwcphy_set_instr(tap, CRSEL);
 
@@ -173,7 +171,7 @@ static void dwcphy_memory_cmd_data(struct jtag_tap *tap, const uint8_t* data, ui
 static int dwcphy_read_memory(struct target *target, target_addr_t address,
 							uint32_t size, uint32_t count, uint8_t *buffer)
 {
-	LOG_INFO("Reading memory at physical address 0x%" TARGET_PRIxADDR
+	LOG_DEBUG("Reading memory at physical address 0x%" TARGET_PRIxADDR
 		  "; size %" PRIu32 "; count %" PRIu32, address, size, count);
 
 	if (count == 0 || !buffer)
