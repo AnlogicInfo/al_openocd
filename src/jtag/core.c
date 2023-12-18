@@ -1285,6 +1285,8 @@ static int jtag_examine_chain(void)
 			/* Friendly devices support IDCODE */
 			tap->hasidcode = true;
 			tap->idcode = idcode;
+			if (strstr(tap->dotted_name, "dummy") != NULL)
+				idcode = 0;
 			jtag_examine_chain_display(LOG_LVL_INFO, "tap/device found", tap->dotted_name, idcode);
 
 			bit_count += 32;

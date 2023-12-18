@@ -3958,6 +3958,8 @@ COMMAND_HANDLER(handle_load_image_command)
 		command_print(CMD, "downloaded %" PRIu32 " bytes "
 				"in %fs (%0.3f KiB/s)", image_size,
 				duration_elapsed(&bench), duration_kbps(&bench, image_size));
+	} else {
+		command_print(CMD, "load image failed");
 	}
 
 	image_close(&image);
