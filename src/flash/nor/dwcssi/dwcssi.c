@@ -1464,11 +1464,14 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 	uint32_t page_size, page_offset;
-
+	uint8_t addr_size = driver_priv->addr_len >> 1;
 	page_size = driver_priv->dev->pagesize ?
 				driver_priv->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
 
 	count = flash_write_boundary_check(bank, offset, count);
+
+	if (flash_addr_mode_check(offset, count, addr_size) != ERROR_OK)
+		return ERROR_FAIL; 
 	page_offset = offset % page_size;
 	dwcssi_unset_protect(bank);
 	if ((bank->x4_mode) && (bank->x4_en)) {

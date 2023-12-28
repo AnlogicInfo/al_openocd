@@ -17,6 +17,7 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
 int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t *id);
 int flash_sector_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
 uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, uint32_t count);
+int flash_addr_mode_check(uint32_t offset, uint32_t count, uint8_t addr_size);
 // int flash_status_err(uint8_t status);
 
 #endif

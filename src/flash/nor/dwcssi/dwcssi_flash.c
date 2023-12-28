@@ -106,3 +106,14 @@ uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, ui
 
 	return actual_count;
 }
+
+int flash_addr_mode_check(uint32_t offset, uint32_t count, uint8_t addr_size) 
+{
+	if ((offset + count > 0x1000000) && (addr_size == 3)) {
+		LOG_ERROR("Write exceeds 3-Byte address boundary");
+		LOG_ERROR("Pls try to program with flash customize cmd");
+		return ERROR_FAIL;
+	}
+	else
+		return ERROR_OK;
+}
