@@ -988,7 +988,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 		dwcssi_erase_bulk(bank);
 	else {
 		for (sector = first; sector <= last; sector++) {
-			LOG_PROC(sector, last);
+			LOG_PROC((sector-first), (last-first));
 			retval = dwcssi_erase_sector(bank, sector);
 			if (retval != ERROR_OK)
 				break;
