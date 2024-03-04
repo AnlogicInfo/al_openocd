@@ -351,14 +351,25 @@ COMMAND_HANDLER(handle_adapter_list_command)
 	return ERROR_OK;
 }
 
+extern struct adapter_driver jtag_vpi_adapter_driver;
+int adapter_previous_not_vpi = 1;
 COMMAND_HANDLER(handle_adapter_driver_command)
 {
 	int retval;
 
 	/* check whether the interface is already configured */
 	if (adapter_driver) {
-		LOG_WARNING("Interface already configured, ignoring");
-		return ERROR_OK;
+		if (adapter_driver == &jtag_vpi_adapter_driver) {
+			jtag_vpi_switch_bypass(1);
+			adapter_previous_not_vpi = 0;
+		} else {
+			if (adapter_previous_not_vpi == 0) { /* Want to switch back to VPI mode */
+				jtag_vpi_switch_bypass(0);
+			} else {
+				LOG_WARNING("Interface already configured, ignoring");
+				return ERROR_OK;
+			}
+		}
 	}
 
 	/* interface name is a mandatory argument */
@@ -805,7 +816,7 @@ static const struct command_registration adapter_command_handlers[] = {
 	{
 		.name = "driver",
 		.handler = handle_adapter_driver_command,
-		.mode = COMMAND_CONFIG,
+		.mode = COMMAND_ANY,
 		.help = "Select a debug adapter driver",
 		.usage = "driver_name",
 	},

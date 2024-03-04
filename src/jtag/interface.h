@@ -375,4 +375,6 @@ int adapter_config_trace(bool enabled, enum tpiu_pin_protocol pin_protocol,
 		unsigned int traceclkin_freq, uint16_t *prescaler);
 int adapter_poll_trace(uint8_t *buf, size_t *size);
 
+int jtag_vpi_switch_bypass(int bypassen); /* TODO: Dirty implement */
+
 #endif /* OPENOCD_JTAG_INTERFACE_H */
