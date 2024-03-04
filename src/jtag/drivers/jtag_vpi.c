@@ -48,6 +48,7 @@
 #define CMD_SCAN_CHAIN		2
 #define CMD_SCAN_CHAIN_FLIP_TMS	3
 #define CMD_STOP_SIMU		4
+#define CMD_HWSERVER_BYPASS	5
 
 /* jtag_vpi server port and address to connect to */
 static int server_port = DEFAULT_SERVER_PORT;
@@ -218,6 +219,16 @@ static int jtag_vpi_reset(int trst, int srst)
 
 	vpi.cmd = CMD_RESET;
 	vpi.length = 0;
+	return jtag_vpi_send_cmd(&vpi);
+}
+
+int jtag_vpi_switch_bypass(int bypassen)
+{
+	struct vpi_cmd vpi;
+	memset(&vpi, 0, sizeof(struct vpi_cmd));
+
+	vpi.cmd = CMD_HWSERVER_BYPASS;
+	vpi.length = bypassen;
 	return jtag_vpi_send_cmd(&vpi);
 }
 
