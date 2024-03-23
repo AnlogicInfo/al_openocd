@@ -602,4 +602,6 @@ void jtag_poll_set_enabled(bool value);
 
 int jim_jtag_newtap(Jim_Interp *interp, int argc, Jim_Obj *const *argv);
 
+extern int allow_tap_access;
+
 #endif /* OPENOCD_JTAG_JTAG_H */

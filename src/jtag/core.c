@@ -1680,6 +1680,7 @@ int jtag_init(struct command_context *cmd_ctx)
 	if (Jim_Eval_Named(cmd_ctx->interp, "jtag_init", __FILE__, __LINE__) != JIM_OK)
 		return ERROR_FAIL;
 
+	allow_tap_access = 0;
 	return ERROR_OK;
 }
 

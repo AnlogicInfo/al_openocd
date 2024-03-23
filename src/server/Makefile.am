@@ -11,6 +11,8 @@ noinst_LTLIBRARIES += %D%/libserver.la
 	%D%/rtt_server.c \
 	%D%/rtt_server.h \
 	%D%/ipdbg.c \
-	%D%/ipdbg.h
+	%D%/ipdbg.h \
+	%D%/rbb_server.c \
+	%D%/rbb_server.h
 
 STARTUP_TCL_SRCS += %D%/startup.tcl
