@@ -22,4 +22,6 @@
 
 int rtt_server_register_commands(struct command_context *ctx);
 
+extern int allow_tap_access;
+
 #endif /* OPENOCD_SERVER_RTT_SERVER_H */
