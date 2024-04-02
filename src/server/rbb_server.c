@@ -339,9 +339,11 @@ static int rbb_input(struct connection *connection)
 			if (last_st == TAP_IRSHIFT)
 				jtag_add_plain_ir_scan(service->regions[i].end - service->regions[i].begin,
 					scan_out_buf, tdi_buffer[tdi_buffer_count], last_req ? TAP_IREXIT1 : TAP_IRSHIFT);
-			else
+			else if (last_st == TAP_DRSHIFT)
 				jtag_add_plain_dr_scan(service->regions[i].end - service->regions[i].begin,
 					scan_out_buf, tdi_buffer[tdi_buffer_count], last_req ? TAP_DREXIT1 : TAP_DRSHIFT);
+			else /* Probably just RTI */
+				jtag_add_runtest(service->regions[i].end - service->regions[i].begin, TAP_IDLE);
 		}
 		last_st = service->regions[i].endstate;
 	}
@@ -362,6 +364,10 @@ static int rbb_input(struct connection *connection)
 		assert(tdo_bits_p == read_bits);
 		connection_write(connection, send_buffer, read_bits);
 	}
+
+	if (cmd_queue_cur_state == TAP_IDLE || cmd_queue_cur_state == TAP_RESET)
+		allow_tap_access = 0;
+
 	return ERROR_OK;
 }
 
