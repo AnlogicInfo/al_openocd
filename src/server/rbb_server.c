@@ -278,6 +278,10 @@ static int rbb_input(struct connection *connection)
 
 	int j;
 	int tms_buffer_count = 0;
+
+	/* TODO: Dynamically assign the buffer and drop out RBB_MAX_BUF_COUNT for
+		efficency and safety reason */
+
 	uint8_t tms_buffer[RBB_MAX_BUF_COUNT][RBB_BUFFERSIZE];
 	size_t tdi_buffer_count = 0;
 	uint8_t tdi_buffer[RBB_MAX_BUF_COUNT][RBB_BUFFERSIZE];
@@ -431,7 +435,7 @@ static const struct command_registration rbb_server_command_handlers[] = {
 static const struct command_registration rbb_command_handlers[] = {
 	{.name = "rbb",
 	 .mode = COMMAND_ANY,
-	 .help = "rbb",
+	 .help = "Remote Bitbang server for Anlogic TD",
 	 .usage = "",
 	 .chain = rbb_server_command_handlers},
 	COMMAND_REGISTRATION_DONE};
