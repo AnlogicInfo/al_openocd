@@ -771,9 +771,9 @@ static int telnet_input(struct connection *connection)
 	unsigned char *buf_p;
 	struct telnet_connection *t_con = connection->priv;
 
-	if (allow_tap_access)
-		return ERROR_OK;
-
+/*	if (allow_tap_access)
+		return ERROR_OK; /* Please DON'T USE RBB interface while access from CLI! */
+*/
 	bytes_read = connection_read(connection, buffer, TELNET_BUFFER_SIZE);
 
 	if (bytes_read == 0)

@@ -307,11 +307,11 @@ static int rbb_input(struct connection *connection)
 
 			int do_read = 0;
 			for (j = service->regions[i].begin; j < service->regions[i].end; j++) {
-				uint8_t tdi_bit = (tdi_input[i / 8] >> (i % 8)) & 0x1;
-				int off = i - service->regions[i].begin;
+				uint8_t tdi_bit = (tdi_input[j / 8] >> (j % 8)) & 0x1;
+				int off = j - service->regions[i].begin;
 				tdi_buffer[tdi_buffer_count][off / 8] |= tdi_bit << (off % 8);
 
-				uint8_t read_bit = (read_input[i / 8] >> (i % 8)) & 0x1;
+				uint8_t read_bit = (read_input[j / 8] >> (j % 8)) & 0x1;
 				if (read_bit) {
 					do_read = 1;
 					/* Raise a flag */
