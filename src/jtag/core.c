@@ -514,6 +514,21 @@ int jtag_add_tms_seq(unsigned nbits, const uint8_t *seq, enum tap_state state)
 	return retval;
 }
 
+int jtag_add_tdi_seq(unsigned nbits, const uint8_t *out_bits, uint8_t *in_bits, tap_state_t state)
+{
+	int retval;
+
+	if (!(adapter_driver->jtag_ops->supported & DEBUG_CAP_TDI_SEQ))
+		return ERROR_JTAG_NOT_IMPLEMENTED;
+
+	jtag_checks();
+	cmd_queue_cur_state = state;
+
+	retval = interface_add_tdi_seq(nbits, out_bits, in_bits, state);
+	jtag_set_error(retval);
+	return retval;
+}
+
 void jtag_add_pathmove(int num_states, const tap_state_t *path)
 {
 	tap_state_t cur_state = cmd_queue_cur_state;
@@ -1004,6 +1019,9 @@ int default_interface_jtag_execute_queue(void)
 				break;
 			case JTAG_TMS:
 				LOG_DEBUG_IO("JTAG TMS (TODO)");
+				break;
+			case JTAG_TDI:
+				LOG_DEBUG_IO("JTAG TDI (TODO)");
 				break;
 			default:
 				LOG_ERROR("Unknown JTAG command: %d", cmd->type);

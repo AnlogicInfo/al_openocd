@@ -145,7 +145,7 @@ static const struct command_registration dummy_command_handlers[] = {
  * where the target is unresponsive.
  */
 static struct jtag_interface dummy_interface = {
-	.supported = DEBUG_CAP_TMS_SEQ,
+	.supported = DEBUG_CAP_TMS_SEQ | DEBUG_CAP_TDI_SEQ,
 	.execute_queue = &bitbang_execute_queue,
 };
 

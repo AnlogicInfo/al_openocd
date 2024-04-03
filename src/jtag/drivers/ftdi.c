@@ -451,6 +451,55 @@ static void ftdi_execute_tms(struct jtag_command *cmd)
 		ftdi_jtag_mode);
 }
 
+/**
+ * Clock a bunch of TDI sequence to the adapter, bypasses all
+ * sanity check logic! Cuz RBB server required this feature
+ * and please consider DON'T USE this function by any other
+ * function except RBB!
+ */
+static void ftdi_execute_tdi(struct jtag_command *cmd)
+{
+	struct scan_field *field = cmd->cmd.scan->fields;
+	LOG_DEBUG_IO("TDI: %d bits, %s", field->num_bits,
+		field->in_value == NULL ? "WRITE" : "READ");
+
+	if (cmd->cmd.scan->end_state == TAP_DREXIT1 || cmd->cmd.scan->end_state == TAP_DREXIT2) {
+		LOG_DEBUG_IO("flip TMS needed");
+		DO_CLOCK_DATA(mpsse_ctx,
+					field->out_value,
+					0,
+					field->in_value,
+					0,
+					field->num_bits - 1,
+					ftdi_jtag_mode);
+
+		uint8_t last_bit = 0;
+		if (field->out_value)
+			bit_copy(&last_bit, 0, field->out_value, field->num_bits - 1, 1);
+
+		uint8_t tms_bits = 0x03;
+		DO_CLOCK_TMS_CS(mpsse_ctx,
+				&tms_bits,
+				0,
+				field->in_value,
+				field->num_bits - 1,
+				1,
+				last_bit,
+				ftdi_jtag_mode); /* send last TDI bit and flip TMS */
+
+	} else {
+		DO_CLOCK_DATA(mpsse_ctx,
+			field->out_value,
+			0,
+			field->in_value,
+			0,
+			field->num_bits,
+			ftdi_jtag_mode);
+	}
+
+}
+
+
 static void ftdi_execute_pathmove(struct jtag_command *cmd)
 {
 	tap_state_t *path = cmd->cmd.pathmove->path;
@@ -705,6 +754,9 @@ static void ftdi_execute_command(struct jtag_command *cmd)
 			break;
 		case JTAG_TMS:
 			ftdi_execute_tms(cmd);
+			break;
+		case JTAG_TDI:
+			ftdi_execute_tdi(cmd);
 			break;
 		default:
 			LOG_ERROR("BUG: unknown JTAG command type encountered: %d", cmd->type);
@@ -1683,7 +1735,7 @@ static const struct swd_driver ftdi_swd = {
 static const char * const ftdi_transports[] = { "jtag", "swd", NULL };
 
 static struct jtag_interface ftdi_interface = {
-	.supported = DEBUG_CAP_TMS_SEQ,
+	.supported = DEBUG_CAP_TMS_SEQ | DEBUG_CAP_TDI_SEQ,
 	.execute_queue = ftdi_execute_queue,
 };
 

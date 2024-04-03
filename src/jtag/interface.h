@@ -198,7 +198,7 @@ struct jtag_interface {
 	 */
 	unsigned supported;
 #define DEBUG_CAP_TMS_SEQ	(1 << 0)
-
+#define DEBUG_CAP_TDI_SEQ	(1 << 1)
 	/**
 	 * Execute queued commands.
 	 * @returns ERROR_OK on success, or an error code on failure.

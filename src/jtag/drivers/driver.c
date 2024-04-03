@@ -255,6 +255,30 @@ int interface_add_tms_seq(unsigned num_bits, const uint8_t *seq, enum tap_state 
 	return ERROR_OK;
 }
 
+int interface_add_tdi_seq(unsigned num_bits,
+		const uint8_t *out_bits, uint8_t *in_bits, enum tap_state state)
+{
+	struct jtag_command *cmd = cmd_queue_alloc(sizeof(struct jtag_command));
+	struct scan_command *scan = cmd_queue_alloc(sizeof(struct scan_command));
+	struct scan_field *out_fields = cmd_queue_alloc(sizeof(struct scan_field));
+
+	jtag_queue_command(cmd);
+
+	cmd->type = JTAG_TDI;
+	cmd->cmd.scan = scan;
+
+	scan->ir_scan = 0;
+	scan->num_fields = 1;
+	scan->fields = out_fields;
+	scan->end_state = state;
+
+	out_fields->num_bits = num_bits;
+	out_fields->out_value = buf_cpy(out_bits, cmd_queue_alloc(DIV_ROUND_UP(num_bits, 8)), num_bits);
+	out_fields->in_value = in_bits;
+
+	return ERROR_OK;
+}
+
 int interface_jtag_add_pathmove(int num_states, const tap_state_t *path)
 {
 	/* allocate memory for a new list member */

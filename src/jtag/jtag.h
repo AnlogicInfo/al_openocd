@@ -496,6 +496,8 @@ void jtag_add_reset(int req_tlr_or_trst, int srst);
 void jtag_add_sleep(uint32_t us);
 
 int jtag_add_tms_seq(unsigned nbits, const uint8_t *seq, enum tap_state t);
+int jtag_add_tdi_seq(unsigned nbits, const uint8_t *out_bits, uint8_t *in_bits,
+		tap_state_t endstate);
 
 /**
  * Function jtag_add_clocks
