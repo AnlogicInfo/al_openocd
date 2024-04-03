@@ -38,6 +38,8 @@
 #include <helper/jep106.h>
 #include "helper/system.h"
 
+#include <server/rbb_server.h>
+
 #ifdef HAVE_STRINGS_H
 #include <strings.h>
 #endif
@@ -160,6 +162,10 @@ bool is_jtag_poll_safe(void)
 
 	if (!jtag_poll || jtag_trst != 0)
 		return false;
+
+	if (allow_tap_access)
+		return false;
+
 	return jtag_srst == 0 || (jtag_reset_config & RESET_SRST_NO_GATING);
 }
 

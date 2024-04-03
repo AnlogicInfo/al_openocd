@@ -142,7 +142,7 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 		if ((cur_state != TAP_DRSHIFT && new_state == TAP_DRSHIFT) ||
 			(cur_state != TAP_IRSHIFT && new_state == TAP_IRSHIFT)) {
 			struct jtag_region *region = &(service->regions[service->region_count++]);
-			region->is_tms = true;
+			region->is_tms = 1;
 			region->begin = shift_pos;
 			region->end = i + 1;
 			region->endstate = cur_state;
@@ -152,8 +152,8 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 					(cur_state == TAP_IRSHIFT && new_state != TAP_IRSHIFT)) {
 			/* end */
 			struct jtag_region *region = &(service->regions[service->region_count++]);
-			region->is_tms = false;
-			region->flip_tms = true;
+			region->is_tms = 0;
+			region->flip_tms = 1;
 			region->begin = shift_pos;
 			region->end = i + 1;
 			region->endstate = cur_state;
@@ -164,8 +164,8 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 					(tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state == cur_state)) {
 			/* skip some bits */
 			struct jtag_region *region = &(service->regions[service->region_count++]);
-			region->is_tms = false;
-			region->flip_tms = false;
+			region->is_tms = 0;
+			region->flip_tms = 0;
 			region->begin = shift_pos;
 			region->end = i + 1;
 			region->endstate = cur_state;
@@ -179,8 +179,8 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 					(tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state != cur_state)) {
 			/* skip some bits */
 			struct jtag_region *region = &(service->regions[service->region_count++]);
-			region->is_tms = false;
-			region->flip_tms = true;
+			region->is_tms = 0;
+			region->flip_tms = 1;
 			region->begin = shift_pos;
 			region->end = i + 1;
 			region->endstate = cur_state;
@@ -267,10 +267,10 @@ static int rbb_input(struct connection *connection)
 		read_bits++;
 	}
 	if (command == 'R') {
-		service->last_is_read = true;
+		service->last_is_read = 1;
 		read_bits--;
 	} else {
-		service->last_is_read = false;
+		service->last_is_read = 0;
 	}
 #endif
 
@@ -291,7 +291,7 @@ static int rbb_input(struct connection *connection)
 
 	tap_state_t last_st = TAP_IDLE;
 	for (i = 0; i < service->region_count; i++) {
-		if (service->regions[i].flip_tms) { /* Needs to flip TMS */
+		if (service->regions[i].is_tms) { /* Handle TAP state change */
 
 			memset(tms_buffer[tms_buffer_count++], 0x00, RBB_BUFFERSIZE);
 			for (j = service->regions[i].begin; j < service->regions[i].end; j++) {
@@ -335,15 +335,15 @@ static int rbb_input(struct connection *connection)
 			else
 				scan_out_buf = tdo_buffer[tdi_buffer_count];
 
-			int last_req = (i == (service->region_count - 1));
+			int last_req = service->regions[i].flip_tms; /* Needs to flip TMS */
 			if (last_st == TAP_IRSHIFT)
 				jtag_add_plain_ir_scan(service->regions[i].end - service->regions[i].begin,
-					scan_out_buf, tdi_buffer[tdi_buffer_count], last_req ? TAP_IREXIT1 : TAP_IRSHIFT);
+					tdi_buffer[tdi_buffer_count], scan_out_buf, last_req ? TAP_IREXIT1 : TAP_IRSHIFT);
 			else if (last_st == TAP_DRSHIFT)
 				jtag_add_plain_dr_scan(service->regions[i].end - service->regions[i].begin,
-					scan_out_buf, tdi_buffer[tdi_buffer_count], last_req ? TAP_DREXIT1 : TAP_DRSHIFT);
-			else /* Probably just RTI */
-				jtag_add_runtest(service->regions[i].end - service->regions[i].begin, TAP_IDLE);
+					tdi_buffer[tdi_buffer_count], scan_out_buf, last_req ? TAP_DREXIT1 : TAP_DRSHIFT);
+			else /* Probably just RTI/PDR/PIR */
+				jtag_add_runtest(service->regions[i].end - service->regions[i].begin, last_st);
 		}
 		last_st = service->regions[i].endstate;
 	}
