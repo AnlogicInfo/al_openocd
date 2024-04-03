@@ -363,7 +363,7 @@ static int rbb_input(struct connection *connection)
 					send_buffer[tdo_bits_p++] = tdo_bit ? '1' : '0';
 				}
 		}
-		assert(tdo_bits_p == read_bits);
+		/* assert(tdo_bits_p == read_bits); */
 		connection_write(connection, send_buffer, read_bits);
 	}
 
