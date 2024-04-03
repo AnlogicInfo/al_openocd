@@ -349,8 +349,10 @@ static int rbb_input(struct connection *connection)
 	}
 
 	int retval = jtag_execute_queue();
-	if (retval != ERROR_OK)
+	if (retval != ERROR_OK) {
+		allow_tap_access = 0; /* Need to release the TAP */
 		return retval;
+	}
 
 	int tdo_bits_p = 0;
 	if (read_bits != 0) {
