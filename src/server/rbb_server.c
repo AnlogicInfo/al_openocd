@@ -193,6 +193,7 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 			/* dprintf("region-> begin %d, end %d\n", region->begin, region->end); */
 
 			shift_pos = i + 1;
+			tdo_read_bit_old = tdo_read_bit;
 		} else if ((tdo_read_bit_old != tdo_read_bit && cur_state == TAP_DRSHIFT && new_state != cur_state) ||
 					(tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state != cur_state)) {
 			/* skip some bits */
@@ -206,13 +207,12 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 			/* dprintf("region-> begin %d, end %d\n", region->begin, region->end); */
 
 			shift_pos = i + 1;
-
+			tdo_read_bit_old = tdo_read_bit;
 		}
 		cur_state = new_state;
-		tdo_read_bit_old = tdo_read_bit;
 	}
 	service->state = cur_state;
-
+#if 0
 	if (bits != 0) {
 		if (service->region_count == 0) {
 			service->region_count = 1;
@@ -253,6 +253,16 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 			}
 		}
 	}
+#else
+	if (shift_pos != bits) {
+		struct jtag_region *region = &(service->regions[service->region_count++]);
+		region->is_tms = cur_state != TAP_IRSHIFT && cur_state != TAP_DRSHIFT;
+		region->flip_tms = 0;
+		region->begin = shift_pos;
+		region->end = bits;
+		region->endstate = cur_state;
+	}
+#endif
 	LOG_DEBUG_IO("bit len = %d", bits);
 }
 #endif
@@ -493,7 +503,7 @@ static int rbb_input(struct connection *connection)
 				}
 		}
 		assert(tdo_bits_p == read_bits);
-		LOG_INFO("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
+		LOG_DEBUG("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
 						(int)tdi_buffer_count);
 
 		send_buffer[tdo_bits_p] = 0;
@@ -505,7 +515,7 @@ static int rbb_input(struct connection *connection)
 	/* need an ringbuffer to store all data */
 	/* functions we need:
 		rbb_buf_add(inbuffer, length); // Adds data to the ringbuffer
-		rbb_buf_getsize();  // Get current data count
+		rbb_buf_getsize();	// Get current data count
 		rbb_buf_getdata(); // Readout a control word, and increase write pointer
 		rbb_buf_getrp(); // Get current read pointer
 		rbb_buf_rstrp(rp); // Reset read pointer to a specification value
