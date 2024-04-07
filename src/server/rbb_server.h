@@ -24,7 +24,7 @@ int rbb_server_register_commands(struct command_context *ctx);
 
 extern int allow_tap_access;
 
-#define RBB_BUFFERSIZE 1024
+#define RBB_BUFFERSIZE 16384
 #define RBB_MAX_BUF_COUNT 16
 
 #endif /* OPENOCD_SERVER_RBB_SERVER_H */

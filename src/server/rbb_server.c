@@ -149,18 +149,20 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 	int shift_pos = 0;
 	uint8_t tdo_read_bit_old = read_bits[0] & 0x1;
 	tap_state_t cur_state = service->state;
-
+	LOG_DEBUG_IO("curstate = %s", tap_state_name(cur_state));
 	service->region_count = 0;
 	for (int i = 0; i < bits; i++) {
 		uint8_t tms_bit = (tms[i / 8] >> (i % 8)) & 0x1;
 		uint8_t tdo_read_bit = (read_bits[(i+1) / 8] >> ((i+1) % 8)) & 0x1;
 
 		tap_state_t new_state = next_state(cur_state, tms_bit);
-		/* LOG_DEBUG("st %s -> %s, tms %d", tap_state_name(cur_state), tap_state_name(new_state), tms_bit); */
+		/* LOG_DEBUG_IO("st %s -> %s, tms %d, pos %d, read %d",
+			tap_state_name(cur_state), tap_state_name(new_state), tms_bit, i, tdo_read_bit); */
 		if ((cur_state != TAP_DRSHIFT && new_state == TAP_DRSHIFT) ||
 			(cur_state != TAP_IRSHIFT && new_state == TAP_IRSHIFT)) {
 			struct jtag_region *region = &(service->regions[service->region_count++]);
 			region->is_tms = 1;
+			region->flip_tms = 0;
 			region->begin = shift_pos;
 			region->end = i + 1;
 			region->endstate = cur_state;
@@ -190,8 +192,6 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 
 			/* dprintf("region-> begin %d, end %d\n", region->begin, region->end); */
 
-			tdo_read_bit_old = tdo_read_bit;
-
 			shift_pos = i + 1;
 		} else if ((tdo_read_bit_old != tdo_read_bit && cur_state == TAP_DRSHIFT && new_state != cur_state) ||
 					(tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state != cur_state)) {
@@ -205,36 +205,53 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 
 			/* dprintf("region-> begin %d, end %d\n", region->begin, region->end); */
 
-			tdo_read_bit_old = tdo_read_bit;
-
 			shift_pos = i + 1;
 
 		}
 		cur_state = new_state;
+		tdo_read_bit_old = tdo_read_bit;
 	}
 	service->state = cur_state;
 
-	if (service->region_count == 0 && bits != 0) {
-		service->region_count = 1;
-		if (cur_state == TAP_DRSHIFT || cur_state == TAP_DRSHIFT) {
-			struct jtag_region *region = &(service->regions[0]);
-			region->is_tms = 0;
-			region->flip_tms = 0;
-			region->begin = 0;
-			region->end = bits;
-			region->endstate = cur_state;
+	if (bits != 0) {
+		if (service->region_count == 0) {
+			service->region_count = 1;
+			if (cur_state == TAP_DRSHIFT || cur_state == TAP_IRSHIFT) {
+				struct jtag_region *region = &(service->regions[0]);
+				region->is_tms = 0;
+				region->flip_tms = 0;
+				region->begin = 0;
+				region->end = bits;
+				region->endstate = cur_state;
+			} else {
+				struct jtag_region *region = &(service->regions[0]);
+				region->is_tms = 1;
+				region->flip_tms = 0;
+				region->begin = 0;
+				region->end = bits;
+				region->endstate = cur_state;
+			}
 		} else {
-			struct jtag_region *region = &(service->regions[0]);
-			region->is_tms = 1;
-			region->flip_tms = 0;
-			region->begin = 0;
-			region->end = bits;
-			region->endstate = cur_state;
+			struct jtag_region *region = &(service->regions[service->region_count - 1]);
+			int prev_end = region->end;
+			if (prev_end != bits && service->region_count != 0) {
+				region = &(service->regions[service->region_count]);
+				region->flip_tms = 0; /* TODO: Maybe an issue*/
+
+				if (cur_state == TAP_DRSHIFT || cur_state == TAP_IRSHIFT) {
+					region->is_tms = 0;
+					/* Need a better way */
+				} else
+					region->is_tms = 1;
+
+				region->begin = prev_end + 1;
+				region->end = bits;
+				region->endstate = cur_state;
+				service->region_count++;
+				LOG_DEBUG("Add new region at last, start pos = %d, endpos = %d",
+							region->begin, bits);
+			}
 		}
-	} else {
-		struct jtag_region *region = &(service->regions[service->region_count - 1]);
-		if (region->end != bits && service->region_count != 0)
-			region->end = bits;
 	}
 	LOG_DEBUG_IO("bit len = %d", bits);
 }
@@ -252,7 +269,7 @@ static int rbb_input(struct connection *connection)
 	unsigned char read_input[RBB_BUFFERSIZE];
 	unsigned char send_buffer[RBB_BUFFERSIZE];
 
-	LOG_DEBUG("called, st = %s", tap_state_name(cmd_queue_cur_state));
+	/* LOG_DEBUG("called, st = %s", tap_state_name(cmd_queue_cur_state)); */
 
 	if (allow_tap_access == 0) { /* Not occuppied by RBB */
 		/* If the TAP state not in TLR or RTI, just return back */
@@ -288,16 +305,20 @@ static int rbb_input(struct connection *connection)
 
 	length = bytes_read;
 
+#if 1
 	char command;
 	int bits = 0, read_bits = 0;
 	size_t i;
 	memset(tms_input, 0x00, sizeof(tms_input));
 	memset(tdi_input, 0x00, sizeof(tdi_input));
 	memset(read_input, 0x00, sizeof(read_input));
-
+	LOG_DEBUG_IO("Here comes receive buffer");
 	for (i = 0; i < length; i++) {
 		command = buffer[i];
-		/* printf("%c ", command); */
+
+		if (debug_level >= LOG_LVL_DEBUG_IO)
+			LOG_OUTPUT("%c", command);
+
 		if ('0' <= command && command <= '7') {
 			/* set */
 		char offset = command - '0';
@@ -319,6 +340,8 @@ static int rbb_input(struct connection *connection)
 			/* TRST = 1 */
 		}
 	}
+	if (debug_level >= LOG_LVL_DEBUG_IO)
+		LOG_OUTPUT("\n-\n");
 	/* LOG_DEBUG("received length %lld, bits %d", length, bits); */
 
 #ifndef RBB_NOT_HANDLE_LAST
@@ -390,7 +413,7 @@ static int rbb_input(struct connection *connection)
 		} else {
 			/* Handle SHIFT-DR/ SHIFT-IR */
 			memset(tdi_buffer[tdi_buffer_count], 0x00, RBB_BUFFERSIZE);
-
+			int warned = 0;
 			for (j = service->regions[i].begin; j < service->regions[i].end; j++) {
 				uint8_t tdi_bit = (tdi_input[j / 8] >> (j % 8)) & 0x1;
 				int off = j - service->regions[i].begin;
@@ -406,6 +429,15 @@ static int rbb_input(struct connection *connection)
 				}
 				/* verify our assumption: all read_bit remains the same */
 				assert(do_read == read_bit);
+				if (do_read != read_bit) {
+					if (warned == 0) {
+						LOG_ERROR("do read in region %d mismatch, off = %d!", (int)i, off);
+						int k;
+						for (k = 0; k < bytes_read; k++)
+							LOG_OUTPUT("%c", buffer[k]);
+						warned = 1;
+					}
+				}
 			}
 
 			if (do_read != 0) {
@@ -436,10 +468,12 @@ static int rbb_input(struct connection *connection)
 			tdi_buffer_count++;
 		}
 		last_st = service->regions[i].endstate;
-		/* LOG_DEBUG_IO("region %lld, type %s, size %d, do_read %d, end state %s", i,
-					service->regions[i].is_tms ? "TMS" : "TDI",
-					service->regions[i].end - service->regions[i].begin,
-					do_read, tap_state_name(last_st)); */
+#if 1
+		LOG_DEBUG("region %d, type %s, start %d, size %d, ftms %d, do_read %d, end state %s", (int)i,
+					service->regions[i].is_tms ? "TMS" : "TDI", service->regions[i].begin,
+					service->regions[i].end - service->regions[i].begin, service->regions[i].flip_tms,
+					do_read, tap_state_name(last_st));
+#endif
 	}
 
 	int retval = jtag_execute_queue();
@@ -459,13 +493,28 @@ static int rbb_input(struct connection *connection)
 				}
 		}
 		assert(tdo_bits_p == read_bits);
-		/* LOG_DEBUG_IO("read_bits %d, tdo_bits %d, tdi cnt %lld", read_bits, tdo_bits_p,
-						tdi_buffer_count); */
+		LOG_INFO("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
+						(int)tdi_buffer_count);
+
 		send_buffer[tdo_bits_p] = 0;
-		LOG_DEBUG_IO("send buffer '%s'", send_buffer);
+		LOG_DEBUG("send buffer '%s'", send_buffer);
 		connection_write(connection, send_buffer, read_bits);
 	}
+#else
+	/* New pipelined FSM */
+	/* need an ringbuffer to store all data */
+	/* functions we need:
+		rbb_buf_add(inbuffer, length); // Adds data to the ringbuffer
+		rbb_buf_getsize();  // Get current data count
+		rbb_buf_getdata(); // Readout a control word, and increase write pointer
+		rbb_buf_getrp(); // Get current read pointer
+		rbb_buf_rstrp(rp); // Reset read pointer to a specification value
 
+		How FSM works:
+		read an control word from ringbuffer
+		run JTAG FSM
+	*/
+#endif
 	if (cmd_queue_cur_state == TAP_IDLE || cmd_queue_cur_state == TAP_RESET)
 		allow_tap_access = 0;
 

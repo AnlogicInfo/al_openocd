@@ -463,8 +463,9 @@ static void ftdi_execute_tdi(struct jtag_command *cmd)
 	LOG_DEBUG_IO("TDI: %d bits, %s", field->num_bits,
 		field->in_value == NULL ? "WRITE" : "READ");
 
-	if (cmd->cmd.scan->end_state == TAP_DREXIT1 || cmd->cmd.scan->end_state == TAP_DREXIT2) {
-		LOG_DEBUG_IO("flip TMS needed");
+	LOG_DEBUG_IO("tap_end_st %s", tap_state_name(cmd->cmd.scan->end_state));
+
+	if (cmd->cmd.scan->end_state == TAP_DREXIT1 || cmd->cmd.scan->end_state == TAP_IREXIT1) {
 		DO_CLOCK_DATA(mpsse_ctx,
 					field->out_value,
 					0,
