@@ -74,7 +74,7 @@ static int rbb_connection_closed(struct connection *connection)
 	int retval = ERROR_OK;
 	if (cmd_queue_cur_state != TAP_IDLE &&
 		cmd_queue_cur_state != TAP_RESET) {
-		LOG_INFO("Move TAP state back to IDLE");
+		LOG_INFO("Move TAP state from %s to IDLE", tap_state_name(cmd_queue_cur_state));
 
 		/* If tap's current state not in idle */
 		/* TODO: not issue JTAG RESET */
@@ -525,8 +525,11 @@ static int rbb_input(struct connection *connection)
 		run JTAG FSM
 	*/
 #endif
+
+#ifdef RBB_RELEASE_FAST
 	if (cmd_queue_cur_state == TAP_IDLE || cmd_queue_cur_state == TAP_RESET)
 		allow_tap_access = 0;
+#endif
 
 	return ERROR_OK;
 }
