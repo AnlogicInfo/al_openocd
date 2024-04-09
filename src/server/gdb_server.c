@@ -51,6 +51,7 @@
 #include <jtag/jtag.h>
 #include "rtos/rtos.h"
 #include "target/smp.h"
+#include "rbb_server.h"
 
 /**
  * @file
@@ -3748,6 +3749,10 @@ static int gdb_input_inner(struct connection *connection)
 
 static int gdb_input(struct connection *connection)
 {
+	/* If the rbb server is now occuppied the port, we should exit */
+	if (allow_tap_access)
+		return ERROR_OK;
+
 	int retval = gdb_input_inner(connection);
 	struct gdb_connection *gdb_con = connection->priv;
 	if (retval == ERROR_SERVER_REMOTE_CLOSED)

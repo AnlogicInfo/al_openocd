@@ -44,6 +44,7 @@
 #include <server/server.h>
 #include <server/gdb_server.h>
 #include <server/rtt_server.h>
+#include <server/rbb_server.h>
 
 #ifdef HAVE_STRINGS_H
 #include <strings.h>
@@ -314,6 +315,7 @@ static struct command_context *setup_command_handler(Jim_Interp *interp)
 		&server_register_commands,
 		&gdb_register_commands,
 		&log_register_commands,
+		&rbb_server_register_commands,
 		&rtt_server_register_commands,
 		&transport_register_commands,
 		&adapter_register_commands,

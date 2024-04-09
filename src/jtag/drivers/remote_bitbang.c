@@ -185,7 +185,7 @@ static bb_value_t char_to_int(int c)
 			return BB_HIGH;
 		default:
 			remote_bitbang_quit();
-			LOG_ERROR("remote_bitbang: invalid read response: %c(%i)", c, c);
+			LOG_ERROR("remote_bitbang: invalid read response: %02x(%c)", c, c);
 			return BB_ERROR;
 	}
 }

@@ -30,6 +30,7 @@
 #include <target/target_request.h>
 #include <helper/configuration.h>
 #include <helper/list.h>
+#include "rbb_server.h"
 
 static char *telnet_port;
 
@@ -770,6 +771,10 @@ static int telnet_input(struct connection *connection)
 	unsigned char *buf_p;
 	struct telnet_connection *t_con = connection->priv;
 
+/*	Please DON'T TOUCH CLI while RBB is running! */
+/*	if (allow_tap_access)
+		return ERROR_OK;
+*/
 	bytes_read = connection_read(connection, buffer, TELNET_BUFFER_SIZE);
 
 	if (bytes_read == 0)

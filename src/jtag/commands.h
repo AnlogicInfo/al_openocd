@@ -152,6 +152,7 @@ enum jtag_command_type {
 	JTAG_SLEEP        = 7,
 	JTAG_STABLECLOCKS = 8,
 	JTAG_TMS          = 9,
+	JTAG_TDI          = 10,
 };
 
 struct jtag_command {
