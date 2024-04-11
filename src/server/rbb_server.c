@@ -26,6 +26,7 @@
 
 #include "server.h"
 #include "rbb_server.h"
+#include <helper/time_support.h>
 
 int allow_tap_access;
 
@@ -52,6 +53,9 @@ struct rbb_service {
 	tap_state_t state;
 	struct jtag_region regions[64];
 	size_t region_count;
+	int64_t lasttime;
+	int64_t backofftime;
+	int64_t spacingtime;
 };
 
 
@@ -90,6 +94,7 @@ static int rbb_connection_closed(struct connection *connection)
 			LOG_ERROR("JTAG queue execute failed!");
 	}
 	allow_tap_access = 0;
+	service->lasttime = timeval_ms(); /* Record the time when client disconnects */
 	LOG_DEBUG("rbb: Connection for channel %u closed", service->channel);
 
 	return retval;
@@ -289,6 +294,13 @@ static int rbb_input(struct connection *connection)
 	}
 
 	service = (struct rbb_service *)connection->service->priv;
+
+	if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
+		int64_t curtime = timeval_ms();
+		if ((curtime - service->lasttime) < service->spacingtime)
+			return ERROR_OK; /* Wait for spacing time passed */
+	}
+
 	bytes_read = connection_read(connection, buffer, sizeof(buffer));
 	/* Needs to Lock the adapter driver, reject any other access */
 	/* TODO: dirty call, don't do that */
@@ -548,7 +560,7 @@ COMMAND_HANDLER(handle_rbb_start_command)
 	int ret;
 	struct rbb_service *service;
 
-	if (CMD_ARGC != 1)
+	if (CMD_ARGC < 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	service = malloc(sizeof(struct rbb_service));
@@ -559,8 +571,19 @@ COMMAND_HANDLER(handle_rbb_start_command)
 	service->channel = 0;
 	service->last_is_read = 0;
 	service->state = TAP_RESET;
+	service->lasttime = 0;
 
 	ret = add_service(&rbb_service_driver, CMD_ARGV[0], CONNECTION_LIMIT_UNLIMITED, service);
+
+	if (CMD_ARGC >= 2)
+		service->spacingtime = atoi(CMD_ARGV[1]);
+	else
+		service->spacingtime = 100; /* 100ms */
+
+	if (CMD_ARGC >= 3)
+		service->backofftime = atoi(CMD_ARGV[2]);
+	else
+		service->backofftime = 100; /* 100ms */
 
 	if (ret != ERROR_OK) {
 		free(service);
@@ -585,7 +608,7 @@ static const struct command_registration rbb_server_subcommand_handlers[] = {
 	 .handler = handle_rbb_start_command,
 	 .mode = COMMAND_ANY,
 	 .help = "Start a rbb server",
-	 .usage = "<port>"},
+	 .usage = "<port> [spacing time]"},
 	{.name = "stop",
 	 .handler = handle_rbb_stop_command,
 	 .mode = COMMAND_ANY,
