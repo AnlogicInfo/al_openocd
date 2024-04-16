@@ -39,6 +39,7 @@
 #include <helper/time_support.h>
 #include <helper/list.h>
 #include <jtag/swd.h>
+#include <server/rbb_server.h>
 
 /*#define DEBUG_WAIT*/
 
@@ -791,6 +792,9 @@ static int jtag_dp_run(struct adiv5_dap *dap)
 {
 	int retval;
 	int retval2 = ERROR_OK;
+	int old_tap_st = allow_tap_access;
+
+	allow_tap_access = 3;
 
 	retval = adi_jtag_finish_read(dap);
 	if (retval != ERROR_OK)
@@ -799,6 +803,7 @@ static int jtag_dp_run(struct adiv5_dap *dap)
 	retval = jtagdp_transaction_endcheck(dap);
 
  done:
+	allow_tap_access = old_tap_st;
 	return (retval2 != ERROR_OK) ? retval2 : retval;
 }
 

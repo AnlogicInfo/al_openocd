@@ -292,6 +292,8 @@ static int rbb_input(struct connection *connection)
 			cmd_queue_cur_state != TAP_RESET)
 			return ERROR_OK;
 	}
+	if (allow_tap_access == 3)
+		return ERROR_OK;
 
 	service = (struct rbb_service *)connection->service->priv;
 
