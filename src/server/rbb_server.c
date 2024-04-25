@@ -292,6 +292,9 @@ static int rbb_input(struct connection *connection)
 		if (cmd_queue_cur_state != TAP_IDLE &&
 			cmd_queue_cur_state != TAP_RESET)
 			return ERROR_OK;
+
+		if (jtag_command_queue != NULL)
+			return ERROR_OK;
 	}
 	if (allow_tap_access == 3)
 		return ERROR_OK;
