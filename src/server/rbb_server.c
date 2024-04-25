@@ -56,6 +56,7 @@ struct rbb_service {
 	int64_t lasttime;
 	int64_t backofftime;
 	int64_t spacingtime;
+	int allow_tlr;
 };
 
 
@@ -425,10 +426,46 @@ static int rbb_input(struct connection *connection)
 		if (service->regions[i].is_tms) { /* Handle TAP state change */
 
 			memset(tms_buffer[tms_buffer_count], 0x00, RBB_BUFFERSIZE);
+			int first_tms_one_pos = -1;
+			int cont_tms_count = 0;
+
+			int tlr_startpos = -1;
+			int tlr_endpos = -1;
 			for (j = service->regions[i].begin; j < service->regions[i].end; j++) {
 				uint8_t tms_bit = (tms_input[j / 8] >> (j % 8)) & 0x1;
+				if (tms_bit != 1) {
+					if (cont_tms_count >= 5) { /* 5 more ones, Issuing TLR-RST */
+						tlr_endpos = j - 1;
+						tlr_startpos = first_tms_one_pos;
+					}
+					first_tms_one_pos = -1;
+					cont_tms_count = 0;
+				}
+				if (tms_bit == 1 && first_tms_one_pos == -1) {
+					/* tms count start point */
+					first_tms_one_pos = j;
+				}
+				if (tms_bit == 1 && first_tms_one_pos != -1) {
+					/* count contingous tms bits */
+					cont_tms_count++;
+				}
 				int off = j - service->regions[i].begin;
 				tms_buffer[tms_buffer_count][off / 8] |= tms_bit << (off % 8);
+			}
+
+			if (service->allow_tlr == 0) {
+				if (tlr_startpos != -1) {
+					LOG_DEBUG("Blocking TLR-RESET, TLR start pos %d, TLR end pos %d", tlr_startpos, tlr_endpos);
+					for (j = tlr_startpos; j <= tlr_endpos; j++) {
+						uint8_t tms_data = tms_buffer[tms_buffer_count][j / 8];
+
+						int ofs = j % 8;
+						uint8_t mask = ~(1 << ofs); /* clear a specific bit */
+						tms_data &= mask;
+
+						tms_buffer[tms_buffer_count][j / 8] = tms_data;
+					}
+				}
 			}
 			jtag_add_tms_seq(service->regions[i].end - service->regions[i].begin, tms_buffer[tms_buffer_count],
 				service->regions[i].endstate);
@@ -587,6 +624,12 @@ COMMAND_HANDLER(handle_rbb_start_command)
 	else
 		service->backofftime = 100; /* 100ms */
 
+	if (CMD_ARGC >= 4)
+		service->allow_tlr = atoi(CMD_ARGV[3]);
+	else
+		service->allow_tlr = 0; /* Don't allow TLR */
+
+
 	if (ret != ERROR_OK) {
 		free(service);
 		return ERROR_FAIL;
@@ -610,7 +653,7 @@ static const struct command_registration rbb_server_subcommand_handlers[] = {
 	 .handler = handle_rbb_start_command,
 	 .mode = COMMAND_ANY,
 	 .help = "Start a rbb server",
-	 .usage = "<port> [spacing time]"},
+	 .usage = "<port> [spacing time] [backofftime] [allow_tlr]"},
 	{.name = "stop",
 	 .handler = handle_rbb_stop_command,
 	 .mode = COMMAND_ANY,
