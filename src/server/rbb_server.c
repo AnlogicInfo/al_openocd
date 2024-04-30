@@ -29,6 +29,7 @@
 #include <helper/time_support.h>
 
 int allow_tap_access;
+int arm_workaround;
 
 /**
  * @file
@@ -95,6 +96,7 @@ static int rbb_connection_closed(struct connection *connection)
 			LOG_ERROR("JTAG queue execute failed!");
 	}
 	allow_tap_access = 0;
+	arm_workaround = 1;
 	service->lasttime = timeval_ms(); /* Record the time when client disconnects */
 	LOG_DEBUG("rbb: Connection for channel %u closed", service->channel);
 
@@ -630,7 +632,7 @@ COMMAND_HANDLER(handle_rbb_start_command)
 	if (CMD_ARGC >= 4)
 		service->allow_tlr = atoi(CMD_ARGV[3]);
 	else
-		service->allow_tlr = 0; /* Don't allow TLR */
+		service->allow_tlr = 1; /* allow TLR */
 
 
 	if (ret != ERROR_OK) {
