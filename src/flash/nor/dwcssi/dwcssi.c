@@ -1216,10 +1216,32 @@ static int dwcssi_checksum_x4(struct flash_bank *bank, target_addr_t address, ui
 	return retval;
 }
 
+static int find_difference(struct flash_bank *bank, const uint8_t *buffer, uint32_t size, uint32_t offset) {
+    if (size == 1) {
+        return offset;
+    }
+
+    uint32_t half = size / 2;
+    uint32_t checksum_image, checksum_target;
+
+    image_calculate_checksum(buffer, half, &checksum_image);
+		qspi_mio5_pull(bank, HIGH);
+		dwcssi_checksum_x1(bank, offset, half, &checksum_target);
+		qspi_mio5_pull(bank, LOW);
+
+		LOG_DEBUG("find difference size %x offset %x image %x target %x", half, offset, checksum_image, checksum_target);
+    if (checksum_image != checksum_target) {
+        return find_difference(bank, buffer, half, offset);
+    } else {
+        return find_difference(bank, buffer + half, size - half, offset + half);
+    }
+}
+
 static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	int retval = ERROR_FAIL;
 	uint32_t target_crc, image_crc;
+	uint32_t fail_location = 0;
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
@@ -1239,12 +1261,11 @@ static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_
 	if (retval != ERROR_OK)
 		return retval;
 
-	LOG_INFO("checksum image %x", image_crc);
 	if (~image_crc != ~target_crc) {
 		LOG_DEBUG("X4 verify fail, try X1 verify");
-		dwcssi_checksum_x1(bank, offset, count, &target_crc);
 		if (~image_crc != ~target_crc) {
-			LOG_ERROR("target %x", target_crc);
+			fail_location = find_difference(bank, buffer, count, offset);
+			LOG_ERROR("write failed at location %x", fail_location);
 			retval = ERROR_FAIL;
 		}
 	}
