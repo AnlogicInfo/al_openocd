@@ -16,13 +16,19 @@ struct emmc_device *emmc_devices;
 /* configured EMMC devices and EMMC Flash command handler */
 void emmc_device_add(struct emmc_device *c)
 {
+	unsigned bank_num = 0;
 	if (emmc_devices) {
 		struct emmc_device *p = emmc_devices;
-		while (p && p->next)
+		while (p && p->next) {
+			bank_num += 1;
 			p = p->next;
+		}
 		p->next = c;
+		bank_num += 1;
 	} else
 		emmc_devices = c;
+
+	c->bank_number = bank_num;
 }
 
 /*	Chip ID list
@@ -32,12 +38,13 @@ void emmc_device_add(struct emmc_device *c)
 static struct emmc_info emmc_flash_ids[] = 
 {
 	// mfr             prd_cid         block_size   chip_size     name
-    {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200,       16,           "Samsung KLMAG1JETD-B041 16GB EMMC "},
-    {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200,       64,           "Samsung KLMCG8GEAC-B031 64GB EMMC "},
+  {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200,       16,           "Samsung KLMAG1JETD-B041 16GB EMMC "},
+  {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200,       64,           "Samsung KLMCG8GEAC-B031 64GB EMMC "},
 	{EMMC_MFR_MICRON,  0x53304a353658, 0x200,       16,           "Micron MTFC16GAPALBH-IT 16GB EMMC "},
 	{EMMC_MFR_MICRON,  0x52314a35364c, 0x200,       16,           "Micron MTFC16GAKAEJP-4MIT 16GB EMMC "},
 	{EMMC_MFR_MICRON,  0x51324a35354c, 0x200,       8,            "Micron MTFC8GAKAJCN-4MIT 8GB EMMC "},
 	{EMMC_MFR_MICRON,  0x53304a333541, 0x200,       8,            "Micron MTFC8GAMALBH-AIT 8GB EMMC "},
+	{EMMC_MFR_FORESEE, 0x383841333938, 0x200,       8,            "Foresee FEMDRW008g-88A39 8GB EMMC "},
 	{EMMC_MFR_FORESEE, 0x353841343631, 0x200,       16,           "Foresee FEMDNN016G-58A46 16GB EMMC "},
 	{EMMC_MFR_FORESEE, 0x413341353632, 0x200,       128,          "Foresee FEMDNN128G-A3A56 128GB EMMC "},
 	{EMMC_MFR_HYNIX,   0x483847346132, 0x200,       8,            "Hynix H26M41208HPR 8GB EMMC "},

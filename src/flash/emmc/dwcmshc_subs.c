@@ -9,24 +9,41 @@
 int dwcmshc_mio_init(struct emmc_device *emmc)
 {
     struct target *target = emmc->target;
-    target_addr_t mio_addr;
-    uint32_t value=0, status = ERROR_OK;
-    uint8_t mio_num;
-    for (mio_num = 40; mio_num < 50; mio_num = mio_num + 1)
+    target_addr_t mio_addr, emio_addr;
+    uint32_t mio_val, value=0, status = ERROR_OK;
+    uint8_t mio_num, mio_start, mio_end;
+
+    if(emmc->bank_number == 0)
     {
+        mio_start = 40;
+        mio_end = 50;
+        mio_val = 0xb;
+        emio_addr = EMIO_SEL11;
+    }
+    else
+    {
+        mio_start = 10;
+        mio_end = 15;
+        mio_val = 0xa;
+        emio_addr = EMIO_SEL12;
+    }
+
+    for (mio_num = mio_start; mio_num < mio_end; mio_num = mio_num + 1)
+    {
+        LOG_DEBUG("mio init %d val %x", mio_num, mio_val);
         mio_addr =MIO_BASE + (mio_num << 2);
         status = target_read_u32(target, mio_addr, &value);
         if(status != ERROR_OK)
             return status;
-        if(value != 0xb)
+        if(value != mio_val)
         {
-            status = target_write_u32(target,  mio_addr, 0xb);
+            status = target_write_u32(target,  mio_addr, mio_val);
             if(status != ERROR_OK)
                 return status;
         }
     }
 
-    status = target_write_u32(target, EMIO_SEL11, 0x1);
+    status = target_write_u32(target, emio_addr, 0x1);
 
     return status;
 }
@@ -142,8 +159,13 @@ int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc, bool mode, uint32_t div)
     CLK_CTRL_R clk_ctrl;
   
     //ctrl clock reset
-    target_write_u32(target, CFG_CTRL_SDIO1, 8);
-    target_write_u32(target, CFG_CTRL_SDIO1, 0);
+    if(emmc->bank_number == 0) {
+        target_write_u32(target, CFG_CTRL_SDIO1, 8);
+        target_write_u32(target, CFG_CTRL_SDIO1, 0);
+    } else {
+        target_write_u32(target, CFG_CTRL_SDIO2, 8);
+        target_write_u32(target, CFG_CTRL_SDIO2, 0);
+    }
 
     clk_ctrl.d16 = 0;
     clk_ctrl.bit.clk_gen_select = mode;

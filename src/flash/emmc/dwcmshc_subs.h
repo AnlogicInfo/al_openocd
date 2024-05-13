@@ -49,7 +49,10 @@ struct dwcmshc_emmc_controller {
 //AL9000 config
 #define MIO_BASE                             0xF8803000ULL
 #define EMIO_SEL11                           0xF880342CULL
+#define EMIO_SEL12                           0xF8803430ULL
 #define CFG_CTRL_SDIO1                       0xF8800150ULL
+#define CFG_CTRL_SDIO2                       0xF8800154ULL
+
 #define IO_BANK1_REF                         0xF8803C04ULL
 #define FAST_MODE_BASE                       0xF8803940ULL
 

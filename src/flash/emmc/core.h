@@ -16,9 +16,9 @@ struct emmc_device
     struct target *target;
     struct target *trans_target;
     struct emmc_flash_controller *controller;
+    unsigned int bank_number;
     void *controller_priv;
     struct emmc_info *device;
-
     struct emmc_device *next;
 };
 
