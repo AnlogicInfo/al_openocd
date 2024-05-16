@@ -16,19 +16,14 @@ struct emmc_device *emmc_devices;
 /* configured EMMC devices and EMMC Flash command handler */
 void emmc_device_add(struct emmc_device *c)
 {
-	unsigned bank_num = 0;
 	if (emmc_devices) {
 		struct emmc_device *p = emmc_devices;
 		while (p && p->next) {
-			bank_num += 1;
 			p = p->next;
 		}
 		p->next = c;
-		bank_num += 1;
 	} else
 		emmc_devices = c;
-
-	c->bank_number = bank_num;
 }
 
 /*	Chip ID list

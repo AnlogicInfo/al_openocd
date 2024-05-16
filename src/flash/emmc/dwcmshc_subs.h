@@ -30,12 +30,12 @@ typedef struct dwcmshc_cmd_pkt_t
 } dwcmshc_cmd_pkt_t;
 
 struct dwcmshc_emmc_controller {
-    bool probed;
-    target_addr_t      ctrl_base;
-	dwcmshc_cmd_pkt_t  ctrl_cmd;
-	uint32_t           io_bank_pwr;
+	bool                probed;
+	uint8_t             io_location;
+	target_addr_t       ctrl_base;
+	dwcmshc_cmd_pkt_t   ctrl_cmd;
+	uint32_t            io_bank_pwr;
 	struct flash_loader flash_loader;
-    // const struct       emmc_device *dev;
 };
 
 
