@@ -446,6 +446,7 @@ int server_loop(struct command_context *command_context)
 	int64_t next_event = timeval_ms() + polling_period;
 
 	allow_tap_access = 0;
+	arm_workaround = 0;
 
 #ifndef _WIN32
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)

@@ -2801,8 +2801,13 @@ static void aarch64_deinit_target(struct target *target)
 static int aarch64_mmu(struct target *target, int *enabled)
 {
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("%s: target %s not halted", __func__, target_name(target));
-		return ERROR_TARGET_INVALID;
+		LOG_DEBUG("%s: target %s not halted", __func__, target_name(target));
+
+		int retval = aarch64_halt(target);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("%s: target %s not halted", __func__, target_name(target));
+			return ERROR_TARGET_INVALID;
+		}
 	}
 
 	*enabled = target_to_aarch64(target)->armv8_common.armv8_mmu.mmu_enabled;

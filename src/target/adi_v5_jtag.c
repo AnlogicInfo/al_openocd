@@ -39,6 +39,7 @@
 #include <helper/time_support.h>
 #include <helper/list.h>
 #include <jtag/swd.h>
+#include <server/rbb_server.h>
 
 /*#define DEBUG_WAIT*/
 
@@ -53,6 +54,10 @@
 #define JTAG_ACK_WAIT		0x1
 
 static int jtag_ap_q_abort(struct adiv5_dap *dap, uint8_t *ack);
+
+int old_tap_st;
+
+#define DEBUG_WAIT
 
 #ifdef DEBUG_WAIT
 static const char *dap_reg_name(int instr, int reg_addr)
@@ -287,11 +292,16 @@ static int adi_jtag_dp_scan_cmd_sync(struct adiv5_dap *dap, struct dap_cmd *cmd,
 {
 	int retval;
 
+	if (allow_tap_access != 3)
+		old_tap_st = allow_tap_access;
+
 	retval = adi_jtag_dp_scan_cmd(dap, cmd, ack);
 	if (retval != ERROR_OK)
 		return retval;
 
-	return jtag_execute_queue();
+	retval = jtag_execute_queue();
+	allow_tap_access = old_tap_st;
+	return retval;
 }
 
 /**
@@ -398,7 +408,9 @@ static int adi_jtag_scan_inout_check_u32(struct adiv5_dap *dap,
 			return retval;
 	}
 
-	return jtag_execute_queue();
+	retval = jtag_execute_queue();
+	allow_tap_access = old_tap_st;
+	return retval;
 }
 
 static int jtagdp_overrun_check(struct adiv5_dap *dap)
@@ -407,8 +419,8 @@ static int jtagdp_overrun_check(struct adiv5_dap *dap)
 	struct dap_cmd *el, *tmp, *prev = NULL;
 	int found_wait = 0;
 	int64_t time_now;
-	LIST_HEAD(replay_list);
 
+	LIST_HEAD(replay_list);
 	/* make sure all queued transactions are complete */
 	retval = jtag_execute_queue();
 	if (retval != ERROR_OK)
@@ -601,6 +613,7 @@ static int jtagdp_overrun_check(struct adiv5_dap *dap)
 	}
 
  done:
+	allow_tap_access = old_tap_st;
 	flush_journal(dap, &replay_list);
 	flush_journal(dap, &dap->cmd_journal);
 	return retval;
@@ -660,11 +673,20 @@ static int jtagdp_transaction_endcheck(struct adiv5_dap *dap)
 static int jtag_connect(struct adiv5_dap *dap)
 {
 	dap->do_reconnect = false;
+	if (allow_tap_access != 3)
+		old_tap_st = allow_tap_access;
+
 	return dap_dp_init(dap);
 }
 
 static int jtag_check_reconnect(struct adiv5_dap *dap)
 {
+#if 0
+	if (arm_workaround) {
+		arm_workaround = 0;
+		dap->do_reconnect = true;
+	}
+#endif
 	if (dap->do_reconnect)
 		return jtag_connect(dap);
 
@@ -688,8 +710,10 @@ static int jtag_send_sequence(struct adiv5_dap *dap, enum swd_special_seq seq)
 		LOG_ERROR("Sequence %d not supported", seq);
 		return ERROR_FAIL;
 	}
-	if (retval == ERROR_OK)
+	if (retval == ERROR_OK) {
 		retval = jtag_execute_queue();
+		allow_tap_access = old_tap_st;
+	}
 	return retval;
 }
 
@@ -699,6 +723,10 @@ static int jtag_dp_q_read(struct adiv5_dap *dap, unsigned reg,
 	int retval = jtag_limit_queue_size(dap);
 	if (retval != ERROR_OK)
 		return retval;
+
+	if (allow_tap_access != 3)
+		old_tap_st = allow_tap_access;
+	allow_tap_access = 3;
 
 	retval =  adi_jtag_dp_scan_u32(dap, JTAG_DP_DPACC, reg,
 			DPAP_READ, 0, dap->last_read, 0, NULL);
@@ -712,6 +740,10 @@ static int jtag_dp_q_write(struct adiv5_dap *dap, unsigned reg,
 	int retval = jtag_limit_queue_size(dap);
 	if (retval != ERROR_OK)
 		return retval;
+
+	if (allow_tap_access != 3)
+		old_tap_st = allow_tap_access;
+	allow_tap_access = 3;
 
 	retval =  adi_jtag_dp_scan_u32(dap, JTAG_DP_DPACC,
 			reg, DPAP_WRITE, data, dap->last_read, 0, NULL);
@@ -744,6 +776,10 @@ static int jtag_ap_q_read(struct adiv5_ap *ap, unsigned reg,
 	if (retval != ERROR_OK)
 		return retval;
 
+	if (allow_tap_access != 3)
+		old_tap_st = allow_tap_access;
+	allow_tap_access = 3;
+
 	retval = jtag_ap_q_bankselect(ap, reg);
 	if (retval != ERROR_OK)
 		return retval;
@@ -766,6 +802,10 @@ static int jtag_ap_q_write(struct adiv5_ap *ap, unsigned reg,
 	if (retval != ERROR_OK)
 		return retval;
 
+	if (allow_tap_access != 3)
+		old_tap_st = allow_tap_access;
+	allow_tap_access = 3;
+
 	retval = jtag_ap_q_bankselect(ap, reg);
 	if (retval != ERROR_OK)
 		return retval;
@@ -784,7 +824,9 @@ static int jtag_ap_q_abort(struct adiv5_dap *dap, uint8_t *ack)
 	if (retval != ERROR_OK)
 		return retval;
 
-	return jtag_execute_queue();
+	retval = jtag_execute_queue();
+	allow_tap_access = old_tap_st;
+	return retval;
 }
 
 static int jtag_dp_run(struct adiv5_dap *dap)
