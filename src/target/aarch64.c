@@ -391,6 +391,9 @@ static int aarch64_halt_one(struct target *target, enum halt_mode mode)
 	if (retval != ERROR_OK)
 		return retval;
 
+	/* enable channel0 to output halt request */
+	retval = arm_cti_write_reg(armv8->cti, CTI_OUTEN0, 1);
+
 	/* trigger an event on channel 0, this outputs a halt request to the PE */
 	retval = arm_cti_pulse_channel(armv8->cti, 0);
 	if (retval != ERROR_OK)
@@ -661,13 +664,16 @@ static int aarch64_prepare_restart_one(struct target *target)
 	 * get passed along to all PEs. Also close gate for channel 0
 	 * to isolate the PE from halt events.
 	 */
-	/*
-	 *workaround for al9000
-	 *if (retval == ERROR_OK)
-	 *	retval = arm_cti_ungate_channel(armv8->cti, 1);
-	 */
+
 	if (retval == ERROR_OK)
-		retval = arm_cti_gate_channel(armv8->cti, 0);
+		retval = arm_cti_ungate_channel(armv8->cti, 1);
+
+/*	if (retval == ERROR_OK)
+		retval = arm_cti_gate_channel(armv8->cti, 0); */
+
+	/* disable outen 0 to isolate the PE from halt event */
+	if (retval == ERROR_OK)
+		retval = arm_cti_write_reg(armv8->cti, CTI_OUTEN0, 0);
 
 	/* make sure that DSCR.HDE is set */
 	if (retval == ERROR_OK) {
