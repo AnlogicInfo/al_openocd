@@ -57,7 +57,7 @@ static int jtag_ap_q_abort(struct adiv5_dap *dap, uint8_t *ack);
 
 int old_tap_st;
 
-#define DEBUG_WAIT
+// #define DEBUG_WAIT
 
 #ifdef DEBUG_WAIT
 static const char *dap_reg_name(int instr, int reg_addr)
