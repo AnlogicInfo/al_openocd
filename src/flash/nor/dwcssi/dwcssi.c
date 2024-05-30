@@ -606,22 +606,23 @@ static int dwcssi_unset_protect(struct flash_bank *bank)
 
 int dwcssi_rd_flash_reg(struct flash_bank *bank, uint8_t* rd_val, uint8_t cmd, uint32_t len)
 {
-/*	LOG_INFO("dwcssi read flash reg cmd %x len %d", cmd, len);*/
-	int64_t endtime;
-	uint8_t rx = 0, i = 0;
+/*LOG_INFO("dwcssi read flash reg cmd %x len %d", cmd, len);*/
+/*int64_t endtime;*/
+/*uint8_t rx = 0, i = 0;*/
 	dwcssi_txwm_wait(bank);
-	dwcssi_config_eeprom(bank, len);
+
+/*	dwcssi_config_eeprom(bank, len);
 	dwcssi_tx(bank, cmd);
 
-	dwcssi_txwm_wait(bank);
-	endtime = timeval_ms() + DWCSSI_PROBE_TIMEOUT;
+	dwcssi_txwm_wait(bank); */
+/*	endtime = timeval_ms() + DWCSSI_PROBE_TIMEOUT;
 
 	while (timeval_ms() < endtime || i < len) {
 		if (dwcssi_rx(bank, &rx) == ERROR_OK) {
 			*(rd_val + i) = rx;
 			i = i + 1;
 		}
-	}
+	} */
 	return ERROR_OK;
 }
 
@@ -738,14 +739,8 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	uint8_t id[4] = {0};
 
-	if (reset != NULL)
-		reset(bank, cmd_mode);
-	else {
-		if (cmd_mode == QPI_MODE)
-			return ERROR_FAIL;
-	}
-
 	dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
+
 	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0x00FFFFFF)) 
 	{
 		LOG_WARNING("read id fail %"PRIx32", reset and try again", *(uint32_t *)id);
@@ -758,7 +753,7 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 static int dwcssi_read_id(struct flash_bank *bank)
 {
 	int retval = ERROR_FAIL;
-	for (int i = 0; i < 3; i++) {
+	for (int i = 0; i < 1; i++) {
 		retval = dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE);
 		if (retval == ERROR_OK)
 			break;
@@ -805,7 +800,10 @@ int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_p
 static int dwcssi_probe(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = NULL;
+
+/*  const flash_ops_t *flash_ops = NULL;
+*/
+
 	int retval = ERROR_FAIL;
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
@@ -829,16 +827,16 @@ static int dwcssi_probe(struct flash_bank *bank)
 	}
 	else
 		driver_priv->probed = true;
-
+	/*
 	if (driver_priv->probed == true) {
 		flash_sector_init(bank, driver_priv);
 		flash_ops = driver_priv->dev->flash_ops;
 		if (flash_ops != NULL)
 			dwcssi_wr_qe(bank, DISABLE);
-		/*flash_ops->quad_dis(bank); */
 		return ERROR_OK;
 	} else
 		return ERROR_FAIL;
+	*/
 
 	return retval;
 }
