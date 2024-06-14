@@ -86,7 +86,13 @@ static int autodetect_image_type(struct image *image, const char *url)
 		&& (buffer[8] >= '0') && (buffer[8] < '6')) {
 		LOG_DEBUG("IHEX image detected.");
 		image->type = IMAGE_IHEX;
-	} else if ((buffer[0] == 'S')	/* record start byte */
+	} else if ((buffer[0] == 0x3A)
+		&& (buffer[1]==0xFF)
+		&& (buffer[2]==0x26)
+		&& (buffer[3]==0xED))	{
+		LOG_DEBUG("SPARSE image detected.");
+		image->type = IMAGE_SPARSE;
+	}	else if ((buffer[0] == 'S')	/* record start byte */
 		&& (isxdigit(buffer[1]))
 		&& (isxdigit(buffer[2]))
 		&& (isxdigit(buffer[3]))
@@ -114,6 +120,8 @@ static int identify_image_type(struct image *image, const char *type_string, con
 			image->type = IMAGE_SRECORD;
 		else if (!strcmp(type_string, "build"))
 			image->type = IMAGE_BUILDER;
+		else if (!strcmp(type_string, "sparse"))
+			image->type = IMAGE_SPARSE;
 		else
 			return ERROR_IMAGE_TYPE_UNKNOWN;
 	} else
@@ -754,6 +762,48 @@ static int image_elf_read_section(struct image *image,
 		return image_elf32_read_section(image, section, offset, size, buffer, size_read);
 }
 
+static int image_sparse_read_section(struct image *image,
+	int section,
+	target_addr_t offset,
+	uint32_t size,
+	uint8_t *buffer,
+	size_t *size_read)
+{
+	struct image_sparse *sparse = image->type_private;
+	Sparse_Chk *chk = (Sparse_Chk *)image->sections[section].private;
+	size_t read_size, really_read;
+	int retval;
+
+	*size_read = 0;
+
+	LOG_INFO("load sparse chunk %d at 0x%" TARGET_PRIxADDR " (sz = 0x%" PRIx32 ")", section, offset, size);
+	/* read current chunk data */
+	if (offset < chk->size) {
+		read_size = MIN(size, chk->size - offset);
+		LOG_INFO("read sparse: size = 0x%zx at 0x%" TARGET_PRIxADDR "", read_size, chk->input_offset + offset);
+
+		retval = fileio_seek(sparse->fileio, chk->input_offset + offset);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("cannot find sparse chunk content, seek failed");
+			return retval;
+		}
+
+		retval = fileio_read(sparse->fileio, read_size, buffer, &really_read);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("cannot read sparse chunk content, read failed");
+			return retval;
+		}
+
+		size -= read_size;
+		*size_read += read_size;
+		if (!size)
+			return ERROR_OK;
+	}
+
+	return ERROR_OK;
+}
+
+
 static int image_mot_buffer_complete_inner(struct image *image,
 	char *lpsz_line,
 	struct imagesection *section)
@@ -957,6 +1007,122 @@ static int image_mot_buffer_complete(struct image *image)
 	return retval;
 }
 
+static int image_sparse_read_chunk_headers(struct image *image)
+{
+	struct image_sparse *sparse = image->type_private;
+	size_t read_bytes;
+	uint32_t i, j, data_cnt = 0;
+	uint16_t chunk_type;
+	int retval;
+	LOG_INFO("read sparse chunk header");
+	retval = fileio_seek(sparse->fileio, 0);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("cannot seek to SPARSE file header, read failed");
+		return retval;
+	}
+
+	sparse->header = malloc(sizeof(Sparse_Hdr));
+
+	LOG_INFO("malloc sparse header");
+	if (!sparse->header) {
+		LOG_ERROR("insufficient memory to perform operation");
+		return ERROR_FILEIO_OPERATION_FAILED;
+	}
+
+	retval = fileio_read(sparse->fileio, sizeof(Sparse_Hdr), (uint8_t *)sparse->header, &read_bytes);
+	LOG_INFO("read sparse header");
+	if (retval != ERROR_OK) {
+		LOG_ERROR("cannot read SPARSE file header, read failed");
+		return retval;
+	}
+
+	sparse->chunks  = malloc(sparse->header->total_chunks * sizeof(Sparse_Chk));
+	
+	LOG_INFO("malloc sparse chunks num %x", sparse->header->total_chunks);
+	/* count useful segments */
+	for (i = 0; i < sparse->header->total_chunks; i++) {
+		LOG_INFO("read sparse chunk header %d", i);
+		sparse->chunks[i].chunk_header = malloc(sizeof(Sparse_Chdr));
+		/* analysis chunk header */
+		fileio_read(sparse->fileio, sizeof(Sparse_Chdr), (uint8_t *)sparse->chunks[i].chunk_header, &read_bytes);
+		/* update image section cnt */
+		chunk_type  = sparse->chunks[i].chunk_header->chunk_type;
+		LOG_INFO("chunk %d type %x", i, chunk_type);
+		sparse->chunks[i].data_flag = (chunk_type == CHUNK_TYPE_RAW) || (chunk_type == CHUNK_TYPE_FILL);
+		if (sparse->chunks[i].data_flag) {
+			image->num_sections++;
+			/* calculate chunk size */
+			sparse->chunks[i].size = sparse->chunks[i].chunk_header->total_sz - sparse->header->chunk_hdr_sz;
+			/* calculate offset */
+			if(data_cnt == 0) {
+				sparse->chunks[i].output_offset = 0;
+			} else {
+				sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
+			}
+
+			data_cnt += 1;	
+		} else
+			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset;
+
+		if (i==0)
+			sparse->chunks[i].input_offset = sparse->header->file_hdr_sz + sparse->header->chunk_hdr_sz;
+		else
+			sparse->chunks[i].input_offset = sparse->chunks[i-1].input_offset + sparse->chunks[i-1].size;
+
+		LOG_INFO("chunk %d size %x output_offset %x input_offset %x", i, sparse->chunks[i].size, sparse->chunks[i].output_offset, sparse->chunks[i].input_offset);
+		/* point to next header */
+		fileio_seek(sparse->fileio, (sparse->chunks[i].input_offset) + (sparse->chunks[i].size));
+	}
+
+	image->sections = malloc(image->num_sections * sizeof(struct imagesection));
+
+	/* update image section info from chunk header */
+	for (i = 0, j = 0; i < sparse->header->total_chunks; i++) {
+		if (sparse->chunks[i].data_flag) {
+			image->sections[j].size = sparse->chunks[i].size;
+			image->sections[j].base_address = sparse->chunks[i].output_offset;
+			image->sections[j].private = &sparse->chunks[i];
+			image->sections[j].flags = 0;
+			LOG_INFO("section %d size %x base_address "TARGET_ADDR_FMT, j, image->sections[j].size, image->sections[j].base_address);
+
+			j++;
+		}
+	}
+
+	return ERROR_OK;
+}
+
+static int image_sparse_read_headers(struct image *image)
+{
+	struct image_sparse *sparse = image->type_private;
+	size_t read_bytes;
+	unsigned char s_ident[SI_NIDENT];
+	unsigned char magic[SPARSE_HEADER_MAGIC_LEN] = {0x3A, 0xFF, 0x26, 0xED};
+	int retval;
+	LOG_INFO("read sparse header");
+	retval = fileio_read(sparse->fileio, SI_NIDENT, s_ident, &read_bytes);
+	for (int i = 0; i < SI_NIDENT; i++) {
+		LOG_INFO("sparse header: %x", s_ident[i]);
+	}
+	if (retval != ERROR_OK) {
+		LOG_ERROR("cannot read SPARSE file header, read failed");
+		return ERROR_FILEIO_OPERATION_FAILED;
+	}
+
+	if (read_bytes != SI_NIDENT) {
+		LOG_ERROR("cannot read SPARSE file header, only partially read");
+		return ERROR_FILEIO_OPERATION_FAILED;
+	}
+
+	
+	if (memcmp(s_ident, magic, SPARSE_HEADER_MAGIC_LEN) != 0) {
+		LOG_ERROR("invalid SPARSE file, bad magic number");
+		return ERROR_IMAGE_FORMAT_ERROR;
+	}
+
+	return image_sparse_read_chunk_headers(image);
+}
+
 int image_open(struct image *image, const char *url, const char *type_string)
 {
 	int retval = ERROR_OK;
@@ -1052,7 +1218,20 @@ int image_open(struct image *image, const char *url, const char *type_string)
 			fileio_close(image_mot->fileio);
 			return retval;
 		}
-	} else if (image->type == IMAGE_BUILDER) {
+	} else if (image->type == IMAGE_SPARSE) {
+		struct image_sparse *image_sparse;
+		image_sparse = image->type_private = malloc(sizeof(struct image_sparse));
+		retval = fileio_open(&image_sparse->fileio, url, FILEIO_READ, FILEIO_BINARY);
+		LOG_INFO("open sparse info");
+		
+		if(retval != ERROR_OK)
+			return retval;
+		retval = image_sparse_read_headers(image);
+		if(retval != ERROR_OK) {
+			fileio_close(image_sparse->fileio);
+			return retval;
+		}
+	}	else if (image->type == IMAGE_BUILDER) {
 		image->num_sections = 0;
 		image->base_address_set = false;
 		image->sections = NULL;
@@ -1158,7 +1337,9 @@ int image_read_section(struct image *image,
 		*size_read = size;
 
 		return ERROR_OK;
-	} else if (image->type == IMAGE_BUILDER) {
+	} else if (image->type == IMAGE_SPARSE) {
+		return image_sparse_read_section(image, section, offset, size, buffer, size_read);
+	}	else if (image->type == IMAGE_BUILDER) {
 		memcpy(buffer, (uint8_t *)image->sections[section].private + offset, size);
 		*size_read = size;
 
@@ -1248,7 +1429,18 @@ void image_close(struct image *image)
 
 		free(image_mot->buffer);
 		image_mot->buffer = NULL;
-	} else if (image->type == IMAGE_BUILDER) {
+	} else if (image->type == IMAGE_SPARSE) {
+		struct image_sparse *image_sparse = image->type_private;
+
+		fileio_close(image_sparse->fileio);
+
+		free(image_sparse->header);
+		image_sparse->header = NULL;
+
+		free(image_sparse->chunks);
+		image_sparse->chunks = NULL;
+	
+	}	else if (image->type == IMAGE_BUILDER) {
 		for (unsigned int i = 0; i < image->num_sections; i++) {
 			free(image->sections[i].private);
 			image->sections[i].private = NULL;

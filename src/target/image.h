@@ -47,6 +47,7 @@ enum image_type {
 	IMAGE_ELF,		/* ELF binary */
 	IMAGE_SRECORD,	/* motorola s19 */
 	IMAGE_BUILDER,	/* when building a new image */
+	IMAGE_SPARSE 	/* sparse image */
 };
 
 struct imagesection {
@@ -100,6 +101,12 @@ struct image_elf {
 struct image_mot {
 	struct fileio *fileio;
 	uint8_t *buffer;
+};
+
+struct image_sparse {
+	struct fileio *fileio;
+	Sparse_Hdr *header;
+	Sparse_Chk *chunks;
 };
 
 int image_open(struct image *image, const char *url, const char *type_string);
