@@ -70,6 +70,7 @@ int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc);
 int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* in_field);
 int dwcmshc_emmc_rd_id(struct emmc_device *emmc);
 
+int dwcmshc_emmc_set_bus_width(struct emmc_device *emmc);
 int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf);
 int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc, bool mode, uint32_t div);
 

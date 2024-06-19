@@ -68,6 +68,8 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 	status = dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
 
 	dwcmshc_emmc_set_clk_ctrl(emmc, MMC_CC_CLK_CARD_OPER, 1);
+
+	dwcmshc_emmc_set_bus_width(emmc);
 	dwcmshc_fast_mode(emmc);
 	return status;
 }
