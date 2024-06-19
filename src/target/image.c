@@ -823,8 +823,6 @@ static int image_sparse_read_fill_section(struct image_sparse *sparse,
 	*read_size = MIN(size, fill_size);
 	LOG_INFO("read size %"PRIx64, *read_size);
 	memcpy(buffer, (fill_buffer + offset), *read_size);
-	for (int j = 0; j < 10; j++)
-		LOG_INFO("i %x dest:%x src:%x", j, buffer[j], fill_buffer[j+offset]);
 	free(fill_buffer);
 	return ERROR_OK;
 }
@@ -863,70 +861,6 @@ static int image_sparse_read_section(struct image *image,
 		if (!size)
 			return ERROR_OK;
 	}
-
-
-	/* read raw chunk data */
-	/*if (chk->chunk_header->chunk_type == CHUNK_TYPE_RAW) {
-		if (offset < chk->size) {
-			read_size = MIN(size, chk->size - offset);
-			LOG_INFO("read raw: size = %"PRIx64 " at %"PRIx64 "", read_size, chk->input_offset + offset);
-
-			retval = fileio_seek(sparse->fileio, chk->input_offset + offset);
-			if (retval != ERROR_OK) {
-				LOG_ERROR("cannot find sparse chunk content, seek failed");
-				return retval;
-			}
-
-			retval = fileio_read(sparse->fileio, read_size, buffer, &really_read);
-			if (retval != ERROR_OK) {
-				LOG_ERROR("cannot read sparse chunk content, read failed");
-				return retval;
-			}
-
-			size -= read_size;
-			*size_read += read_size;
-			if (!size)
-				return ERROR_OK;
-		}
-	} else if (chk->chunk_header->chunk_type == CHUNK_TYPE_FILL) {
-		if (offset < chk->size) {
-		size_t fill_size;
-		uint32_t fill_value;
-		uint8_t *fill_buffer;
-
-			fill_size = chk->chunk_header->chunk_sz * sparse->header->blk_sz;
-
-			retval = fileio_seek(sparse->fileio, chk->input_offset);
-			if (retval != ERROR_OK) {
-				LOG_ERROR("cannot find sparse chunk content, seek failed");
-				return retval;
-			}
-
-			fileio_read(sparse->fileio, 4, (uint8_t *)&fill_value, &really_read);
-			LOG_INFO("read fill: data = %x size %"PRIx64 " at 0x%x ", fill_value, fill_size, chk->input_offset);
-
-			fill_buffer = malloc(fill_size);
-			for (size_t i = 0; i < fill_size; i += 4) {
-				fill_buffer[i] = fill_value;
-				fill_buffer[i+1] = fill_value >> 8;
-				fill_buffer[i+2] = fill_value >> 16;
-				fill_buffer[i+3] = fill_value >> 24;
-			}
-
-			read_size = MIN(size, fill_size);
-			LOG_INFO("read size %"PRIx64, read_size);
-			memcpy(buffer, (fill_buffer + offset), read_size);
-			for (int j = 0; j < 10; j++)
-				LOG_INFO("i %x dest:%x src:%x", j, buffer[j], fill_buffer[j+offset]);
-			free(fill_buffer);
-
-			size -= read_size;
-			*size_read += read_size;
-			if (!size)
-				return ERROR_OK;
-		}
-	} */
-
 	return ERROR_OK;
 }
 
