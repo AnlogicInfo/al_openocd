@@ -95,26 +95,63 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
-	int file_size, total_size;
-	int retval ;	
+	size_t offset, buf_cnt;
+	size_t image_size, total_size;
+	int retval;
 
 	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
-			&s, &emmc, FILEIO_READ, false);
+			&s, &emmc, FILEIO_READ);
 	if(retval != ERROR_OK) 
-	{
 		return retval;
+
+	/* cal total size */
+	image_size = s.image.size;
+	total_size = (image_size / s.block_size + 1) * s.block_size;
+	LOG_INFO("image size %"PRIx64 " total size %"PRIx64, image_size, total_size);
+	s.block = malloc(total_size);
+	if (!s.block) {
+		LOG_ERROR("Out of memory");
+		return ERROR_FAIL;
 	}
 
-	file_size = s.size;
-	total_size = emmc_fileio_read(&s);
+	/* read image to buffer */
+	offset = 0;
+	for (unsigned int i = 0; i < s.image.num_sections; i++) {
+		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block + offset, &buf_cnt);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("read section fail");
+			emmc_fileio_cleanup(&s);
+			free(s.block);
+			return retval;
+		}
+
+		offset = offset + buf_cnt;
+
+		LOG_INFO("read section %d offset %"PRIx64, i, offset);
+	}
+
+	/* pad image */
+	if (offset < total_size)
+		memset(s.block + offset, 0xff, total_size - offset);
+
 	retval = emmc_write_image(emmc, s.block, s.address, total_size);
 
+	free(s.block);
+
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
+		LOG_INFO("start measue time");
+		LOG_INFO("name %s", CMD_ARGV[0]);
+		LOG_INFO("bank num %d", s.bank_num);
+		LOG_INFO("address %"PRIx64, s.address);
+		LOG_INFO("duration %fs", duration_elapsed(&s.bench));
+		LOG_INFO("speed %0.3f KiB/s", duration_kbps(&s.bench, image_size));
 		command_print(CMD, "wrote file %s to EMMC flash %d up to "
-			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
-			CMD_ARGV[0], s.bank_num, s.address, duration_elapsed(&s.bench),
-			duration_kbps(&s.bench, file_size));
-	}
+									"offset 0x%8.8" PRIx64 " in %fs (%0.3f KiB/s)",
+									CMD_ARGV[0], s.bank_num, s.address, duration_elapsed(&s.bench),
+									duration_kbps(&s.bench, image_size));
+	} else
+		LOG_INFO("file io finish fail");
+
 	return retval;
 }
 
@@ -175,28 +212,52 @@ fail:
 COMMAND_HANDLER(handle_emmc_verify_command)
 {
 	struct emmc_device *emmc = NULL;
-	struct emmc_fileio_state file;
-	int file_size;
+	struct emmc_fileio_state s;
+	size_t offset, buf_cnt;
+	size_t image_size, total_size;
 	int retval = CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
-			&file, &emmc, FILEIO_READ, false);
+			&s, &emmc, FILEIO_READ);
 	if (retval != ERROR_OK)
 		return retval;
 
-	file_size = file.size;
-	emmc_fileio_read(&file);
-	retval = emmc_verify_image(emmc, file.block, file.address, file_size);
+		/* cal total size */
+	image_size = s.image.size;
+	total_size = (image_size / s.block_size + 1) * s.block_size;
+	s.block = malloc(total_size);
+	if (!s.block) {
+		LOG_ERROR("Out of memory");
+		return ERROR_FAIL;
+	}
+
+	/* read image to buffer */
+	offset = 0;
+	for (unsigned int i = 0; i < s.image.num_sections; i++) {
+		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block + offset, &buf_cnt);
+		if (retval != ERROR_OK) {
+			emmc_fileio_cleanup(&s);
+			free(s.block);
+			return retval;
+		}
+
+		offset = offset + buf_cnt;
+	}
+
+	/* pad image */
+	if (offset < total_size)
+		memset(s.block + offset, 0xff, total_size - offset);
+
+	retval = emmc_verify_image(emmc, s.block, s.address, image_size);
 	if(retval != ERROR_OK)
 	{
 		command_print(CMD, "emmc verify file %s fail", CMD_ARGV[0]);
-		emmc_fileio_finish(&file);
-		return retval;
 	}
-	
-	if (emmc_fileio_finish(&file) == ERROR_OK) {
+
+	free(s.block);
+	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "verified file %s "
-			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
-			CMD_ARGV[0], file.address, duration_elapsed(&file.bench),
-			duration_kbps(&file.bench, file.size));
+			"up to offset 0x%8.8" PRIx64 " in %fs (%0.3f KiB/s)",
+			CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
+			duration_kbps(&s.bench, image_size));
 	}
 
 	return ERROR_OK;

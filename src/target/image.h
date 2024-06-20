@@ -62,6 +62,7 @@ struct image {
 	void *type_private;		/* type private data */
 	unsigned int num_sections;		/* number of sections contained in the image */
 	struct imagesection *sections;	/* array of sections */
+	size_t size; /* total size of the image */
 	bool base_address_set;	/* whether the image has a base address set (for relocation purposes) */
 	long long base_address;		/* base address, if one is set */
 	bool start_address_set;	/* whether the image has a start address (entry point) associated */

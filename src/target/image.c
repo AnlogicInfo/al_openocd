@@ -1313,16 +1313,18 @@ int image_open(struct image *image, const char *url, const char *type_string)
 		image->type_private = NULL;
 	}
 
-	if (image->base_address_set) {
-		/* relocate */
-		for (unsigned int section = 0; section < image->num_sections; section++)
-			image->sections[section].base_address += image->base_address;
-											/* we're done relocating. The two statements below are mainly
-											* for documentation purposes: stop anyone from empirically
-											* thinking they should use these values henceforth. */
-		image->base_address = 0;
-		image->base_address_set = false;
+	image->size = 0;
+	for (unsigned int section = 0; section < image->num_sections; section++) {
+		image->size = image->size + image->sections[section].size;
+		if (image->base_address_set)
+				/* relocate */
+				image->sections[section].base_address += image->base_address;
 	}
+	/* we're done relocating. The two statements below are mainly
+	* for documentation purposes: stop anyone from empirically
+	* thinking they should use these values henceforth. */
+	image->base_address = 0;
+	image->base_address_set = false;
 
 	return retval;
 };
