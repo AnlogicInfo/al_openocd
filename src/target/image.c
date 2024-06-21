@@ -848,6 +848,11 @@ static int image_sparse_read_section(struct image *image,
 			retval = image_sparse_read_raw_section(sparse, chk, offset, size, buffer, &read_size);
 		else if (chk->chunk_header->chunk_type == CHUNK_TYPE_FILL)
 			retval = image_sparse_read_fill_section(sparse, chk, offset, size, buffer, &read_size);
+		else if (chk->chunk_header->chunk_type == CHUNK_TYPE_DONT_CARE) {
+			read_size = MIN(size, chk->chunk_header->chunk_sz * sparse->header->blk_sz);
+			memset(buffer, 0, read_size);
+			retval = ERROR_OK;
+		}
 		else {
 			LOG_ERROR("invalid sparse chunk type");
 			return ERROR_IMAGE_FORMAT_ERROR;
@@ -1104,19 +1109,20 @@ static int image_sparse_read_chunk_headers(struct image *image)
 	/* count useful segments */
 	image->num_sections = 0;
 	for (i = 0; i < sparse->header->total_chunks; i++) {
-		LOG_INFO("read sparse chunk header %d", i);
 		sparse->chunks[i].chunk_header = malloc(sizeof(Sparse_Chdr));
 		/* analysis chunk header */
 		fileio_read(sparse->fileio, sizeof(Sparse_Chdr), (uint8_t *)sparse->chunks[i].chunk_header, &read_bytes);
 		/* update image section cnt */
 		chunk_type  = sparse->chunks[i].chunk_header->chunk_type;
-		sparse->chunks[i].data_flag = (chunk_type == CHUNK_TYPE_RAW) || (chunk_type == CHUNK_TYPE_FILL);
+		sparse->chunks[i].data_flag = (chunk_type == CHUNK_TYPE_RAW)
+																	|| (chunk_type == CHUNK_TYPE_FILL)
+																	|| (chunk_type == CHUNK_TYPE_DONT_CARE);
 		if (sparse->chunks[i].data_flag) {
 			image->num_sections++;
 			/* calculate chunk size */
 			if (chunk_type == CHUNK_TYPE_RAW)
 				sparse->chunks[i].size = sparse->chunks[i].chunk_header->total_sz - sparse->header->chunk_hdr_sz;
-			else if (chunk_type == CHUNK_TYPE_FILL)
+			else if (chunk_type == CHUNK_TYPE_FILL || chunk_type == CHUNK_TYPE_DONT_CARE)
 				sparse->chunks[i].size = sparse->chunks[i].chunk_header->chunk_sz * sparse->header->blk_sz;
 			else
 				LOG_ERROR("invalid chunk type %x", chunk_type);
@@ -1128,8 +1134,7 @@ static int image_sparse_read_chunk_headers(struct image *image)
 			}
 
 			data_cnt += 1;	
-		} else
-			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
+		}
 
 		if (i==0)
 			sparse->chunks[i].input_offset = sparse->header->file_hdr_sz + sparse->header->chunk_hdr_sz;
@@ -1137,9 +1142,10 @@ static int image_sparse_read_chunk_headers(struct image *image)
 			sparse->chunks[i].input_offset = sparse->chunks[i-1].input_offset +
 																			 sparse->chunks[i-1].chunk_header->total_sz;
 
-		LOG_INFO("chunk %d type %x data size %x output_offset %x input_offset %x",
-							i, chunk_type, sparse->chunks[i].size, sparse->chunks[i].output_offset,
-							sparse->chunks[i].input_offset);
+		LOG_INFO("chunk %d input_offset %d data size %d output_offset %d type %x ",
+							i+1, sparse->chunks[i].input_offset, sparse->chunks[i].size,
+							sparse->chunks[i].output_offset/sparse->header->blk_sz,
+							chunk_type);
 
 		/* point to next header */
 		nxt_hdr_start = sparse->chunks[i].input_offset + sparse->chunks[i].chunk_header->total_sz
