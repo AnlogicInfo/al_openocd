@@ -46,8 +46,10 @@ int emmc_fileio_start(struct command_invocation *cmd,
 int emmc_fileio_cleanup(struct emmc_fileio_state *state)
 {
 	if (state->file_opened)
-		fileio_close(state->fileio);
+		image_close(&state->image);
 	LOG_INFO("close file");
+	free(state->block);
+	state->block = NULL;
 	return ERROR_OK;
 }
 
@@ -55,6 +57,7 @@ int emmc_fileio_finish(struct emmc_fileio_state *state)
 {
 	int retval;
 	LOG_INFO("clean fileio");
+
 	emmc_fileio_cleanup(state);
 	LOG_INFO("finish fileio");
 

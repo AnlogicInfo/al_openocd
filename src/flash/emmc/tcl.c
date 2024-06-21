@@ -121,7 +121,6 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 		if (retval != ERROR_OK) {
 			LOG_ERROR("read section fail");
 			emmc_fileio_cleanup(&s);
-			free(s.block);
 			return retval;
 		}
 
@@ -135,8 +134,6 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 		memset(s.block + offset, 0xff, total_size - offset);
 
 	retval = emmc_write_image(emmc, s.block, s.address, total_size);
-
-	free(s.block);
 
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		LOG_INFO("start measue time");
@@ -235,7 +232,6 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block + offset, &buf_cnt);
 		if (retval != ERROR_OK) {
 			emmc_fileio_cleanup(&s);
-			free(s.block);
 			return retval;
 		}
 
@@ -252,7 +248,6 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 		command_print(CMD, "emmc verify file %s fail", CMD_ARGV[0]);
 	}
 
-	free(s.block);
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "verified file %s "
 			"up to offset 0x%8.8" PRIx64 " in %fs (%0.3f KiB/s)",

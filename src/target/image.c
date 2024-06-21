@@ -1110,8 +1110,6 @@ static int image_sparse_read_chunk_headers(struct image *image)
 		fileio_read(sparse->fileio, sizeof(Sparse_Chdr), (uint8_t *)sparse->chunks[i].chunk_header, &read_bytes);
 		/* update image section cnt */
 		chunk_type  = sparse->chunks[i].chunk_header->chunk_type;
-		LOG_INFO("chunk %d type %x total size %x",
-						i, chunk_type, sparse->chunks[i].chunk_header->total_sz);
 		sparse->chunks[i].data_flag = (chunk_type == CHUNK_TYPE_RAW) || (chunk_type == CHUNK_TYPE_FILL);
 		if (sparse->chunks[i].data_flag) {
 			image->num_sections++;
@@ -1131,7 +1129,7 @@ static int image_sparse_read_chunk_headers(struct image *image)
 
 			data_cnt += 1;	
 		} else
-			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset;
+			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
 
 		if (i==0)
 			sparse->chunks[i].input_offset = sparse->header->file_hdr_sz + sparse->header->chunk_hdr_sz;
@@ -1139,13 +1137,13 @@ static int image_sparse_read_chunk_headers(struct image *image)
 			sparse->chunks[i].input_offset = sparse->chunks[i-1].input_offset +
 																			 sparse->chunks[i-1].chunk_header->total_sz;
 
-		LOG_INFO("chunk %d size %x output_offset %x input_offset %x",
-							i, sparse->chunks[i].size, sparse->chunks[i].output_offset, sparse->chunks[i].input_offset);
+		LOG_INFO("chunk %d type %x data size %x output_offset %x input_offset %x",
+							i, chunk_type, sparse->chunks[i].size, sparse->chunks[i].output_offset,
+							sparse->chunks[i].input_offset);
 
 		/* point to next header */
 		nxt_hdr_start = sparse->chunks[i].input_offset + sparse->chunks[i].chunk_header->total_sz
 										- sparse->header->chunk_hdr_sz;
-		LOG_INFO("next header start %"PRIx64, nxt_hdr_start);
 		fileio_seek(sparse->fileio, nxt_hdr_start);
 	}
 
@@ -1174,11 +1172,8 @@ static int image_sparse_read_headers(struct image *image)
 	unsigned char s_ident[SI_NIDENT];
 	unsigned char magic[SPARSE_HEADER_MAGIC_LEN] = {0x3A, 0xFF, 0x26, 0xED};
 	int retval;
-	LOG_INFO("read sparse header");
 	retval = fileio_read(sparse->fileio, SI_NIDENT, s_ident, &read_bytes);
-	for (int i = 0; i < SI_NIDENT; i++) {
-		LOG_INFO("sparse header: %x", s_ident[i]);
-	}
+
 	if (retval != ERROR_OK) {
 		LOG_ERROR("cannot read SPARSE file header, read failed");
 		return ERROR_FILEIO_OPERATION_FAILED;
