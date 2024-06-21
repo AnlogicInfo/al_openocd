@@ -95,8 +95,8 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
-	size_t offset, buf_cnt;
-	size_t image_size, total_size;
+	size_t buf_cnt;
+	size_t write_size;
 	int retval;
 
 	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
@@ -104,50 +104,48 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 	if(retval != ERROR_OK) 
 		return retval;
 
-	/* cal total size */
-	image_size = s.image.size;
-	total_size = (image_size / s.block_size + 1) * s.block_size;
-	LOG_INFO("image size %"PRIx64 " total size %"PRIx64, image_size, total_size);
-	s.block = malloc(total_size);
-	if (!s.block) {
-		LOG_ERROR("Out of memory");
-		return ERROR_FAIL;
-	}
-
-	/* read image to buffer */
-	offset = 0;
+	/* write image per section */
 	for (unsigned int i = 0; i < s.image.num_sections; i++) {
-		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block + offset, &buf_cnt);
+		if (s.image.sections[i].size % s.block_size != 0) {
+			if (s.image.num_sections == 1)
+				write_size = (s.image.sections[i].size / s.block_size + 1) * s.block_size;
+			else {
+				LOG_ERROR("section size is not block aligned");
+				emmc_fileio_cleanup(&s);
+				return ERROR_FAIL;
+			}
+		} else
+			write_size = s.image.sections[i].size;
+
+		s.block = malloc(write_size);
+
+		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block, &buf_cnt);
+
 		if (retval != ERROR_OK) {
 			LOG_ERROR("read section fail");
+			free(s.block);
 			emmc_fileio_cleanup(&s);
 			return retval;
 		}
 
-		offset = offset + buf_cnt;
+		retval = emmc_write_image(emmc, s.block, s.image.sections[i].base_address, write_size);
 
-		LOG_INFO("read section %d offset %"PRIx64, i, offset);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("write image fail");
+			free(s.block);
+			emmc_fileio_cleanup(&s);
+			return retval;
+		}
+
+		free(s.block);
 	}
 
-	/* pad image */
-	if (offset < total_size)
-		memset(s.block + offset, 0xff, total_size - offset);
-
-	retval = emmc_write_image(emmc, s.block, s.address, total_size);
-
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
-		LOG_INFO("start measue time");
-		LOG_INFO("name %s", CMD_ARGV[0]);
-		LOG_INFO("bank num %d", s.bank_num);
-		LOG_INFO("address %"PRIx64, s.address);
-		LOG_INFO("duration %fs", duration_elapsed(&s.bench));
-		LOG_INFO("speed %0.3f KiB/s", duration_kbps(&s.bench, image_size));
 		command_print(CMD, "wrote file %s to EMMC flash %d up to "
 									"offset 0x%8.8" PRIx64 " in %fs (%0.3f KiB/s)",
 									CMD_ARGV[0], s.bank_num, s.address, duration_elapsed(&s.bench),
-									duration_kbps(&s.bench, image_size));
-	} else
-		LOG_INFO("file io finish fail");
+									duration_kbps(&s.bench, s.image.size));
+	}
 
 	return retval;
 }
@@ -205,59 +203,49 @@ fail:
 	return retval;
 }
 
-
 COMMAND_HANDLER(handle_emmc_verify_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
-	size_t offset, buf_cnt;
-	size_t image_size, total_size;
+	size_t buf_cnt;
+
 	int retval = CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
 			&s, &emmc, FILEIO_READ);
 	if (retval != ERROR_OK)
 		return retval;
 
-		/* cal total size */
-	image_size = s.image.size;
-	total_size = (image_size / s.block_size + 1) * s.block_size;
-	s.block = malloc(total_size);
-	if (!s.block) {
-		LOG_ERROR("Out of memory");
-		return ERROR_FAIL;
-	}
-
-	/* read image to buffer */
-	offset = 0;
 	for (unsigned int i = 0; i < s.image.num_sections; i++) {
-		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block + offset, &buf_cnt);
+		s.block = malloc(s.image.sections[i].size);
+		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block, &buf_cnt);
+
 		if (retval != ERROR_OK) {
+			LOG_ERROR("read section fail");
+			free(s.block);
 			emmc_fileio_cleanup(&s);
 			return retval;
 		}
 
-		offset = offset + buf_cnt;
-	}
+		retval = emmc_verify_image(emmc, s.block, s.image.sections[i].base_address, s.image.sections[i].size);
 
-	/* pad image */
-	if (offset < total_size)
-		memset(s.block + offset, 0xff, total_size - offset);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("verify image fail");
+			free(s.block);
+			emmc_fileio_cleanup(&s);
+			return retval;
+		}
 
-	retval = emmc_verify_image(emmc, s.block, s.address, image_size);
-	if(retval != ERROR_OK)
-	{
-		command_print(CMD, "emmc verify file %s fail", CMD_ARGV[0]);
+		free(s.block);
 	}
 
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "verified file %s "
 			"up to offset 0x%8.8" PRIx64 " in %fs (%0.3f KiB/s)",
 			CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
-			duration_kbps(&s.bench, image_size));
+			duration_kbps(&s.bench, s.image.size));
 	}
 
 	return ERROR_OK;
 }
-
 
 static const struct command_registration emmc_exec_command_handlers[] = {
 	{

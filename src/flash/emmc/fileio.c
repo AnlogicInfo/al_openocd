@@ -48,8 +48,6 @@ int emmc_fileio_cleanup(struct emmc_fileio_state *state)
 	if (state->file_opened)
 		image_close(&state->image);
 	LOG_INFO("close file");
-	free(state->block);
-	state->block = NULL;
 	return ERROR_OK;
 }
 

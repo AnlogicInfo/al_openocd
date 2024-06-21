@@ -848,11 +848,6 @@ static int image_sparse_read_section(struct image *image,
 			retval = image_sparse_read_raw_section(sparse, chk, offset, size, buffer, &read_size);
 		else if (chk->chunk_header->chunk_type == CHUNK_TYPE_FILL)
 			retval = image_sparse_read_fill_section(sparse, chk, offset, size, buffer, &read_size);
-		else if (chk->chunk_header->chunk_type == CHUNK_TYPE_DONT_CARE) {
-			read_size = MIN(size, chk->chunk_header->chunk_sz * sparse->header->blk_sz);
-			memset(buffer, 0, read_size);
-			retval = ERROR_OK;
-		}
 		else {
 			LOG_ERROR("invalid sparse chunk type");
 			return ERROR_IMAGE_FORMAT_ERROR;
@@ -1078,7 +1073,7 @@ static int image_sparse_read_chunk_headers(struct image *image)
 	struct image_sparse *sparse = image->type_private;
 	size_t read_bytes;
 	size_t nxt_hdr_start;
-	uint32_t i, j, data_cnt = 0;
+	uint32_t i, j;
 	uint16_t chunk_type;
 	int retval;
 	LOG_INFO("read sparse chunk header");
@@ -1115,32 +1110,20 @@ static int image_sparse_read_chunk_headers(struct image *image)
 		/* update image section cnt */
 		chunk_type  = sparse->chunks[i].chunk_header->chunk_type;
 		sparse->chunks[i].data_flag = (chunk_type == CHUNK_TYPE_RAW)
-																	|| (chunk_type == CHUNK_TYPE_FILL)
-																	|| (chunk_type == CHUNK_TYPE_DONT_CARE);
-		if (sparse->chunks[i].data_flag) {
+																	|| (chunk_type == CHUNK_TYPE_FILL);
+
+		if (sparse->chunks[i].data_flag)
 			image->num_sections++;
-			/* calculate chunk size */
-			if (chunk_type == CHUNK_TYPE_RAW)
-				sparse->chunks[i].size = sparse->chunks[i].chunk_header->total_sz - sparse->header->chunk_hdr_sz;
-			else if (chunk_type == CHUNK_TYPE_FILL || chunk_type == CHUNK_TYPE_DONT_CARE)
-				sparse->chunks[i].size = sparse->chunks[i].chunk_header->chunk_sz * sparse->header->blk_sz;
-			else
-				LOG_ERROR("invalid chunk type %x", chunk_type);
-			/* calculate offset */
-			if(data_cnt == 0) {
-				sparse->chunks[i].output_offset = 0;
-			} else {
-				sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
-			}
 
-			data_cnt += 1;	
-		}
-
-		if (i==0)
+		sparse->chunks[i].size = sparse->chunks[i].chunk_header->chunk_sz * sparse->header->blk_sz;
+		if (i == 0) {
 			sparse->chunks[i].input_offset = sparse->header->file_hdr_sz + sparse->header->chunk_hdr_sz;
-		else
+			sparse->chunks[i].output_offset = 0;
+		}	else {
 			sparse->chunks[i].input_offset = sparse->chunks[i-1].input_offset +
-																			 sparse->chunks[i-1].chunk_header->total_sz;
+																			sparse->chunks[i-1].chunk_header->total_sz;
+			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
+		}
 
 		LOG_INFO("chunk %d input_offset %d data size %d output_offset %d type %x ",
 							i+1, sparse->chunks[i].input_offset, sparse->chunks[i].size,
@@ -1163,7 +1146,6 @@ static int image_sparse_read_chunk_headers(struct image *image)
 			image->sections[j].private = &sparse->chunks[i];
 			image->sections[j].flags = 0;
 			LOG_INFO("section %d size %x base_address "TARGET_ADDR_FMT, j, image->sections[j].size, image->sections[j].base_address);
-
 			j++;
 		}
 	}
