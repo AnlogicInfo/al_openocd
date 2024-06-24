@@ -1096,9 +1096,7 @@ static int aarch64_post_debug_entry(struct target *target)
 		(aarch64->system_control_reg & 0x4U) ? 1 : 0;
 	armv8->armv8_mmu.armv8_cache.i_cache_enabled =
 		(aarch64->system_control_reg & 0x1000U) ? 1 : 0;
-	
 
-	armv8_flush_all_instr(armv8);
 	return ERROR_OK;
 }
 
