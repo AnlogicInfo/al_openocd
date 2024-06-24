@@ -47,20 +47,14 @@ int emmc_fileio_cleanup(struct emmc_fileio_state *state)
 {
 	if (state->file_opened)
 		image_close(&state->image);
-	LOG_INFO("close file");
 	return ERROR_OK;
 }
 
 int emmc_fileio_finish(struct emmc_fileio_state *state)
 {
 	int retval;
-	LOG_INFO("clean fileio");
-
 	emmc_fileio_cleanup(state);
-	LOG_INFO("finish fileio");
-
 	retval = duration_measure(&state->bench);
-	LOG_INFO("duration %d", retval);
 	return retval;
 }
 
