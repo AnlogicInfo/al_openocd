@@ -21,8 +21,9 @@ void emmc_fileio_init(struct emmc_fileio_state *state)
 
 int emmc_fileio_start(struct command_invocation *cmd,
 	struct emmc_device *emmc, const char *filename, int filemode,
-	struct emmc_fileio_state *state)
+	const char *filetype, struct emmc_fileio_state *state)
 {
+	int retval;
 	if (state->address % emmc->device->block_size) {
 		command_print(cmd, "only block-aligned addresses are supported");
 		return ERROR_COMMAND_SYNTAX_ERROR;
@@ -30,40 +31,36 @@ int emmc_fileio_start(struct command_invocation *cmd,
 
 	duration_start(&state->bench);
 
-	if (filename) {
-		int retval = fileio_open(&state->fileio, filename, filemode, FILEIO_BINARY);
-		if (retval != ERROR_OK) {
-			const char *msg = (filemode == FILEIO_READ) ? "read" : "write";
-			command_print(cmd, "failed to open '%s' for %s access",
-				filename, msg);
-			return retval;
-		}
-		state->file_opened = true;
+	retval = image_open(&state->image, filename, filetype);
+	if (retval != ERROR_OK) {
+		command_print(cmd, "failed to open '%s'", filename);
+		return retval;
 	}
 
-    state->block_size = emmc->device->block_size;
-    state->block = malloc(emmc->device->block_size);
+	state->file_opened = true;
+	state->block_size = emmc->device->block_size;
 
 	return ERROR_OK;
 }
+
 int emmc_fileio_cleanup(struct emmc_fileio_state *state)
 {
 	if (state->file_opened)
-		fileio_close(state->fileio);
-
-	free(state->block);
-	state->block = NULL;
+		image_close(&state->image);
 	return ERROR_OK;
 }
+
 int emmc_fileio_finish(struct emmc_fileio_state *state)
 {
+	int retval;
 	emmc_fileio_cleanup(state);
-	return duration_measure(&state->bench);
+	retval = duration_measure(&state->bench);
+	return retval;
 }
 
+/* parse cmd and open image */
 COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
-	struct emmc_device **dev, enum fileio_access filemode,
-	bool need_size)
+	struct emmc_device **dev, enum fileio_access filemode)
 {
 	int retval;
 	emmc_fileio_init(state);
@@ -80,9 +77,11 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 	{
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
-
+	/* parse start addr */
 	if(CMD_ARGC >= 2) {
-		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], state->address);
+		COMMAND_PARSE_NUMBER(llong, CMD_ARGV[1], state->image.base_address);
+		state->image.base_address_set = true;
+		state->address = state->image.base_address;
 	}
 
 	struct emmc_device *emmc;
@@ -90,6 +89,8 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 
 	if (!emmc)
 		return ERROR_FAIL;
+
+	*dev = emmc;
 
 	if (!emmc->device) {
 		retval = CALL_COMMAND_HANDLER(emmc_command_auto_probe, state->bank_num, &emmc); // auto probe bank 0, need update index according to offset later
@@ -101,27 +102,11 @@ COMMAND_HELPER(emmc_fileio_parse_args, struct emmc_fileio_state *state,
 		}
 	}
 
-	if (need_size) {
-		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->size);
-		if (state->size % emmc->device->block_size) {
-			command_print(CMD, "only block-aligned sizes are supported");
-			return ERROR_COMMAND_SYNTAX_ERROR;
-		}
-	}
 
-	retval = emmc_fileio_start(CMD, emmc, CMD_ARGV[0], filemode, state);
+	retval = emmc_fileio_start(CMD, emmc, CMD_ARGV[0], filemode, (CMD_ARGC >= 3) ? CMD_ARGV[2] : NULL
+														, state);
 	if (retval != ERROR_OK)
 		return retval;
-
-	if (!need_size) {
-		size_t filesize;
-		retval = fileio_size(state->fileio, &filesize);
-		if (retval != ERROR_OK)
-			return retval;
-		state->size = filesize;
-	}
-
-	*dev = emmc;
 
 	return ERROR_OK;
 }
@@ -149,7 +134,7 @@ int emmc_fileio_read(struct emmc_fileio_state *s)
 	size_t one_read;
 	uint32_t total_size;
 
-	total_size = (s->size / s->block_size + 1) * s->block_size;
+	total_size = (s->image.size / s->block_size + 1) * s->block_size;
 
 	s->block = malloc(total_size);
 	if(s->block) 
@@ -161,7 +146,6 @@ int emmc_fileio_read(struct emmc_fileio_state *s)
 
 	// for(uint32_t i=0; i<total_size; i++)
 	// 	LOG_INFO("file rd index %x val %x", i, *(s->block + i));
-
 
 	return total_size;
 }
