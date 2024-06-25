@@ -25,7 +25,7 @@ int emmc_fileio_start(struct command_invocation *cmd,
 {
 	int retval;
 	if (state->address % emmc->device->block_size) {
-		command_print(cmd, "only block-aligned addresses are supported");
+		LOG_ERROR("only block-aligned addresses are supported");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -33,7 +33,7 @@ int emmc_fileio_start(struct command_invocation *cmd,
 
 	retval = image_open(&state->image, filename, filetype);
 	if (retval != ERROR_OK) {
-		command_print(cmd, "failed to open '%s'", filename);
+		LOG_ERROR("failed to open '%s'", filename);
 		return retval;
 	}
 
