@@ -468,17 +468,23 @@ static int dwcmshc_emmc_cmd6_hs_switch(struct emmc_device *emmc)
 {
 	struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
 	dwcmshc_cmd_pkt_t *cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
-
+	AL_MMC_Cmd6ArgUnion argu;
+	int status;
 	memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
 
+	argu.Reg = 0;
+	argu.Emmc.Index = AL_MMC_CMD6_EMMC_FUNC_BUS_WIDTH;
+		/* 1-bit enum 1 >> 2 -> 0b00, 4-bit enum 4 >> 2 -> 0b01, 8-bit enum 8 >> 2 -> 0b10 */
+	argu.Emmc.Value  = 4 >> 2;
+	argu.Emmc.Access = AL_MMC_CMD6_EMMC_ACCESS_WR_BYTE;
+	LOG_INFO("emmc hs switch argu %x", argu.Reg);
 	cmd_pkt->argu_en = ARGU_EN;
-	cmd_pkt->argument = 0x03b70200;
+	cmd_pkt->argument = argu.Reg;
 	cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_HS_SWITCH;
 	cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
 	cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
-	dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
-
-	return ERROR_OK;
+	status = dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+	return status;
 }
 
 static int dwcmshc_emmc_cmd_desel(struct emmc_device *emmc)
@@ -679,7 +685,11 @@ int dwcmshc_emmc_set_bus_width(struct emmc_device *emmc)
 {
 	uint32_t status = ERROR_OK;
 
-	dwcmshc_emmc_cmd6_hs_switch(emmc);
+	status = dwcmshc_emmc_cmd6_hs_switch(emmc);
+	if (status != ERROR_OK) {
+		LOG_ERROR("emmc cmd6 hs switch error");
+	}
+
 	dwcmshc_emmc_set_host_ctrl1(emmc, 0x20, 0x20);
 
 	return status;
@@ -787,9 +797,15 @@ int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uin
 {
 	int retval = ERROR_OK;
 	uint32_t block_addr = addr/emmc->device->block_size;
-	dwcmshc_emmc_cmd_set_block_length(emmc, 512);
-	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+	retval = dwcmshc_emmc_cmd_set_block_length(emmc, 512);
+	if (retval != ERROR_OK)
+		LOG_ERROR("set block length error");
+	retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+	if (retval != ERROR_OK)
+		LOG_ERROR("set block count error");
 	retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, block_addr);
+	if (retval != ERROR_OK)
+		LOG_ERROR("read single block addr %x error", block_addr);
 	return retval;
 }
 
