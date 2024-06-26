@@ -143,6 +143,8 @@ static int dwcmshc_emmc_set_host_ctrl1(struct emmc_device *emmc, uint32_t val, u
 	reg_val &= ~mask;
 	reg_val |= val;
 	target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, reg_val);
+	target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, &reg_val);
+	LOG_INFO("host ctrl1 %x", reg_val);
 	return ERROR_OK;
 }
 
@@ -354,13 +356,13 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t poll_flag)
 	dwcmshc_emmc_wait_ctl(emmc);
 
 	if (cmd_pkt->argu_en) {
-		LOG_DEBUG("emmc cmd addr %" PRIx64 " argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
+		LOG_INFO("emmc cmd addr %" PRIx64 " argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
 		target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
 	}
 
 	cmd = (cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16;
 	target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, cmd);
-
+	LOG_INFO("emmc cmd addr %" PRIx64 " cmd_xfer %x", dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, cmd);
 	status = dwcmshc_emmc_poll_int(emmc, poll_flag, TIMEOUT_1S);
 	dwcmshc_emmc_get_resp(emmc);
 	return status;
@@ -690,7 +692,7 @@ int dwcmshc_emmc_set_bus_width(struct emmc_device *emmc)
 		LOG_ERROR("emmc cmd6 hs switch error");
 	}
 
-	dwcmshc_emmc_set_host_ctrl1(emmc, 0x20, 0x20);
+	dwcmshc_emmc_set_host_ctrl1(emmc, 0x02, 0x02);
 
 	return status;
 }
