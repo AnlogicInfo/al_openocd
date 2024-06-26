@@ -812,7 +812,6 @@ static int image_sparse_read_fill_section(struct image_sparse *sparse,
 		return retval;
 	}
 
-	LOG_INFO("read fill: data = %x size %"PRIx64 " at 0x%x ", fill_value, fill_size, chk->input_offset);
 	fill_buffer = malloc(fill_size);
 	for (size_t i = 0; i < fill_size; i += 4) {
 		fill_buffer[i] = fill_value;
@@ -821,7 +820,6 @@ static int image_sparse_read_fill_section(struct image_sparse *sparse,
 		fill_buffer[i+3] = fill_value >> 24;
 	}
 	*read_size = MIN(size, fill_size);
-	LOG_INFO("read size %"PRIx64, *read_size);
 	memcpy(buffer, (fill_buffer + offset), *read_size);
 	free(fill_buffer);
 	return ERROR_OK;
@@ -842,7 +840,6 @@ static int image_sparse_read_section(struct image *image,
 
 	*size_read = 0;
 
-	LOG_INFO("load sparse chunk %d at 0x%" TARGET_PRIxADDR " (sz = 0x%" PRIx32 ")", section, offset, size);
 	if (offset < chk->size) {
 		if (chk->chunk_header->chunk_type == CHUNK_TYPE_RAW)
 			retval = image_sparse_read_raw_section(sparse, chk, offset, size, buffer, &read_size);
@@ -1073,26 +1070,21 @@ static int image_sparse_read_chunk_headers(struct image *image)
 	struct image_sparse *sparse = image->type_private;
 	size_t read_bytes;
 	size_t nxt_hdr_start;
-	uint32_t i, j, data_cnt = 0;
+	uint32_t i, j;
 	uint16_t chunk_type;
 	int retval;
-	LOG_INFO("read sparse chunk header");
 	retval = fileio_seek(sparse->fileio, 0);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("cannot seek to SPARSE file header, read failed");
 		return retval;
 	}
-
 	sparse->header = malloc(sizeof(Sparse_Hdr));
-
-	LOG_INFO("malloc sparse header");
 	if (!sparse->header) {
 		LOG_ERROR("insufficient memory to perform operation");
 		return ERROR_FILEIO_OPERATION_FAILED;
 	}
 
 	retval = fileio_read(sparse->fileio, sizeof(Sparse_Hdr), (uint8_t *)sparse->header, &read_bytes);
-	LOG_INFO("read sparse header");
 	if (retval != ERROR_OK) {
 		LOG_ERROR("cannot read SPARSE file header, read failed");
 		return retval;
@@ -1100,57 +1092,42 @@ static int image_sparse_read_chunk_headers(struct image *image)
 
 	sparse->chunks  = malloc(sparse->header->total_chunks * sizeof(Sparse_Chk));
 	
-	LOG_INFO("malloc sparse chunks num %x", sparse->header->total_chunks);
 	/* count useful segments */
 	image->num_sections = 0;
 	for (i = 0; i < sparse->header->total_chunks; i++) {
-		LOG_INFO("read sparse chunk header %d", i);
 		sparse->chunks[i].chunk_header = malloc(sizeof(Sparse_Chdr));
 		/* analysis chunk header */
 		fileio_read(sparse->fileio, sizeof(Sparse_Chdr), (uint8_t *)sparse->chunks[i].chunk_header, &read_bytes);
 		/* update image section cnt */
 		chunk_type  = sparse->chunks[i].chunk_header->chunk_type;
-		LOG_INFO("chunk %d type %x total size %x",
-						i, chunk_type, sparse->chunks[i].chunk_header->total_sz);
-		sparse->chunks[i].data_flag = (chunk_type == CHUNK_TYPE_RAW) || (chunk_type == CHUNK_TYPE_FILL);
-		if (sparse->chunks[i].data_flag) {
+		sparse->chunks[i].data_flag = (chunk_type == CHUNK_TYPE_RAW)
+																	|| (chunk_type == CHUNK_TYPE_FILL);
+
+		if (sparse->chunks[i].data_flag)
 			image->num_sections++;
-			/* calculate chunk size */
-			if (chunk_type == CHUNK_TYPE_RAW)
-				sparse->chunks[i].size = sparse->chunks[i].chunk_header->total_sz - sparse->header->chunk_hdr_sz;
-			else if (chunk_type == CHUNK_TYPE_FILL)
-				sparse->chunks[i].size = sparse->chunks[i].chunk_header->chunk_sz * sparse->header->blk_sz;
-			else
-				LOG_ERROR("invalid chunk type %x", chunk_type);
-			/* calculate offset */
-			if(data_cnt == 0) {
-				sparse->chunks[i].output_offset = 0;
-			} else {
-				sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
-			}
 
-			data_cnt += 1;	
-		} else
-			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset;
-
-		if (i==0)
+		sparse->chunks[i].size = sparse->chunks[i].chunk_header->chunk_sz * sparse->header->blk_sz;
+		if (i == 0) {
 			sparse->chunks[i].input_offset = sparse->header->file_hdr_sz + sparse->header->chunk_hdr_sz;
-		else
+			sparse->chunks[i].output_offset = 0;
+		}	else {
 			sparse->chunks[i].input_offset = sparse->chunks[i-1].input_offset +
-																			 sparse->chunks[i-1].chunk_header->total_sz;
+																			sparse->chunks[i-1].chunk_header->total_sz;
+			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
+		}
 
-		LOG_INFO("chunk %d size %x output_offset %x input_offset %x",
-							i, sparse->chunks[i].size, sparse->chunks[i].output_offset, sparse->chunks[i].input_offset);
+		LOG_DEBUG("chunk %d input_offset %d data size %d output_offset %d type %x ",
+							i+1, sparse->chunks[i].input_offset, sparse->chunks[i].size,
+							sparse->chunks[i].output_offset/sparse->header->blk_sz,
+							chunk_type);
 
 		/* point to next header */
 		nxt_hdr_start = sparse->chunks[i].input_offset + sparse->chunks[i].chunk_header->total_sz
 										- sparse->header->chunk_hdr_sz;
-		LOG_INFO("next header start %"PRIx64, nxt_hdr_start);
 		fileio_seek(sparse->fileio, nxt_hdr_start);
 	}
 
 	image->sections = malloc(image->num_sections * sizeof(struct imagesection));
-	LOG_INFO("image num sections %d", image->num_sections);
 	/* update image section info from chunk header */
 	for (i = 0, j = 0; i < sparse->header->total_chunks; i++) {
 		if (sparse->chunks[i].data_flag) {
@@ -1158,8 +1135,8 @@ static int image_sparse_read_chunk_headers(struct image *image)
 			image->sections[j].base_address = sparse->chunks[i].output_offset;
 			image->sections[j].private = &sparse->chunks[i];
 			image->sections[j].flags = 0;
-			LOG_INFO("section %d size %x base_address "TARGET_ADDR_FMT, j, image->sections[j].size, image->sections[j].base_address);
-
+			LOG_DEBUG("section %d size %x base_address "TARGET_ADDR_FMT,
+								j, image->sections[j].size, image->sections[j].base_address);
 			j++;
 		}
 	}
@@ -1174,11 +1151,8 @@ static int image_sparse_read_headers(struct image *image)
 	unsigned char s_ident[SI_NIDENT];
 	unsigned char magic[SPARSE_HEADER_MAGIC_LEN] = {0x3A, 0xFF, 0x26, 0xED};
 	int retval;
-	LOG_INFO("read sparse header");
 	retval = fileio_read(sparse->fileio, SI_NIDENT, s_ident, &read_bytes);
-	for (int i = 0; i < SI_NIDENT; i++) {
-		LOG_INFO("sparse header: %x", s_ident[i]);
-	}
+
 	if (retval != ERROR_OK) {
 		LOG_ERROR("cannot read SPARSE file header, read failed");
 		return ERROR_FILEIO_OPERATION_FAILED;
@@ -1297,7 +1271,6 @@ int image_open(struct image *image, const char *url, const char *type_string)
 		struct image_sparse *image_sparse;
 		image_sparse = image->type_private = malloc(sizeof(struct image_sparse));
 		retval = fileio_open(&image_sparse->fileio, url, FILEIO_READ, FILEIO_BINARY);
-		LOG_INFO("open sparse info");
 		
 		if(retval != ERROR_OK)
 			return retval;
@@ -1313,16 +1286,18 @@ int image_open(struct image *image, const char *url, const char *type_string)
 		image->type_private = NULL;
 	}
 
-	if (image->base_address_set) {
-		/* relocate */
-		for (unsigned int section = 0; section < image->num_sections; section++)
-			image->sections[section].base_address += image->base_address;
-											/* we're done relocating. The two statements below are mainly
-											* for documentation purposes: stop anyone from empirically
-											* thinking they should use these values henceforth. */
-		image->base_address = 0;
-		image->base_address_set = false;
+	image->size = 0;
+	for (unsigned int section = 0; section < image->num_sections; section++) {
+		image->size = image->size + image->sections[section].size;
+		if (image->base_address_set)
+				/* relocate */
+				image->sections[section].base_address += image->base_address;
 	}
+	/* we're done relocating. The two statements below are mainly
+	* for documentation purposes: stop anyone from empirically
+	* thinking they should use these values henceforth. */
+	image->base_address = 0;
+	image->base_address_set = false;
 
 	return retval;
 };
