@@ -21,7 +21,7 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 		emio_addr = EMIO_SEL11;
 	} else {
 		mio_start = 10;
-		mio_end = 15;
+		mio_end = 16;
 		mio_val = 0xa;
 		emio_addr = EMIO_SEL12;
 	}
@@ -37,6 +37,7 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 			if (status != ERROR_OK)
 				return status;
 		}
+		LOG_INFO("mio init addr %"TARGET_PRIxADDR " val %x", mio_addr, mio_val);
 	}
 
 	status = target_write_u32(target, emio_addr, 0x1);
@@ -301,6 +302,9 @@ static int dwcmshc_emmc_get_resp(struct emmc_device *emmc)
 			break;
 	}
 
+	for (int i = 0; i < 4; i++)
+		LOG_INFO("emmc resp %x", cmd_pkt->resp_buf[i]);
+
 	return ERROR_OK;
 }
 
@@ -355,6 +359,7 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t poll_flag)
 
 	dwcmshc_emmc_wait_ctl(emmc);
 
+	LOG_INFO("emmc cmd index %d", cmd_pkt->cmd_reg.bit.cmd_index);
 	if (cmd_pkt->argu_en) {
 		LOG_INFO("emmc cmd addr %" PRIx64 " argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
 		target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
