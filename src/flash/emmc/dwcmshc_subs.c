@@ -27,7 +27,6 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 	}
 
 	for (mio_num = mio_start; mio_num < mio_end; mio_num = mio_num + 1) {
-		LOG_DEBUG("mio init %d val %x", mio_num, mio_val);
 		mio_addr = MIO_BASE + (mio_num << 2);
 		status = target_read_u32(target, mio_addr, &value);
 		if (status != ERROR_OK)
@@ -37,7 +36,7 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 			if (status != ERROR_OK)
 				return status;
 		}
-		LOG_INFO("mio init addr %"TARGET_PRIxADDR " val %x", mio_addr, mio_val);
+		LOG_DEBUG("mio init addr %"TARGET_PRIxADDR " val %x", mio_addr, mio_val);
 	}
 
 	status = target_write_u32(target, emio_addr, 0x1);
@@ -145,7 +144,6 @@ static int dwcmshc_emmc_set_host_ctrl1(struct emmc_device *emmc, uint32_t val, u
 	reg_val |= val;
 	target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, reg_val);
 	target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, &reg_val);
-	LOG_INFO("host ctrl1 %x", reg_val);
 	return ERROR_OK;
 }
 
@@ -302,9 +300,6 @@ static int dwcmshc_emmc_get_resp(struct emmc_device *emmc)
 			break;
 	}
 
-	for (int i = 0; i < 4; i++)
-		LOG_INFO("emmc resp %x", cmd_pkt->resp_buf[i]);
-
 	return ERROR_OK;
 }
 
@@ -359,15 +354,15 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t poll_flag)
 
 	dwcmshc_emmc_wait_ctl(emmc);
 
-	LOG_INFO("emmc cmd index %d", cmd_pkt->cmd_reg.bit.cmd_index);
+	LOG_DEBUG("emmc cmd index %d", cmd_pkt->cmd_reg.bit.cmd_index);
 	if (cmd_pkt->argu_en) {
-		LOG_INFO("emmc cmd addr %" PRIx64 " argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
+		LOG_DEBUG("emmc cmd addr %" PRIx64 " argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
 		target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
 	}
 
 	cmd = (cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16;
 	target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, cmd);
-	LOG_INFO("emmc cmd addr %" PRIx64 " cmd_xfer %x", dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, cmd);
+	LOG_DEBUG("emmc cmd addr %" PRIx64 " cmd_xfer %x", dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, cmd);
 	status = dwcmshc_emmc_poll_int(emmc, poll_flag, TIMEOUT_1S);
 	dwcmshc_emmc_get_resp(emmc);
 	return status;
@@ -484,7 +479,6 @@ static int dwcmshc_emmc_cmd6_hs_switch(struct emmc_device *emmc)
 		/* 1-bit enum 1 >> 2 -> 0b00, 4-bit enum 4 >> 2 -> 0b01, 8-bit enum 8 >> 2 -> 0b10 */
 	argu.Emmc.Value  = 4 >> 2;
 	argu.Emmc.Access = AL_MMC_CMD6_EMMC_ACCESS_WR_BYTE;
-	LOG_INFO("emmc hs switch argu %x", argu.Reg);
 	cmd_pkt->argu_en = ARGU_EN;
 	cmd_pkt->argument = argu.Reg;
 	cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_HS_SWITCH;

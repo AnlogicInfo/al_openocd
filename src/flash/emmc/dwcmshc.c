@@ -51,7 +51,6 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 {
 	int status = ERROR_OK;
 	struct target *target = emmc->target;
-	uint32_t* ext_csd;
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -71,12 +70,6 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 	dwcmshc_emmc_set_clk_ctrl(emmc, MMC_CC_CLK_CARD_OPER, 1);
 
 	dwcmshc_emmc_set_bus_width(emmc);
-
-	ext_csd = malloc(1024);
-	dwcmshc_emmc_rd_ext_csd(emmc, ext_csd);
-	for (int i = 0; i < 128; i++)
-		LOG_INFO("ext_csd %d %x", i, ext_csd[i]);
-	free(ext_csd);
 
 	dwcmshc_fast_mode(emmc);
 	return status;
