@@ -29,6 +29,44 @@ typedef struct dwcmshc_cmd_pkt_t
 	uint32_t      resp_buf[4];
 } dwcmshc_cmd_pkt_t;
 
+typedef enum
+{
+	AL_MMC_CMD6_EMMC_ACCESS_CMD_SET,
+	AL_MMC_CMD6_EMMC_ACCESS_SET_BITS,
+	AL_MMC_CMD6_EMMC_ACCESS_CLR_BITS,
+	AL_MMC_CMD6_EMMC_ACCESS_WR_BYTE
+} AL_MMC_Cmd6EmmcAccEnum;
+
+typedef enum
+{
+	AL_MMC_CMD6_SD_SPD_MODE         = (0),
+	AL_MMC_CMD6_EMMC_FUNC_BUS_WIDTH = (183),
+	AL_MMC_CMD6_EMMC_FUNC_HS_TIMING = (185),
+} AL_MMC_Cmd6FuncEnum;
+
+typedef union
+{
+	uint32_t Reg;
+	struct {
+		uint32_t Grp1AccMode:4;   /* Function group 1 for access mode */
+		uint32_t Grp2Cmd:4;       /* Function group 2 for cmd system */
+		uint32_t RsvdGrp3:4;      /* Rsvd for function group 3, set all 0 or 0xF */
+		uint32_t RsvdGrp4:4;      /* Rsvd for function group 4, set all 0 or 0xF */
+		uint32_t RsvdGrp5:4;      /* Rsvd for function group 5, set all 0 or 0xF */
+		uint32_t RsvdGrp6:4;      /* Rsvd for function group 6, set all 0 or 0xF */
+		uint32_t Rsvd30_24:7;     /* Rsvd, set all 0 */
+		uint32_t Mode:1;          /* Mode, 0: check function, 1: switch function */
+	} Sd;
+	struct {
+		uint32_t CmdSet:3;
+		uint32_t SetZero7_3:5;
+		uint32_t Value:8;
+		uint32_t Index:8;
+		uint32_t Access:2;
+		uint32_t SetZero31_26:6;
+	} Emmc;
+} AL_MMC_Cmd6ArgUnion;
+
 struct dwcmshc_emmc_controller {
 	bool                probed;
 	uint8_t             io_location;
@@ -70,6 +108,7 @@ int dwcmshc_emmc_interrupt_init(struct emmc_device *emmc);
 int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* in_field);
 int dwcmshc_emmc_rd_id(struct emmc_device *emmc);
 
+int dwcmshc_emmc_set_bus_width(struct emmc_device *emmc);
 int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf);
 int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc, bool mode, uint32_t div);
 

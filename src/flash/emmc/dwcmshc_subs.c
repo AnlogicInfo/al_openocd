@@ -21,13 +21,12 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 		emio_addr = EMIO_SEL11;
 	} else {
 		mio_start = 10;
-		mio_end = 15;
+		mio_end = 16;
 		mio_val = 0xa;
 		emio_addr = EMIO_SEL12;
 	}
 
 	for (mio_num = mio_start; mio_num < mio_end; mio_num = mio_num + 1) {
-		LOG_DEBUG("mio init %d val %x", mio_num, mio_val);
 		mio_addr = MIO_BASE + (mio_num << 2);
 		status = target_read_u32(target, mio_addr, &value);
 		if (status != ERROR_OK)
@@ -37,6 +36,7 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 			if (status != ERROR_OK)
 				return status;
 		}
+		LOG_DEBUG("mio init addr %"TARGET_PRIxADDR " val %x", mio_addr, mio_val);
 	}
 
 	status = target_write_u32(target, emio_addr, 0x1);
@@ -133,6 +133,19 @@ static int dwcmshc_emmc_set_pwr_ctrl(struct emmc_device *emmc)
 	return ERROR_OK;
 }
 
+static int dwcmshc_emmc_set_host_ctrl1(struct emmc_device *emmc, uint32_t val, uint32_t mask)
+{
+	struct target *target = emmc->target;
+	struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+	uint32_t reg_val = 0;
+
+	target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, &reg_val);
+	reg_val &= ~mask;
+	reg_val |= val;
+	target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, reg_val);
+	target_read_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_HOST_CTRL1_R, &reg_val);
+	return ERROR_OK;
+}
 
 int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc, bool mode, uint32_t div)
 {
@@ -341,6 +354,7 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t poll_flag)
 
 	dwcmshc_emmc_wait_ctl(emmc);
 
+	LOG_DEBUG("emmc cmd index %d", cmd_pkt->cmd_reg.bit.cmd_index);
 	if (cmd_pkt->argu_en) {
 		LOG_DEBUG("emmc cmd addr %" PRIx64 " argu %x", dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
 		target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_ARGUMENT_R, cmd_pkt->argument);
@@ -348,7 +362,7 @@ static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t poll_flag)
 
 	cmd = (cmd_pkt->cmd_reg.d16 << 16) | cmd_pkt->xfer_reg.d16;
 	target_write_u32(target, dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, cmd);
-
+	LOG_DEBUG("emmc cmd addr %" PRIx64 " cmd_xfer %x", dwcmshc_emmc->ctrl_base + OFFSET_XFER_MODE_R, cmd);
 	status = dwcmshc_emmc_poll_int(emmc, poll_flag, TIMEOUT_1S);
 	dwcmshc_emmc_get_resp(emmc);
 	return status;
@@ -449,6 +463,28 @@ static int dwcmshc_emmc_cmd_cid(struct emmc_device *emmc, uint32_t* buf)
 		return ERROR_FAIL;
 	}
 	dwcmshc_emmc_dump_resp(cmd_pkt->resp_buf, buf, MMC_C_RESP_LEN_136);
+	return status;
+}
+
+static int dwcmshc_emmc_cmd6_hs_switch(struct emmc_device *emmc)
+{
+	struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+	dwcmshc_cmd_pkt_t *cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+	AL_MMC_Cmd6ArgUnion argu;
+	int status;
+	memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+
+	argu.Reg = 0;
+	argu.Emmc.Index = AL_MMC_CMD6_EMMC_FUNC_BUS_WIDTH;
+		/* 1-bit enum 1 >> 2 -> 0b00, 4-bit enum 4 >> 2 -> 0b01, 8-bit enum 8 >> 2 -> 0b10 */
+	argu.Emmc.Value  = 4 >> 2;
+	argu.Emmc.Access = AL_MMC_CMD6_EMMC_ACCESS_WR_BYTE;
+	cmd_pkt->argu_en = ARGU_EN;
+	cmd_pkt->argument = argu.Reg;
+	cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_HS_SWITCH;
+	cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
+	cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+	status = dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
 	return status;
 }
 
@@ -646,6 +682,20 @@ int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* buf)
 }
 
 
+int dwcmshc_emmc_set_bus_width(struct emmc_device *emmc)
+{
+	uint32_t status = ERROR_OK;
+
+	status = dwcmshc_emmc_cmd6_hs_switch(emmc);
+	if (status != ERROR_OK) {
+		LOG_ERROR("emmc cmd6 hs switch error");
+	}
+
+	dwcmshc_emmc_set_host_ctrl1(emmc, 0x02, 0x02);
+
+	return status;
+}
+
 int dwcmshc_emmc_rd_ext_csd(struct emmc_device *emmc, uint32_t* buf)
 {
 	int retval = ERROR_OK;
@@ -748,9 +798,15 @@ int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uin
 {
 	int retval = ERROR_OK;
 	uint32_t block_addr = addr/emmc->device->block_size;
-	dwcmshc_emmc_cmd_set_block_length(emmc, 512);
-	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+	retval = dwcmshc_emmc_cmd_set_block_length(emmc, 512);
+	if (retval != ERROR_OK)
+		LOG_ERROR("set block length error");
+	retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+	if (retval != ERROR_OK)
+		LOG_ERROR("set block count error");
 	retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, block_addr);
+	if (retval != ERROR_OK)
+		LOG_ERROR("read single block addr %x error", block_addr);
 	return retval;
 }
 

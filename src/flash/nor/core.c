@@ -772,8 +772,10 @@ int flash_write_unlock_verify(struct target *target, struct image *image,
 	struct imagesection **sections = malloc(sizeof(struct imagesection *) *
 			image->num_sections);
 
-	for (unsigned int i = 0; i < image->num_sections; i++)
+	for (unsigned int i = 0; i < image->num_sections; i++) {
 		sections[i] = &image->sections[i];
+		LOG_INFO("section %d addr "TARGET_ADDR_FMT, i, sections[i]->base_address);
+	}
 
 	qsort(sections, image->num_sections, sizeof(struct imagesection *),
 		compare_section);
@@ -817,6 +819,8 @@ int flash_write_unlock_verify(struct target *target, struct image *image,
 				/* Done with this bank */
 				break;
 			}
+		LOG_INFO("section %d: address " TARGET_ADDR_FMT ", size %x",
+			section, run_address, run_size);
 
 			/* if we have multiple sections within our image,
 			 * flash programming could fail due to alignment issues

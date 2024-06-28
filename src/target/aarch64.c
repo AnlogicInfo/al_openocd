@@ -1038,6 +1038,7 @@ static int aarch64_post_debug_entry(struct target *target)
 {
 	struct aarch64_common *aarch64 = target_to_aarch64(target);
 	struct armv8_common *armv8 = &aarch64->armv8_common;
+	struct arm *arm = &armv8->arm;
 	int retval;
 	enum arm_mode target_mode = ARM_MODE_ANY;
 	uint32_t instr;
@@ -1099,9 +1100,9 @@ static int aarch64_post_debug_entry(struct target *target)
 		(aarch64->system_control_reg & 0x4U) ? 1 : 0;
 	armv8->armv8_mmu.armv8_cache.i_cache_enabled =
 		(aarch64->system_control_reg & 0x1000U) ? 1 : 0;
-	
 
-	armv8_flush_all_instr(armv8);
+	if (arm->core_state == ARM_STATE_AARCH64)
+		armv8_flush_all_instr(armv8);
 	return ERROR_OK;
 }
 
