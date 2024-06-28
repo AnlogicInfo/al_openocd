@@ -668,12 +668,9 @@ static int aarch64_prepare_restart_one(struct target *target)
 	if (retval == ERROR_OK)
 		retval = arm_cti_ungate_channel(armv8->cti, 1);
 
-/*	if (retval == ERROR_OK)
-		retval = arm_cti_gate_channel(armv8->cti, 0); */
-
-	/* disable outen 0 to isolate the PE from halt event */
+	/* gate channel 0 to isolate the PE from halt event */
 	if (retval == ERROR_OK)
-		retval = arm_cti_write_reg(armv8->cti, CTI_OUTEN0, 0);
+		retval = arm_cti_gate_channel(armv8->cti, 0);
 
 	/* make sure that DSCR.HDE is set */
 	if (retval == ERROR_OK) {
