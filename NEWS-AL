@@ -2,12 +2,19 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1117
+1. Fix cwc $ apu co-debug issue
+2. Add ps-ps cross trigger debug
+3. Fix arm mode debug
+4. Enable EMMC 4bit mode
+5. Add sparse image support
+6. Update FTDI PID
+
 v0.1116
 1. Gd25q256d & Gd25lq255e support
 2. P25q128sh support
 3. EMMC1 program support
 4. Onecable support
-5. Update FTDI product ID
 
 v0.1115
 1. Fix erase command for w25q01jv & gd25b512me
