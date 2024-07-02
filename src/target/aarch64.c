@@ -970,6 +970,7 @@ static int aarch64_debug_entry(struct target *target)
 	struct arm_dpm *dpm = &armv8->dpm;
 	enum arm_state core_state;
 	uint32_t dscr;
+	uint32_t cti_gate;
 
 	/* make sure to clear all sticky errors */
 	retval = mem_ap_write_atomic_u32(armv8->debug_ap,
@@ -991,8 +992,12 @@ static int aarch64_debug_entry(struct target *target)
 	armv8_select_reg_access(armv8, core_state == ARM_STATE_AARCH64);
 
 	/* close the CTI gate for all events */
-	if (retval == ERROR_OK)
-		retval = arm_cti_write_reg(armv8->cti, CTI_GATE, 0);
+	/* keep channel 2 status for cti setting */
+	if (retval == ERROR_OK) {
+		arm_cti_read_reg(armv8->cti, CTI_GATE, &cti_gate);
+		retval = arm_cti_write_reg(armv8->cti, CTI_GATE, (cti_gate & 4));
+		/* retval = arm_cti_write_reg(armv8->cti, CTI_GATE, 0); */
+	}
 	/* discard async exceptions */
 	if (retval == ERROR_OK)
 		retval = dpm->instr_cpsr_sync(dpm);
