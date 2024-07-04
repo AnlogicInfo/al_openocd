@@ -3904,6 +3904,9 @@ COMMAND_HANDLER(handle_load_image_command)
 	image_size = 0x0;
 	retval = ERROR_OK;
 	for (unsigned int i = 0; i < image.num_sections; i++) {
+		LOG_INFO("section %d/%d", i, image.num_sections);
+		LOG_PROC(i, image.num_sections);
+
 		buffer = malloc(image.sections[i].size);
 		if (!buffer) {
 			command_print(CMD,
