@@ -75,6 +75,8 @@
 #include <transport/transport.h>
 #include <helper/time_support.h>
 #include <helper/log.h>
+#include <libusb.h>
+
 
 #if IS_CYGWIN == 1
 #include <windows.h>
@@ -1163,6 +1165,54 @@ COMMAND_HANDLER(ftdi_handle_device_desc_command)
 	return ERROR_OK;
 }
 
+static void print_device(libusb_device *dev) {
+	struct libusb_device_descriptor desc;
+	int r = libusb_get_device_descriptor(dev, &desc);
+	if (r < 0) {
+			LOG_ERROR("failed to get device descriptor\n");
+			return;
+	}
+	uint8_t path[8];
+	r = libusb_get_port_numbers(dev, path, sizeof(path));
+	if (r < 0) {
+			LOG_ERROR("failed to get port numbers\n");
+			return;
+	}
+	LOG_INFO("Device %04x:%04x (bus %d, device %d)",
+				 desc.idVendor, desc.idProduct,
+				 libusb_get_bus_number(dev), libusb_get_device_address(dev));
+	LOG_INFO(" path: %d", path[0]);
+	for (int i = 1; i < r; i++)
+			LOG_INFO(".%d", path[i]);
+	LOG_INFO("\n");
+}
+
+COMMAND_HANDLER(ftid_handle_list_command)
+{
+	libusb_device **devs;
+	libusb_context *ctx = NULL;
+	int r;
+	ssize_t cnt;
+	r = libusb_init(&ctx);
+	if (r < 0) {
+			fprintf(stderr, "failed to initialize libusb\n");
+			return 1;
+	}
+	cnt = libusb_get_device_list(ctx, &devs);
+	if (cnt < 0) {
+			fprintf(stderr, "failed to get device list\n");
+			libusb_exit(ctx);
+			return 1;
+	}
+	for (ssize_t i = 0; i < cnt; i++) {
+			print_device(devs[i]);
+	}
+	libusb_free_device_list(devs, 1);
+	libusb_exit(ctx);
+	return ERROR_OK;
+
+}
+
 COMMAND_HANDLER(ftdi_handle_channel_command)
 {
 	if (CMD_ARGC == 1)
@@ -1395,6 +1445,13 @@ static const struct command_registration ftdi_subcommand_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "set the USB device description of the FTDI device",
 		.usage = "description_string",
+	},
+	{
+		.name = "list",
+		.handler = &ftid_handle_list_command,
+		.mode = COMMAND_ANY,
+		.help = "list all FTDI devices",
+		.usage = "",
 	},
 	{
 		.name = "channel",
