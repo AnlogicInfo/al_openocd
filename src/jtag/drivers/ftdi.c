@@ -1165,33 +1165,33 @@ COMMAND_HANDLER(ftdi_handle_device_desc_command)
 	return ERROR_OK;
 }
 
-static void scan_device(libusb_device *dev, uint16_t vid, uint16_t pid) {
+static int scan_device(libusb_device *dev, uint16_t vid, uint16_t pid, char* location) {
 	struct libusb_device_descriptor desc;
 	int r = libusb_get_device_descriptor(dev, &desc);
 	if (r < 0) {
 			LOG_ERROR("failed to get device descriptor\n");
-			return;
+			return ERROR_FAIL;
 	}
 	uint8_t path[8];
 	r = libusb_get_port_numbers(dev, path, sizeof(path));
 	if (r < 0) {
 			LOG_ERROR("failed to get port numbers\n");
-			return;
+			return ERROR_FAIL;
 	}
 
 	if(desc.idVendor != vid || desc.idProduct != pid)
-		return;
-
-	LOG_INFO("Device %04x:%04x (bus %d, device %d, path: %d)",
-				 desc.idVendor, desc.idProduct,
-				 libusb_get_bus_number(dev), libusb_get_device_address(dev),
-				 path[0]);
+		return ERROR_FAIL;
+	else {
+		sprintf(location, "%d-%d", libusb_get_bus_number(dev), path[0]);
+		return ERROR_OK;
+	}
 }
 
 COMMAND_HANDLER(ftid_handle_list_command)
 {
 	libusb_device **devs;
 	libusb_context *ctx = NULL;
+	char location[8];
 	uint16_t vid, pid;
 	ssize_t i, cnt;
 	int r;
@@ -1222,7 +1222,9 @@ COMMAND_HANDLER(ftid_handle_list_command)
 	}
 
 	for (i = 0; i < cnt; i++) {
-			scan_device(devs[i], vid, pid);
+			location[0] = '\0';
+			if (scan_device(devs[i], vid, pid, location) == ERROR_OK)
+				command_print(CMD, "%s", location);
 	}
 
 	libusb_free_device_list(devs, 1);
