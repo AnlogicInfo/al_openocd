@@ -75,7 +75,7 @@
 #include <transport/transport.h>
 #include <helper/time_support.h>
 #include <helper/log.h>
-#include <libusb.h>
+
 
 
 #if IS_CYGWIN == 1
@@ -1165,72 +1165,6 @@ COMMAND_HANDLER(ftdi_handle_device_desc_command)
 	return ERROR_OK;
 }
 
-static void scan_device(libusb_device *dev, uint16_t vid, uint16_t pid) {
-	struct libusb_device_descriptor desc;
-	int r = libusb_get_device_descriptor(dev, &desc);
-	if (r < 0) {
-			LOG_ERROR("failed to get device descriptor\n");
-			return;
-	}
-	uint8_t path[8];
-	r = libusb_get_port_numbers(dev, path, sizeof(path));
-	if (r < 0) {
-			LOG_ERROR("failed to get port numbers\n");
-			return;
-	}
-
-	if(desc.idVendor != vid || desc.idProduct != pid)
-		return;
-
-	LOG_INFO("Device %04x:%04x (bus %d, device %d, path: %d)",
-				 desc.idVendor, desc.idProduct,
-				 libusb_get_bus_number(dev), libusb_get_device_address(dev),
-				 path[0]);
-}
-
-COMMAND_HANDLER(ftid_handle_list_command)
-{
-	libusb_device **devs;
-	libusb_context *ctx = NULL;
-	uint16_t vid, pid;
-	ssize_t i, cnt;
-	int r;
-
-	if (CMD_ARGC < 2 || (CMD_ARGC & 1)) {
-		LOG_WARNING("incomplete ftdi vid_pid configuration directive");
-		if (CMD_ARGC < 2)
-			return ERROR_COMMAND_SYNTAX_ERROR;
-		/* remove the incomplete trailing id */
-		CMD_ARGC -= 1;
-	}
-
-	for (i = 0; i < CMD_ARGC; i += 2) {
-		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i], vid);
-		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i + 1], pid);
-	}
-
-	r = libusb_init(&ctx);
-	if (r < 0) {
-			fprintf(stderr, "failed to initialize libusb\n");
-			return 1;
-	}
-	cnt = libusb_get_device_list(ctx, &devs);
-	if (cnt < 0) {
-			fprintf(stderr, "failed to get device list\n");
-			libusb_exit(ctx);
-			return 1;
-	}
-
-	for (i = 0; i < cnt; i++) {
-			scan_device(devs[i], vid, pid);
-	}
-
-	libusb_free_device_list(devs, 1);
-	libusb_exit(ctx);
-	return ERROR_OK;
-
-}
-
 COMMAND_HANDLER(ftdi_handle_channel_command)
 {
 	if (CMD_ARGC == 1)
@@ -1463,13 +1397,6 @@ static const struct command_registration ftdi_subcommand_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "set the USB device description of the FTDI device",
 		.usage = "description_string",
-	},
-	{
-		.name = "list",
-		.handler = &ftid_handle_list_command,
-		.mode = COMMAND_ANY,
-		.help = "list all FTDI devices",
-		.usage = "(vid pid)*",
 	},
 	{
 		.name = "channel",
