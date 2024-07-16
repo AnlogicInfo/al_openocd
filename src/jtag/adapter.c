@@ -781,6 +781,56 @@ COMMAND_HANDLER(handle_usb_location_command)
 }
 #endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
 
+static void print_device(libusb_device *dev) {
+		struct libusb_device_descriptor desc;
+		int r = libusb_get_device_descriptor(dev, &desc);
+		if (r < 0) {
+				LOG_ERROR("failed to get device descriptor\n");
+				return;
+		}
+
+		uint8_t path[8];
+		r = libusb_get_port_numbers(dev, path, sizeof(path));
+		if (r < 0) {
+				LOG_ERROR("failed to get port numbers\n");
+				return;
+		}
+
+		LOG_INFO("Device %04x:%04x (bus %d, device %d)",
+					 desc.idVendor, desc.idProduct,
+					 libusb_get_bus_number(dev), libusb_get_device_address(dev));
+
+		LOG_INFO(" path: %d", path[0]);
+		for (int i = 1; i < r; i++)
+				LOG_INFO(".%d", path[i]);
+		LOG_INFO("\n");
+}
+
+COMMAND_HANDLER(handle_usb_list_command)
+{
+	libusb_device **devs;
+	libusb_context *ctx = NULL;
+	int r;
+	ssize_t cnt;
+	r = libusb_init(&ctx);
+	if (r < 0) {
+			fprintf(stderr, "failed to initialize libusb\n");
+			return 1;
+	}
+	cnt = libusb_get_device_list(ctx, &devs);
+	if (cnt < 0) {
+			fprintf(stderr, "failed to get device list\n");
+			libusb_exit(ctx);
+			return 1;
+	}
+	for (ssize_t i = 0; i < cnt; i++) {
+			print_device(devs[i]);
+	}
+	libusb_free_device_list(devs, 1);
+	libusb_exit(ctx);
+	return ERROR_OK;
+}
+
 static const struct command_registration adapter_usb_command_handlers[] = {
 #ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
 	{
@@ -789,6 +839,13 @@ static const struct command_registration adapter_usb_command_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "display or set the USB bus location of the USB device",
 		.usage = "[<bus>-port[.port]...]",
+	},
+	{
+		.name = "list",
+		.handler = &handle_usb_list_command,
+		.mode = COMMAND_ANY,
+		.help = "list all USB devices",
+		.usage = "",
 	},
 #endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
 	COMMAND_REGISTRATION_DONE
