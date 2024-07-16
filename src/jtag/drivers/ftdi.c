@@ -1165,7 +1165,7 @@ COMMAND_HANDLER(ftdi_handle_device_desc_command)
 	return ERROR_OK;
 }
 
-static void print_device(libusb_device *dev) {
+static void scan_device(libusb_device *dev, uint16_t vid, uint16_t pid) {
 	struct libusb_device_descriptor desc;
 	int r = libusb_get_device_descriptor(dev, &desc);
 	if (r < 0) {
@@ -1178,21 +1178,37 @@ static void print_device(libusb_device *dev) {
 			LOG_ERROR("failed to get port numbers\n");
 			return;
 	}
-	LOG_INFO("Device %04x:%04x (bus %d, device %d)",
+
+	if(desc.idVendor != vid || desc.idProduct != pid)
+		return;
+
+	LOG_INFO("Device %04x:%04x (bus %d, device %d, path: %d)",
 				 desc.idVendor, desc.idProduct,
-				 libusb_get_bus_number(dev), libusb_get_device_address(dev));
-	LOG_INFO(" path: %d", path[0]);
-	for (int i = 1; i < r; i++)
-			LOG_INFO(".%d", path[i]);
-	LOG_INFO("\n");
+				 libusb_get_bus_number(dev), libusb_get_device_address(dev),
+				 path[0]);
 }
 
 COMMAND_HANDLER(ftid_handle_list_command)
 {
 	libusb_device **devs;
 	libusb_context *ctx = NULL;
+	uint16_t vid, pid;
+	ssize_t i, cnt;
 	int r;
-	ssize_t cnt;
+
+	if (CMD_ARGC < 2 || (CMD_ARGC & 1)) {
+		LOG_WARNING("incomplete ftdi vid_pid configuration directive");
+		if (CMD_ARGC < 2)
+			return ERROR_COMMAND_SYNTAX_ERROR;
+		/* remove the incomplete trailing id */
+		CMD_ARGC -= 1;
+	}
+
+	for (i = 0; i < CMD_ARGC; i += 2) {
+		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i], vid);
+		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i + 1], pid);
+	}
+
 	r = libusb_init(&ctx);
 	if (r < 0) {
 			fprintf(stderr, "failed to initialize libusb\n");
@@ -1204,9 +1220,11 @@ COMMAND_HANDLER(ftid_handle_list_command)
 			libusb_exit(ctx);
 			return 1;
 	}
-	for (ssize_t i = 0; i < cnt; i++) {
-			print_device(devs[i]);
+
+	for (i = 0; i < cnt; i++) {
+			scan_device(devs[i], vid, pid);
 	}
+
 	libusb_free_device_list(devs, 1);
 	libusb_exit(ctx);
 	return ERROR_OK;
@@ -1451,7 +1469,7 @@ static const struct command_registration ftdi_subcommand_handlers[] = {
 		.handler = &ftid_handle_list_command,
 		.mode = COMMAND_ANY,
 		.help = "list all FTDI devices",
-		.usage = "",
+		.usage = "(vid pid)*",
 	},
 	{
 		.name = "channel",
