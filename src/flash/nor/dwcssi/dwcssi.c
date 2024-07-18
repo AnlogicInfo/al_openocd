@@ -94,7 +94,7 @@ static int qspi_mio_init(struct flash_bank *bank)
 				return ERROR_FAIL;
 		}
 
-		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK) 
+		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK)
 			return ERROR_FAIL;
 	}
 
@@ -460,7 +460,6 @@ static int dwcssi_rx_buf(struct flash_bank *bank, uint8_t* out_buf, uint32_t out
 	while (i < out_cnt) {
 		if (dwcssi_rx(bank, out_buf+i) == ERROR_OK)
 			i++;
-/*		LOG_INFO("read buf %x data %x", i, *(out_buf+i));*/
 	}
 	return ERROR_OK;
 }
@@ -732,6 +731,21 @@ static int dwcssi_flash_reset(struct flash_bank *bank)
 	return ERROR_OK;
 }
 
+static int dwcssi_tx_cmd(struct flash_bank *bank, uint8_t cmd, uint8_t rx_len)
+{
+	uint8_t rx_buf[16] = {0};
+	int i;
+	LOG_INFO("send command %x", cmd);
+	if (rx_len == 0) {
+		dwcssi_flash_tx_cmd(bank, &cmd, 1, STANDARD_SPI_MODE);
+	} else {
+		dwcssi_rd_flash_reg(bank, rx_buf, cmd, rx_len);
+		for (i = 0; i < rx_len; i++)
+			LOG_INFO("read buf %x data %x", i, *(rx_buf+i));
+	}
+	return ERROR_OK;
+}
+
 static int dwcssi_read_id_reset(struct flash_bank *bank,
 		int (*reset)(struct flash_bank*, uint8_t cmd_mode), uint8_t cmd_mode)
 {
@@ -746,7 +760,7 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 	}
 
 	dwcssi_rd_flash_reg(bank, id, SPIFLASH_READ_ID, 3);
-	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0x00FFFFFF)) 
+	if ((*(uint32_t *)id == 0) || (*(uint32_t *)id == 0x00FFFFFF))
 	{
 		LOG_WARNING("read id fail %"PRIx32", reset and try again", *(uint32_t *)id);
 		return ERROR_FAIL;
@@ -953,7 +967,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 	if (target->state != TARGET_HALTED) {
 
 		target_halt(target);
-		retval = target_wait_state(target, TARGET_HALTED, 500);		
+		retval = target_wait_state(target, TARGET_HALTED, 500);
 
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Target not halted");
@@ -1492,7 +1506,7 @@ static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t
 	count = flash_write_boundary_check(bank, offset, count);
 
 	if (flash_addr_mode_check(offset, count, addr_size) != ERROR_OK)
-		return ERROR_FAIL; 
+		return ERROR_FAIL;
 	page_offset = offset % page_size;
 	dwcssi_unset_protect(bank);
 	if ((bank->x4_mode) && (bank->x4_en)) {
@@ -1559,6 +1573,7 @@ const struct flash_driver dwcssi_flash = {
 	.read = dwcssi_read,
 	.verify = dwcssi_verify,
 	.reset = dwcssi_flash_reset,
+	.tx_cmd = dwcssi_tx_cmd,
 	.probe = dwcssi_probe,
 	.customize = dwcssi_customize,
 	.auto_probe = dwcssi_auto_probe,

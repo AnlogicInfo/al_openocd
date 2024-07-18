@@ -161,7 +161,7 @@ COMMAND_HANDLER(handle_flash_info_command)
 }
 
 
-COMMAND_HANDLER(hanlder_flash_reset_command)
+COMMAND_HANDLER(hanlde_flash_reset_command)
 {
 	struct flash_bank *p;
 	int retval;
@@ -179,6 +179,28 @@ COMMAND_HANDLER(hanlder_flash_reset_command)
 	return retval;
 }
 
+COMMAND_HANDLER(handle_flash_tx_cmd_command)
+{
+	struct flash_bank *p;
+	uint8_t flash_cmd, rx_len;
+	int retval;
+
+	if (CMD_ARGC != 3)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
+	if (retval != ERROR_OK)
+		return retval;
+
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[1], flash_cmd);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[2], rx_len);
+
+	if (p)
+		retval = p->driver->tx_cmd(p, flash_cmd, rx_len);
+
+	return retval;
+
+}
 
 COMMAND_HANDLER(handle_flash_probe_command)
 {
@@ -207,7 +229,7 @@ COMMAND_HANDLER(handle_flash_probe_command)
 	return retval;
 }
 
-COMMAND_HANDLER(handler_flash_customize_command)
+COMMAND_HANDLER(handle_flash_customize_command)
 {
 	struct flash_bank *p;
 	uint8_t read_cmd, pprog_cmd, erase_cmd;
@@ -1160,10 +1182,17 @@ static const struct command_registration flash_exec_command_handlers[] = {
 	},
 	{
 		.name = "reset",
-		.handler = hanlder_flash_reset_command,
+		.handler = hanlde_flash_reset_command,
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id",
 		.help = "Reset a flash bank",
+	},
+	{
+		.name = "tx_cmd",
+		.handler = handle_flash_tx_cmd_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id cmd rd_len",
+		.help = "Send a command to a flash bank.",
 	},
 	{
 		.name = "erase_check",
@@ -1467,11 +1496,11 @@ static const struct command_registration flash_config_command_handlers[] = {
 	},
 	{
 		.name = "customize",
-		.handler = handler_flash_customize_command,
+		.handler = handle_flash_customize_command,
 		.mode = COMMAND_ANY,
 		.usage = "bank_id read_cmd pprog_cmd erase_cmd page_size sector_size chip_size",
 		.help = "Customize flash with user input",
-	},	
+	},
 	{
 		.name = "init",
 		.mode = COMMAND_CONFIG,
