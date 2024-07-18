@@ -182,10 +182,10 @@ COMMAND_HANDLER(hanlde_flash_reset_command)
 COMMAND_HANDLER(handle_flash_tx_cmd_command)
 {
 	struct flash_bank *p;
-	uint8_t flash_cmd, rx_len;
+	uint8_t flash_cmd, rx_len, mode;
 	int retval;
 
-	if (CMD_ARGC != 3)
+	if (CMD_ARGC != 4)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
@@ -194,11 +194,36 @@ COMMAND_HANDLER(handle_flash_tx_cmd_command)
 
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[1], flash_cmd);
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[2], rx_len);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], mode);
 
 	if (p)
-		retval = p->driver->tx_cmd(p, flash_cmd, rx_len);
+		retval = p->driver->tx_cmd(p, flash_cmd, rx_len, mode);
 
 	return retval;
+}
+
+COMMAND_HANDLER(handle_flash_config_command)
+{
+	struct flash_bank *p;
+	uint8_t flash_cmd, value, mode;
+	int retval;
+
+	if (CMD_ARGC != 4)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
+	if (retval != ERROR_OK)
+		return retval;
+
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[1], flash_cmd);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[2], value);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], mode);
+
+	if (p)
+		retval = p->driver->config_flash(p, flash_cmd, value, mode);
+
+	return retval;
+
 
 }
 
@@ -1191,8 +1216,15 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.name = "tx_cmd",
 		.handler = handle_flash_tx_cmd_command,
 		.mode = COMMAND_EXEC,
-		.usage = "bank_id cmd rd_len",
-		.help = "Send a command to a flash bank.",
+		.usage = "bank_id cmd rd_len mode",
+		.help = "Send a command to a flash bank. Set rd_len to 0 for tx only. Mode is 0 for SPI, 2 for QPI",
+	},
+	{
+		.name = "config_flash",
+		.handler = handle_flash_config_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id cmd data mode",
+		.help = "Send a configuration command to a flash reg. Mode is 0 for SPI, 2 for QPI",
 	},
 	{
 		.name = "erase_check",

@@ -731,18 +731,29 @@ static int dwcssi_flash_reset(struct flash_bank *bank)
 	return ERROR_OK;
 }
 
-static int dwcssi_tx_cmd(struct flash_bank *bank, uint8_t cmd, uint8_t rx_len)
+static int dwcssi_tx_cmd(struct flash_bank *bank, uint8_t cmd, uint8_t rx_len, uint8_t mode)
 {
 	uint8_t rx_buf[16] = {0};
 	int i;
 	LOG_INFO("send command %x", cmd);
 	if (rx_len == 0) {
-		dwcssi_flash_tx_cmd(bank, &cmd, 1, STANDARD_SPI_MODE);
+		dwcssi_flash_tx_cmd(bank, &cmd, 1, mode);
 	} else {
 		dwcssi_rd_flash_reg(bank, rx_buf, cmd, rx_len);
 		for (i = 0; i < rx_len; i++)
 			LOG_INFO("read buf %x data %x", i, *(rx_buf+i));
 	}
+	return ERROR_OK;
+}
+
+static int dwcssi_config_flash(struct flash_bank *bank, uint8_t cmd, uint8_t value, uint8_t mode)
+{
+	uint8_t wr_seq[2] = {0};
+
+	wr_seq[0] = cmd;
+	wr_seq[1] = value;
+	LOG_INFO("write reg %x %x mode %x", cmd, value, mode);
+	dwcssi_wr_flash_reg(bank, wr_seq, 2, mode);
 	return ERROR_OK;
 }
 
@@ -1574,6 +1585,7 @@ const struct flash_driver dwcssi_flash = {
 	.verify = dwcssi_verify,
 	.reset = dwcssi_flash_reset,
 	.tx_cmd = dwcssi_tx_cmd,
+	.config_flash = dwcssi_config_flash,
 	.probe = dwcssi_probe,
 	.customize = dwcssi_customize,
 	.auto_probe = dwcssi_auto_probe,

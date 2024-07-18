@@ -187,7 +187,12 @@ struct flash_driver {
 	/* 
 	 * Tx command to flash
 	 */
-	int (*tx_cmd)(struct flash_bank *bank, uint8_t cmd, uint8_t rx_len);
+	int (*tx_cmd)(struct flash_bank *bank, uint8_t cmd, uint8_t rx_len, uint8_t mode);
+
+	/* 
+	 * Config flash register with value
+	 */
+	int (*config_flash)(struct flash_bank *bank, uint8_t cmd, uint8_t value, uint8_t mode);
 
 	/*
 	 * Customize flash
