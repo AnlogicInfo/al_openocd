@@ -52,4 +52,3 @@ proc config_cti {en filename} {
   }
 }
 
-#config_cti $::env(IDE_ROOT_PATH)/tools/data/cti_config.txt
