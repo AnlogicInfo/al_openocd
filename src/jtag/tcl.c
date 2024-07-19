@@ -848,14 +848,12 @@ COMMAND_HANDLER(handle_jtag_init_command)
 	if (CMD_ARGC != 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-/*
 	static bool jtag_initialized;
 	if (jtag_initialized) {
 		LOG_INFO("'jtag init' has already been called");
 		return ERROR_OK;
 	}
 	jtag_initialized = true;
-*/
 
 	LOG_DEBUG("Initializing jtag devices...");
 	return jtag_init(CMD_CTX);

@@ -1448,7 +1448,7 @@ static int jtag_validate_ircapture(void)
 	if (val != 0x3) {
 		char *cbuf = buf_to_hex_str(ir_test, total_ir_length);
 
-		LOG_ERROR("IR capture error at bit %d, saw 0x%s not 0x...3",
+		LOG_WARNING("IR capture error at bit %d, saw 0x%s not 0x...3",
 			chain_pos, cbuf);
 		free(cbuf);
 		retval = ERROR_JTAG_INIT_FAILED;
