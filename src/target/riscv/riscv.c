@@ -1162,8 +1162,6 @@ int riscv_flush_registers(struct target *target)
 	if (!target->reg_cache)
 		return ERROR_OK;
 
-	LOG_DEBUG("[%s]", target_name(target));
-
 	for (uint32_t number = 0; number < target->reg_cache->num_regs; number++) {
 		struct reg *reg = &target->reg_cache->reg_list[number];
 		if (reg->valid && reg->dirty) {
@@ -2310,8 +2308,6 @@ static enum riscv_poll_hart riscv_poll_hart(struct target *target, int hartid)
 {
 	RISCV_INFO(r);
 
-	LOG_TARGET_DEBUG(target, "polling, target->state=%d", target->state);
-
 	/* If OpenOCD thinks we're running but this hart is halted then it's time
 	 * to raise an event. */
 	bool halted = riscv_is_halted(target);
@@ -2387,7 +2383,6 @@ exit:
 /*** OpenOCD Interface ***/
 int riscv_openocd_poll(struct target *target)
 {
-	LOG_DEBUG("polling all harts");
 	enum target_state old_state = target->state;
 
 	if (target->smp) {
