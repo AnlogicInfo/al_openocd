@@ -55,6 +55,15 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 	return ERROR_OK;
 }
 
+static int dwcssi_set_flash_wrap64(struct flash_bank *bank, uint8_t cmd_mode)
+{
+	uint8_t wrap_cfg = 0x60; /* for W25Q128, W6-4 = 3'b110, 8'b0110_0000 */
+	uint8_t wrap64_cmd[] = {0x77, 0x00, 0x00, 0x00, wrap_cfg};
+
+	return dwcssi_flash_tx_cmd(bank, wrap64_cmd, sizeof(wrap64_cmd), cmd_mode);
+}
+
+
 static uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t pull_dw)
 {
     uint32_t val = speed | (0x8U << 24) | (pull_dw << 28) | (pull_up << 29);
@@ -728,6 +737,8 @@ static int dwcssi_flash_reset(struct flash_bank *bank)
 {
 	general_reset_f0(bank, STANDARD_SPI_MODE);
 	general_reset_66_99(bank, STANDARD_SPI_MODE);
+
+	dwcssi_set_flash_wrap64(bank, STANDARD_SPI_MODE); /* Set to wrap64 mode */
 	bank->x4_mode = false;
 	return ERROR_OK;
 }
@@ -758,17 +769,20 @@ static int dwcssi_read_id_reset(struct flash_bank *bank,
 static int dwcssi_read_id(struct flash_bank *bank)
 {
 	int retval = ERROR_FAIL;
+	int spi_mode;
 	for (int i = 0; i < 3; i++) {
-		retval = dwcssi_read_id_reset(bank, reset_methods[i], STANDARD_SPI_MODE);
+		spi_mode = STANDARD_SPI_MODE;
+		retval = dwcssi_read_id_reset(bank, reset_methods[i], spi_mode);
 		if (retval == ERROR_OK)
 			break;
 		else {
-			retval = dwcssi_read_id_reset(bank, reset_methods[i], QPI_MODE);
+			spi_mode = QPI_MODE;
+			retval = dwcssi_read_id_reset(bank, reset_methods[i], spi_mode);
 			if (retval == ERROR_OK)
 				break;
 		}
 	}
-
+	retval = dwcssi_set_flash_wrap64(bank, spi_mode); /* Set to wrap64 mode */
 	return retval;
 }
 
