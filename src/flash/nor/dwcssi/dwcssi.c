@@ -63,6 +63,13 @@ static int dwcssi_set_flash_wrap64(struct flash_bank *bank, uint8_t cmd_mode)
 	return dwcssi_flash_tx_cmd(bank, wrap64_cmd, sizeof(wrap64_cmd), cmd_mode);
 }
 
+static int dwcssi_unset_flash_wrap(struct flash_bank *bank, uint8_t cmd_mode)
+{
+	uint8_t wrap_cfg = 0x70; /* for W25Q128, W6-4 = 3'b111, 8'b0110_0000 */
+	uint8_t wrap64_cmd[] = {0x77, 0x00, 0x00, 0x00, wrap_cfg};
+
+	return dwcssi_flash_tx_cmd(bank, wrap64_cmd, sizeof(wrap64_cmd), cmd_mode);
+}
 
 static uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t pull_dw)
 {
@@ -1067,6 +1074,7 @@ static void dwcssi_read_x1(struct flash_bank *bank, uint8_t *buffer, uint32_t of
 {
 	uint32_t cur_count, page_size = X1_PAGE_SIZE;
 	uint32_t page_offset;
+	dwcssi_unset_flash_wrap(bank, STANDARD_SPI_MODE);
 
 	page_offset = offset % page_size;
 
@@ -1082,6 +1090,7 @@ static void dwcssi_read_x1(struct flash_bank *bank, uint8_t *buffer, uint32_t of
 		offset += cur_count;
 		count  -= cur_count;
 	}
+	dwcssi_set_flash_wrap64(bank, STANDARD_SPI_MODE);
 }
 
 static void dwcssi_read_x4(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
