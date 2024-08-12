@@ -41,6 +41,7 @@
 #include "spi.h"
 #include <jtag/jtag.h>
 #include <helper/time_support.h>
+#include <flash/loader_io.h>
 #include <target/algorithm.h>
 #include "target/riscv/riscv.h"
 
@@ -147,6 +148,7 @@ struct nuspi_flash_bank {
 	bool probed;
 	target_addr_t ctrl_base;
 	const struct flash_device *dev;
+	struct flash_loader loader;
 	bool simulation;
 };
 
@@ -195,6 +197,12 @@ FLASH_BANK_COMMAND_HANDLER(nuspi_flash_bank_command)
 			LOG_DEBUG("Nuspi Simulation Mode");
 		}
 	}
+
+	nuspi_info->loader.dev_info = (struct nuspi_flash_bank *)nuspi_info;
+	nuspi_info->loader.set_params_priv = NULL;
+	nuspi_info->loader.exec_target = bank->target;
+	nuspi_info->loader.copy_area = NULL;
+	nuspi_info->loader.ctrl_base = nuspi_info->ctrl_base;
 
 	return ERROR_OK;
 }
@@ -745,204 +753,53 @@ static const uint8_t riscv64_bin[] = {
 #include "../../../contrib/loaders/flash/nuspi/riscv64_nuspi.inc"
 };
 
+static struct code_src sync_srcs[2] = {
+	[RV64_SRC] = {riscv64_bin, sizeof(riscv64_bin)},
+	[RV32_SRC] = {riscv32_bin, sizeof(riscv32_bin)},
+};
+
+
+static void nuspi_write_sync_params_priv(struct flash_loader *loader)
+{
+	struct nuspi_flash_bank *nuspi_info = loader->dev_info;
+	buf_set_u64(loader->reg_params[5].value, 0, loader->xlen,
+					nuspi_info->dev->pprog_cmd | (nuspi_info->dev->size_in_bytes > 0x1000000 ? 0x100 : 0));	
+}
+
 static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 		uint32_t offset, uint32_t count)
 {
-	struct target *target = bank->target;
 	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
-	uint32_t cur_count, page_size;
+	struct flash_loader *loader = &nuspi_info->loader;
 	int retval = ERROR_OK;
 
-	LOG_DEBUG("bank->size=0x%x offset=0x%08" PRIx32 " count=0x%08" PRIx32,
-			bank->size, offset, count);
+	loader->work_mode = SYNC_TRANS;
+	loader->block_size = nuspi_info->dev->pagesize;
+	loader->image_size = count;
+	loader->param_cnt = 6;
+	loader->set_params_priv = nuspi_write_sync_params_priv;
 
-	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
-		return ERROR_TARGET_NOT_HALTED;
-	}
+	retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset, count);
 
-	if (offset + count > nuspi_info->dev->size_in_bytes) {
-		LOG_WARNING("Write past end of flash. Extra data discarded.");
-		count = nuspi_info->dev->size_in_bytes - offset;
-	}
-
-	/* Check sector protection */
-	for (unsigned int sector = 0; sector < bank->num_sectors; sector++) {
-		/* Start offset in or before this sector? */
-		/* End offset in or behind this sector? */
-		if ((offset <
-					(bank->sectors[sector].offset + bank->sectors[sector].size))
-				&& ((offset + count - 1) >= bank->sectors[sector].offset)
-				&& bank->sectors[sector].is_protected) {
-			LOG_ERROR("Flash sector %u protected", sector);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("nuspi write sync error");
+		if (0)
+			retval = slow_nuspi_write_buffer(bank, buffer, offset, count);
+	
+		if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+			if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
+				return ERROR_FAIL;
+		}
+		/* Switch to HW mode before return to prompt */
+		if (nuspi_enable_hw_mode(bank) != ERROR_OK)
 			return ERROR_FAIL;
-		}
-	}
 
-	int xlen = riscv_xlen(target);
-	struct working_area *algorithm_wa = NULL;
-	struct working_area *data_wa = NULL;
-	const uint8_t *bin;
-	size_t bin_size;
-	if (xlen == 32) {
-		bin = riscv32_bin;
-		bin_size = sizeof(riscv32_bin);
-	} else {
-		bin = riscv64_bin;
-		bin_size = sizeof(riscv64_bin);
-	}
-
-	unsigned data_wa_size = 0;
-	if (target_alloc_working_area(target, bin_size, &algorithm_wa) == ERROR_OK) {
-		retval = target_write_buffer(target, algorithm_wa->address,
-				bin_size, bin);
-		if (retval != ERROR_OK) {
-			LOG_ERROR("Failed to write code to " TARGET_ADDR_FMT ": %d",
-					algorithm_wa->address, retval);
-			target_free_working_area(target, algorithm_wa);
-			algorithm_wa = NULL;
-
-		} else {
-			data_wa_size = MIN(target->working_area_size - algorithm_wa->size, count);
-			while (1) {
-				if (data_wa_size < 128) {
-					LOG_WARNING("Couldn't allocate data working area.");
-					target_free_working_area(target, algorithm_wa);
-					algorithm_wa = NULL;
-				}
-				if (target_alloc_working_area_try(target, data_wa_size, &data_wa) ==
-						ERROR_OK) {
-					break;
-				}
-
-				data_wa_size = data_wa_size * 3 / 4;
-			}
-		}
-	} else {
-		LOG_WARNING("Couldn't allocate %zd-byte working area.", bin_size);
-		algorithm_wa = NULL;
-	}
-
-	/* If no valid page_size, use reasonable default. */
-	page_size = nuspi_info->dev->pagesize ?
-		nuspi_info->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
-
-	/* Disable Hardware accesses*/
-	if (nuspi_disable_hw_mode(bank) != ERROR_OK)
-		return ERROR_FAIL;
-
-	if (algorithm_wa) {
-		struct reg_param reg_params[6];
-		init_reg_param(&reg_params[0], "a0", xlen, PARAM_IN_OUT);
-		init_reg_param(&reg_params[1], "a1", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[2], "a2", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[3], "a3", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[4], "a4", xlen, PARAM_OUT);
-		init_reg_param(&reg_params[5], "a5", xlen, PARAM_OUT);
-
-		while (count > 0) {
-			cur_count = MIN(count, data_wa_size);
-			buf_set_u64(reg_params[0].value, 0, xlen, nuspi_info->ctrl_base);
-			buf_set_u64(reg_params[1].value, 0, xlen, page_size);
-			buf_set_u64(reg_params[2].value, 0, xlen, data_wa->address);
-			buf_set_u64(reg_params[3].value, 0, xlen, offset);
-			buf_set_u64(reg_params[4].value, 0, xlen, cur_count);
-			buf_set_u64(reg_params[5].value, 0, xlen,
-					nuspi_info->dev->pprog_cmd | (bank->size > 0x1000000 ? 0x100 : 0));
-
-			retval = target_write_buffer(target, data_wa->address, cur_count,
-					buffer);
-			if (retval != ERROR_OK) {
-				LOG_DEBUG("Failed to write %d bytes to " TARGET_ADDR_FMT ": %d",
-						cur_count, data_wa->address, retval);
-				goto err;
-			}
-
-			LOG_DEBUG("write(ctrl_base=0x%" TARGET_PRIxADDR ", page_size=0x%x, "
-					"address=0x%" TARGET_PRIxADDR ", offset=0x%" PRIx32
-					", count=0x%" PRIx32 "), buffer=%02x %02x %02x %02x %02x %02x ..." PRIx32,
-					nuspi_info->ctrl_base, page_size, data_wa->address, offset, cur_count,
-					buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5]);
-			if (nuspi_info->simulation) {
-				retval = target_run_algorithm(target, 0, NULL,
-						ARRAY_SIZE(reg_params), reg_params,
-						algorithm_wa->address, 0, NUSPI_SIM_TIMEOUT, NULL);
-			} else {
-				retval = target_run_algorithm(target, 0, NULL,
-					ARRAY_SIZE(reg_params), reg_params,
-					algorithm_wa->address, 0, cur_count * 2, NULL);
-			}
-			if (retval != ERROR_OK) {
-				LOG_ERROR("Failed to execute algorithm at " TARGET_ADDR_FMT ": %d",
-						algorithm_wa->address, retval);
-				goto err;
-			}
-
-			int algorithm_result = buf_get_u64(reg_params[0].value, 0, xlen);
-			if (algorithm_result != 0) {
-				LOG_ERROR("Algorithm returned error %d", algorithm_result);
-				retval = ERROR_FAIL;
-				goto err;
-			}
-
-			buffer += cur_count;
-			offset += cur_count;
-			count -= cur_count;
-		}
-
-		target_free_working_area(target, data_wa);
-		target_free_working_area(target, algorithm_wa);
-
-	} else {
-		nuspi_txwm_wait(bank);
-
-		/* poll WIP */
-		if (nuspi_info->simulation) {
-			retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
-		} else {
-			retval = nuspi_wip(bank, NUSPI_PROBE_TIMEOUT);
-		}
-		if (retval != ERROR_OK)
-			goto err;
-
-		uint32_t page_offset = offset % page_size;
-		/* central part, aligned words */
-		while (count > 0) {
-			/* clip block at page boundary */
-			if (page_offset + count > page_size)
-				cur_count = page_size - page_offset;
-			else
-				cur_count = count;
-
-			retval = slow_nuspi_write_buffer(bank, buffer, offset, cur_count);
-			if (retval != ERROR_OK)
-				goto err;
-
-			page_offset = 0;
-			buffer += cur_count;
-			offset += cur_count;
-			count -= cur_count;
-		}
-	}
-
-err:
-	if (algorithm_wa) {
-		target_free_working_area(target, data_wa);
-		target_free_working_area(target, algorithm_wa);
-	}
-
-	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
-		if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
+		if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
 			return ERROR_FAIL;
 	}
-	/* Switch to HW mode before return to prompt */
-	if (nuspi_enable_hw_mode(bank) != ERROR_OK)
-		return ERROR_FAIL;
-
-	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
-		return ERROR_FAIL;
 
 	return retval;
+
 }
 
 static int nuspi_read(struct flash_bank *bank, uint8_t *buffer,

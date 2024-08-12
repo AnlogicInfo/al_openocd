@@ -140,7 +140,7 @@ static int loader_code_to_wa(struct flash_loader *loader)
 	 * both large and small page chips, where it won't be...
 	 */
 	wa_size = target_get_working_area_avail(target);
-
+	LOG_DEBUG("wa init size %x", wa_size);
 	/* make sure we have a working area */
 	if (!*area) {
 		retval = target_alloc_working_area(target, wa_size, area);
@@ -149,8 +149,9 @@ static int loader_code_to_wa(struct flash_loader *loader)
 			return ERROR_BUF_TOO_SMALL;
 		}
 	}
+	LOG_DEBUG("wa allocated");
 	target_write_buffer(target, (*area)->address, loader->code_src->size, loader->code_src->bin);
-
+	LOG_DEBUG("wa write code");
 	return wa_size;
 }
 

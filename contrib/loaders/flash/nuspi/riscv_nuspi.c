@@ -1,10 +1,14 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-
-#include "../../../../src/flash/nor/spi.h"
-
 /* Register offsets */
+/* fields in SPI flash status register */
+#define	SPIFLASH_BSY		0
+#define SPIFLASH_BSY_BIT	(1 << SPIFLASH_BSY)	/* WIP Bit of SPI SR */
+
+/* SPI Flash Commands */
+#define SPIFLASH_READ_STATUS	0x05 /* Read Status Register */
+#define SPIFLASH_WRITE_ENABLE	0x06 /* Write Enable */
 
 #define NUSPI_REG_SCKDIV			(0x00)
 #define NUSPI_REG_SCKMODE			(0x04)
@@ -127,8 +131,10 @@ static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
  *   bit 8    -- 0 means send 3 bytes after pprog_cmd, 1 means send 4 bytes
  *               after pprog_cmd
  */
-int flash_nuspi(volatile uint32_t *ctrl_base, uint32_t page_size,
-		const uint8_t *buffer, uint32_t offset, uint32_t count,
+
+
+int flash_nuspi(volatile uint32_t *ctrl_base, uint32_t page_size, uint32_t offset,
+		const uint8_t *buffer,  uint32_t count,
 		uint32_t flash_info)
 {
 	int result;

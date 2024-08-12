@@ -1,6 +1,6 @@
 BIN2C = ../../../../src/helper/bin2char.sh
 
-CROSS_COMPILE ?= riscv-nuclei-elf-
+CROSS_COMPILE ?= riscv64-unknown-elf-
 
 RISCV_CC=$(CROSS_COMPILE)gcc
 RISCV_OBJCOPY=$(CROSS_COMPILE)objcopy

@@ -1118,6 +1118,7 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 
 	if (retval != ERROR_OK) {
 		/* abort flash write algorithm on target */
+		LOG_ERROR("target async trans data fail");
 		target_write_u32(trans_target, fifo->wp_addr, 0);
 	} else
 		LOG_PROC(total_cnt, total_cnt);
