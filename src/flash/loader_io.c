@@ -54,6 +54,8 @@ static int loader_init_arch(struct flash_loader *loader)
 		((struct aarch64_algorithm *) loader->arch_info)->core_mode = ARMV8_64_EL0T;
 	}
 
+	LOG_INFO("loader init arch %s xlen %x", target_type_name(target), loader->xlen);
+
 	return retval;
 
 }
@@ -194,8 +196,12 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 		loader->set_params_priv(loader);
 
 	for (int i = 0; i < loader->param_cnt; i++) {
-		LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
-			*(target_addr_t *)loader->reg_params[i].value);
+		if(loader->xlen == 32)
+			LOG_DEBUG("target set %s value %x", loader->reg_params[i].reg_name ,
+			*(uint32_t *)loader->reg_params[i].value);
+		else
+			LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
+				*(target_addr_t *)loader->reg_params[i].value);
 	}
 
 	/*
@@ -220,6 +226,7 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 		if (wa_size < 0)
 			return ERROR_FAIL;
 		loader->op = LOADER_WRITE;
+		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
 		loader->buf_start = loader->copy_area->address + loader->code_area;
 		if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
 			loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;

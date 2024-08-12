@@ -167,12 +167,12 @@ FLASH_BANK_COMMAND_HANDLER(fespi_flash_bank_command)
 
 	bank->driver_priv = fespi_info;
 	fespi_info->probed = false;
-	fespi_info->ctrl_base = 0;
+	fespi_info->ctrl_base = base;
 	fespi_info->loader.dev_info = (struct fespi_flash_bank *)fespi_info;
 	fespi_info->loader.set_params_priv = NULL;
 	fespi_info->loader.exec_target = bank->target;
 	fespi_info->loader.copy_area = NULL;
-	fespi_info->loader.ctrl_base = 0;
+	fespi_info->loader.ctrl_base = base;
 	return ERROR_OK;
 }
 
