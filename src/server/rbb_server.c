@@ -309,10 +309,10 @@ static int rbb_input(struct connection *connection)
 			return ERROR_OK; /* Wait for spacing time passed */
 	}
 
-	bytes_read = connection_read(connection, buffer, sizeof(buffer));
-	/* Needs to Lock the adapter driver, reject any other access */
 	/* TODO: dirty call, don't do that */
 	allow_tap_access = 1;
+	bytes_read = connection_read(connection, buffer, sizeof(buffer));
+	/* Needs to Lock the adapter driver, reject any other access */
 
 	if (!bytes_read) {
 		allow_tap_access = 0;
