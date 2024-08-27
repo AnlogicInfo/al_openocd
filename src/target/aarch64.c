@@ -570,8 +570,10 @@ static int aarch64_halt(struct target *target)
 	struct armv8_common *armv8 = target_to_armv8(target);
 	armv8->last_run_control_op = ARMV8_RUNCONTROL_HALT;
 
-	if (target->smp)
+	if (target->smp) {
+		LOG_INFO("aarch64 halt smp");
 		return aarch64_halt_smp(target, false);
+	}
 
 	return aarch64_halt_one(target, HALT_SYNC);
 }
