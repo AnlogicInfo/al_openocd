@@ -558,9 +558,11 @@ static int rbb_input(struct connection *connection)
 					send_buffer[tdo_bits_p++] = tdo_bit ? '1' : '0';
 				}
 		}
-		assert(tdo_bits_p == read_bits);
-		LOG_DEBUG("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
+
+		LOG_ERROR("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
 						(int)tdi_buffer_count);
+		assert(tdo_bits_p == read_bits);
+		usleep(10);
 
 		send_buffer[tdo_bits_p] = 0;
 		LOG_DEBUG("send buffer '%s'", send_buffer);
