@@ -779,6 +779,10 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 	loader->param_cnt = 6;
 	loader->set_params_priv = nuspi_write_sync_params_priv;
 
+	/* Disable Hardware accesses*/
+	if (nuspi_disable_hw_mode(bank) != ERROR_OK)
+		return ERROR_FAIL;
+
 	retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset, count);
 
 	if (retval != ERROR_OK) {
