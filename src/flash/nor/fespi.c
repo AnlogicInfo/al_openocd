@@ -528,11 +528,18 @@ static int fespi_write(struct flash_bank *bank, const uint8_t *buffer,
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("fespi write sync error");
-		if (0)
+
+		if (0) {
+			fespi_txwm_wait(bank);
+			/* Disable Hardware accesses*/
+			if (fespi_disable_hw_mode(bank) != ERROR_OK)
+				return ERROR_FAIL;
+
 			retval = slow_fespi_write_buffer(bank, buffer, offset, count);
-		/* Switch to HW mode before return to prompt */
-		if (fespi_enable_hw_mode(bank) != ERROR_OK)
-			return ERROR_FAIL;		
+			/* Switch to HW mode before return to prompt */
+			if (fespi_enable_hw_mode(bank) != ERROR_OK)
+				return ERROR_FAIL;
+		}
 	}
 
 	return retval;
