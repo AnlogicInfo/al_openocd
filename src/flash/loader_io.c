@@ -198,10 +198,10 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 
 	for (int i = 0; i < loader->param_cnt; i++) {
 		if(loader->xlen == 32)
-			LOG_DEBUG("target set %s value %x", loader->reg_params[i].reg_name ,
+			LOG_INFO("target set %s value %x", loader->reg_params[i].reg_name ,
 			*(uint32_t *)loader->reg_params[i].value);
 		else
-			LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
+			LOG_INFO("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
 				*(target_addr_t *)loader->reg_params[i].value);
 	}
 
