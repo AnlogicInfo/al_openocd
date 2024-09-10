@@ -271,7 +271,7 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 		retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,
 		loader->copy_area->address,
-		0, 10000,
+		0, (loader->data_size) * 2,
 		loader->arch_info);
 		data += loader->data_size;
 		addr += loader->data_size;
