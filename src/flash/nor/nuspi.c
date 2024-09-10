@@ -789,18 +789,18 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 		LOG_ERROR("nuspi write sync error");
 		if (0)
 			retval = slow_nuspi_write_buffer(bank, buffer, offset, count);
-	
-		if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
-			if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
-				return ERROR_FAIL;
-		}
-		/* Switch to HW mode before return to prompt */
-		if (nuspi_enable_hw_mode(bank) != ERROR_OK)
-			return ERROR_FAIL;
+	}
 
-		if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
+
+	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+		if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
 			return ERROR_FAIL;
 	}
+	/* Switch to HW mode before return to prompt */
+	if (nuspi_enable_hw_mode(bank) != ERROR_OK)
+		return ERROR_FAIL;
+	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
+			return ERROR_FAIL;
 
 	return retval;
 
