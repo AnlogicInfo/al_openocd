@@ -278,7 +278,7 @@ static void analyze_bitbang(const uint8_t *tms, int bits,
 static int rbb_input(struct connection *connection)
 {
 	int bytes_read;
-	unsigned char buffer[RBB_BUFFERSIZE];
+	unsigned char buffer[RBB_BUFFERSIZE + 1];
 	struct rbb_service *service;
 	size_t length;
 
@@ -494,7 +494,6 @@ static int rbb_input(struct connection *connection)
 					/* TODO: May needs some post-processing */
 				}
 				/* verify our assumption: all read_bit remains the same */
-				assert(do_read == read_bit);
 				if (do_read != read_bit) {
 					if (warned == 0) {
 						LOG_ERROR("do read in region %d mismatch, off = %d!", (int)i, off);
@@ -504,6 +503,7 @@ static int rbb_input(struct connection *connection)
 						warned = 1;
 					}
 				}
+				assert(do_read == read_bit);
 			}
 
 			if (do_read != 0) {
@@ -561,11 +561,17 @@ static int rbb_input(struct connection *connection)
 
 		LOG_ERROR("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
 						(int)tdi_buffer_count);
-		assert(tdo_bits_p == read_bits);
 		usleep(10);
 
 		send_buffer[tdo_bits_p] = 0;
 		LOG_DEBUG("send buffer '%s'", send_buffer);
+		if (tdo_bits_p != read_bits) {
+			buffer[bytes_read] = 0;
+			LOG_ERROR("read bits mismatch!");
+			LOG_ERROR("recv buffer len %d, '%s'", bytes_read, buffer);
+			LOG_ERROR("send buffer '%s'", send_buffer);
+		}
+		assert(tdo_bits_p == read_bits);
 		connection_write(connection, send_buffer, read_bits);
 	}
 #else
