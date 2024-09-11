@@ -311,7 +311,7 @@ static int rbb_input(struct connection *connection)
 
 	/* TODO: dirty call, don't do that */
 	allow_tap_access = 1;
-	bytes_read = connection_read(connection, buffer, sizeof(buffer));
+	bytes_read = connection_read(connection, buffer, sizeof(buffer) - 128);
 	/* Needs to Lock the adapter driver, reject any other access */
 
 	if (!bytes_read) {
