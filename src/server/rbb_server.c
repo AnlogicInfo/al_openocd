@@ -558,14 +558,13 @@ static int rbb_input(struct connection *connection)
 					send_buffer[tdo_bits_p++] = tdo_bit ? '1' : '0';
 				}
 		}
-
-		LOG_ERROR("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
-						(int)tdi_buffer_count);
-		usleep(10);
+		/* usleep(10); */
 
 		send_buffer[tdo_bits_p] = 0;
 		LOG_DEBUG("send buffer '%s'", send_buffer);
 		if (tdo_bits_p != read_bits) {
+			LOG_ERROR("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
+							(int)tdi_buffer_count);
 			buffer[bytes_read] = 0;
 			LOG_ERROR("read bits mismatch!");
 			LOG_ERROR("recv buffer len %d, '%s'", bytes_read, buffer);
