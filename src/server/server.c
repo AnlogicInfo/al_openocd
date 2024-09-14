@@ -99,7 +99,10 @@ static int add_connection(struct service *service, struct command_context *cmd_c
 			(char *)&flag,			/* the cast is historical cruft */
 			sizeof(int));			/* length of option value */
 
-		LOG_INFO("accepting '%s' connection on tcp/%s", service->name, service->port);
+		if (!strcmp(service->name, "rbb"))
+			LOG_DEBUG("accepting '%s' connection on tcp/%s", service->name, service->port);
+		else
+			LOG_INFO("accepting '%s' connection on tcp/%s", service->name, service->port);
 		retval = service->new_connection(c);
 		if (retval != ERROR_OK) {
 			close_socket(c->fd);
@@ -584,8 +587,12 @@ int server_loop(struct command_context *command_context)
 								shutdown_openocd = SHUTDOWN_REQUESTED;
 							}
 							remove_connection(service, c);
-							LOG_INFO("dropped '%s' connection",
-								service->name);
+							if (!strcmp(service->name, "rbb"))
+								LOG_DEBUG("dropped '%s' connection",
+									service->name);
+							else
+								LOG_INFO("dropped '%s' connection",
+									service->name);
 							c = next;
 							continue;
 						}

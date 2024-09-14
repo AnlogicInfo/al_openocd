@@ -80,7 +80,7 @@ static int rbb_connection_closed(struct connection *connection)
 	int retval = ERROR_OK;
 	if (cmd_queue_cur_state != TAP_IDLE &&
 		cmd_queue_cur_state != TAP_RESET) {
-		LOG_INFO("Move TAP state from %s to IDLE", tap_state_name(cmd_queue_cur_state));
+		LOG_DEBUG("Move TAP state from %s to IDLE", tap_state_name(cmd_queue_cur_state));
 
 		/* If tap's current state not in idle */
 		/* TODO: not issue JTAG RESET */
