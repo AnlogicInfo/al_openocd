@@ -73,7 +73,6 @@ static bool jtag_libusb_match_ids(struct libusb_device_descriptor *dev_desc,
 	return false;
 }
 
-#ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
 static bool jtag_libusb_location_equal(struct libusb_device *device)
 {
 	uint8_t port_path[MAX_USB_PORTS];
@@ -90,12 +89,6 @@ static bool jtag_libusb_location_equal(struct libusb_device *device)
 
 	return adapter_usb_location_equal(dev_bus, port_path, path_len);
 }
-#else /* HAVE_LIBUSB_GET_PORT_NUMBERS */
-static bool jtag_libusb_location_equal(struct libusb_device *device)
-{
-	return true;
-}
-#endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
 
 
 /* Returns true if the string descriptor indexed by str_index in device matches string */

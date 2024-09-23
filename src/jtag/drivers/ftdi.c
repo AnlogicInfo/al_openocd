@@ -1182,7 +1182,12 @@ static int scan_device(libusb_device *dev, uint16_t vid, uint16_t pid, char* loc
 	if(desc.idVendor != vid || desc.idProduct != pid)
 		return ERROR_FAIL;
 	else {
+		char temp[32];
 		sprintf(location, "%d-%d", libusb_get_bus_number(dev), path[0]);
+		for (int i = 1; i < r && path[i] != 0; i++) {
+			sprintf(temp, ".%d", path[i]);
+			strcat(location, temp);
+		}
 		return ERROR_OK;
 	}
 }
@@ -1191,7 +1196,7 @@ COMMAND_HANDLER(ftid_handle_list_command)
 {
 	libusb_device **devs;
 	libusb_context *ctx = NULL;
-	char location[8];
+	char location[32];
 	uint16_t vid, pid;
 	ssize_t i, cnt;
 	int r;

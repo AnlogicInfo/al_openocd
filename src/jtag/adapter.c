@@ -235,7 +235,6 @@ const char *adapter_get_required_serial(void)
  */
 #define USB_MAX_LOCATION_LENGTH         16
 
-#ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
 static void adapter_usb_set_location(const char *location)
 {
 	if (strnlen(location, USB_MAX_LOCATION_LENGTH) == USB_MAX_LOCATION_LENGTH)
@@ -244,8 +243,8 @@ static void adapter_usb_set_location(const char *location)
 	free(adapter_config.usb_location);
 
 	adapter_config.usb_location = strndup(location, USB_MAX_LOCATION_LENGTH);
+	LOG_DEBUG("usb location set to %s", adapter_config.usb_location);
 }
-#endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
 
 const char *adapter_usb_get_location(void)
 {
@@ -257,7 +256,7 @@ bool adapter_usb_location_equal(uint8_t dev_bus, uint8_t *port_path, size_t path
 	size_t path_step, string_length;
 	char *ptr, *loc;
 	bool equal = false;
-
+	LOG_INFO("comparing usb location");
 	if (!adapter_usb_get_location())
 		return equal;
 
@@ -279,7 +278,7 @@ bool adapter_usb_location_equal(uint8_t dev_bus, uint8_t *port_path, size_t path
 	path_step = 0;
 	while (path_step < path_len) {
 		ptr = strtok(NULL, ".");
-
+		LOG_INFO("prt %s, port_path %d", ptr, port_path[path_step]);
 		/* no more tokens in path */
 		if (!ptr)
 			break;
@@ -769,7 +768,6 @@ COMMAND_HANDLER(handle_adapter_reset_de_assert)
 						  (srst == VALUE_DEASSERT) ? SRST_DEASSERT : SRST_ASSERT);
 }
 
-#ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
 COMMAND_HANDLER(handle_usb_location_command)
 {
 	if (CMD_ARGC == 1)
@@ -779,10 +777,8 @@ COMMAND_HANDLER(handle_usb_location_command)
 
 	return ERROR_OK;
 }
-#endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
 
 static const struct command_registration adapter_usb_command_handlers[] = {
-#ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
 	{
 		.name = "location",
 		.handler = &handle_usb_location_command,
@@ -790,7 +786,6 @@ static const struct command_registration adapter_usb_command_handlers[] = {
 		.help = "display or set the USB bus location of the USB device",
 		.usage = "[<bus>-port[.port]...]",
 	},
-#endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
 	COMMAND_REGISTRATION_DONE
 };
 
