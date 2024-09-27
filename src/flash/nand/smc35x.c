@@ -1154,7 +1154,7 @@ int smc35x_verify_image(struct nand_device *nand, uint32_t page, uint8_t *data, 
         return retval;
 	}
 
-	LOG_INFO("checksum image %x target %x", image_crc, target_crc);
+	LOG_DEBUG("checksum image %x target %x", image_crc, target_crc);
     if(~image_crc != ~target_crc)
     {
         LOG_ERROR("checksum image %x target %x", image_crc, target_crc);

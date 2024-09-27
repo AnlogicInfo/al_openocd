@@ -284,72 +284,69 @@ COMMAND_HANDLER(handle_nand_write_image_command)
 {
 	struct nand_device *nand = NULL;
 	struct nand_fileio_state s;
-	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
+	int retval = CALL_COMMAND_HANDLER(nand_image_parse_args,
 			&s, &nand, FILEIO_READ, false, true);
 	if (retval != ERROR_OK)
 		return retval;
 
-	size_t one_read, bytes_read = 0;
-	uint32_t total_bytes = s.size;
-
+	size_t one_read = 0;
+	uint32_t total_bytes = 0;
 	uint32_t page_nums = 0, write_size = 0;
-	if (s.oob) {
-		page_nums = (s.size - 1) / (s.page_size + s.oob_size) + 1;
-		write_size = page_nums * (s.page_size + s.oob_size);
-	} else {
-		page_nums = (s.size - 1) / s.page_size + 1;
-		write_size = page_nums * s.page_size;
-	}
 
 	int32_t offset, length;
-	offset = s.address / nand->erase_size;
-	// length = (write_size - 1) / nand->erase_size + 1;
-	length = (page_nums * s.page_size - 1) / nand->erase_size + 1;
-
-	uint8_t *write_data = malloc(write_size);
-	if (write_data) {
-		fileio_read(s.fileio, write_size, write_data, &one_read);
-		if (one_read < write_size)
-			memset(write_data + one_read, 0xff, write_size - one_read);
-		bytes_read += one_read;
-	}
-	if (bytes_read <= 0) {
-		command_print(CMD, "error while reading file");
-		nand_fileio_cleanup(&s);
-		if (write_data)
-			free(write_data);
-		return ERROR_FAIL;
-	}
-
-	if (s.erase) {
-		retval = nand_erase(nand, offset, offset + length - 1);
-		if (retval != ERROR_OK)
-			return retval;
-	}
-
-	retval = nand_write_page(nand, s.address / nand->page_size,
-				write_data, write_size, s.oob, s.oob_size);
-	if (retval != ERROR_OK) {
-		command_print(CMD, "failed writing file %s "
-			"to NAND flash %s at offset 0x%8.8" PRIx32,
-			CMD_ARGV[1], CMD_ARGV[0], s.address);
-		nand_fileio_cleanup(&s);
-		if (write_data) {
-			free(write_data);
+	uint8_t *write_data = NULL;
+	/* write image per section */
+	for (unsigned int i = 0; i < s.image.num_sections; i++) {
+		total_bytes = s.image.sections[i].size;
+		if (s.image.sections[i].size % s.page_size != 0 && s.image.num_sections != 1) {
+			LOG_ERROR("section size is not page aligned");
+			nand_image_cleanup(&s);
+			return ERROR_FAIL;
 		}
-		return retval;
+
+		if (s.oob) {
+			page_nums = (total_bytes - 1) / (s.page_size + s.oob_size) + 1;
+			write_size = page_nums * (s.page_size + s.oob_size);
+		} else {
+			page_nums = (total_bytes - 1) / s.page_size + 1;
+			write_size = page_nums * s.page_size;
+		}
+
+		offset = s.address / nand->erase_size;
+		length = (page_nums * s.page_size - 1) / nand->erase_size + 1;
+		if (s.erase) {
+			retval = nand_erase(nand, offset, offset + length - 1);
+			if (retval != ERROR_OK)
+				return retval;
+		}
+
+		write_data = malloc(write_size);
+		if (write_data) {
+			image_read_section(&s.image, i, 0x0, s.image.sections[i].size, write_data, &one_read);
+			if (one_read < write_size)
+				memset(write_data + one_read, 0xFF, write_size - one_read);
+		}
+		retval = nand_write_page(nand, s.address / nand->page_size,
+					write_data, write_size, s.oob, s.oob_size);
+		if (retval != ERROR_OK) {
+			command_print(CMD, "failed writing file %s "
+				"to NAND flash %s at offset 0x%8.8" PRIx32,
+				CMD_ARGV[1], CMD_ARGV[0], s.address);
+			nand_image_cleanup(&s);
+			if (write_data)
+				free(write_data);
+			return retval;
+		}
+
+		s.address += write_size;
+		free(write_data);
 	}
-	
-	s.address += write_size;
-	if (nand_fileio_finish(&s) == ERROR_OK) {
+
+	if (nand_image_finish(&s) == ERROR_OK) {
 		command_print(CMD, "wrote file %s to NAND flash %s up to "
 			"offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
 			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
-			duration_kbps(&s.bench, total_bytes));
-	}
-
-	if (write_data) {
-		free(write_data);
+			duration_kbps(&s.bench, s.image.size));
 	}
 
 	return ERROR_OK;
@@ -418,54 +415,50 @@ COMMAND_HANDLER(handle_nand_verify_image_command)
 {
 	struct nand_device *nand = NULL;
 	struct nand_fileio_state s;
-	int retval = CALL_COMMAND_HANDLER(nand_fileio_parse_args,
+	int retval = CALL_COMMAND_HANDLER(nand_image_parse_args,
 			&s, &nand, FILEIO_READ, false, true);
 	if (retval != ERROR_OK)
 		return retval;
 
-	size_t one_read, bytes_read = 0;
+	size_t one_read = 0;
+	uint32_t total_bytes = 0;
 	uint32_t page_nums = 0, write_size = 0;
-	if (s.oob) {
-		page_nums = (s.size - 1) / (s.page_size + s.oob_size) + 1;
-		write_size = page_nums * (s.page_size + s.oob_size);
-	} else {
-		page_nums = (s.size - 1) / s.page_size + 1;
-		write_size = page_nums * s.page_size;
+	uint8_t *write_data = NULL;
+	/* verify image per section */
+	for (unsigned int i = 0; i < s.image.num_sections; i++) {
+		total_bytes = s.image.sections[i].size;
+		if (s.oob) {
+			page_nums = (total_bytes - 1) / (s.page_size + s.oob_size) + 1;
+			write_size = page_nums * (s.page_size + s.oob_size);
+		} else {
+			page_nums = (total_bytes - 1) / s.page_size + 1;
+			write_size = page_nums * s.page_size;
+		}
+
+		write_data = malloc(write_size);
+		if (write_data) {
+			image_read_section(&s.image, i, 0x0, s.image.sections[i].size, write_data, &one_read);
+			if (one_read < write_size)
+				memset(write_data + one_read, 0xFF, write_size - one_read);
+		}
+		retval = nand_verify_data(nand, s.address / nand->page_size,
+					write_data, write_size, s.oob, s.oob_size);
+		if (retval != ERROR_OK) {
+			nand_image_cleanup(&s);
+			if (write_data)
+				free(write_data);
+			return retval;
+		}
+
+		s.address += write_size;
+		free(write_data);
 	}
 
-	uint8_t *write_data = malloc(write_size);
-	if (write_data) {
-		fileio_read(s.fileio, write_size, write_data, &one_read);
-		if (one_read < write_size)
-			memset(write_data + one_read, 0xff, write_size - one_read);
-		bytes_read += one_read;
-	}
-	if (bytes_read <= 0) {
-		nand_fileio_cleanup(&s);
-		if (write_data)
-			free(write_data);
-		return ERROR_FAIL;
-	}
-
-	retval = nand_verify_data(nand, s.address / nand->page_size,
-				write_data, write_size, s.oob, s.oob_size);
-	if (retval != ERROR_OK) {
-		nand_fileio_cleanup(&s);
-		if (write_data)
-			free(write_data);
-		return retval;
-	}
-	
-	s.address += write_size;
-	if (nand_fileio_finish(&s) == ERROR_OK) {
+	if (nand_image_finish(&s) == ERROR_OK) {
 		command_print(CMD, "verified file %s in NAND flash %s "
 			"up to offset 0x%8.8" PRIx32 " in %fs (%0.3f KiB/s)",
 			CMD_ARGV[1], CMD_ARGV[0], s.address, duration_elapsed(&s.bench),
-			duration_kbps(&s.bench, write_size));
-	}
-
-	if (write_data) {
-		free(write_data);
+			duration_kbps(&s.bench, s.image.size));
 	}
 
 	return ERROR_OK;
