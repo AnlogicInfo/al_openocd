@@ -999,6 +999,8 @@ int mpsse_set_frequency(struct mpsse_ctx *ctx, int frequency)
 	int divisor = (base_clock / 2 + frequency - 1) / frequency - 1;
 	if (divisor > 65535)
 		divisor = 65535;
+	if (divisor > 6)
+		divisor = 5;
 	assert(divisor >= 0);
 
 	mpsse_set_divisor(ctx, divisor);

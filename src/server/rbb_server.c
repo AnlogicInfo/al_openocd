@@ -80,7 +80,7 @@ static int rbb_connection_closed(struct connection *connection)
 	int retval = ERROR_OK;
 	if (cmd_queue_cur_state != TAP_IDLE &&
 		cmd_queue_cur_state != TAP_RESET) {
-		LOG_INFO("Move TAP state from %s to IDLE", tap_state_name(cmd_queue_cur_state));
+		LOG_DEBUG("Move TAP state from %s to IDLE", tap_state_name(cmd_queue_cur_state));
 
 		/* If tap's current state not in idle */
 		/* TODO: not issue JTAG RESET */
@@ -558,14 +558,13 @@ static int rbb_input(struct connection *connection)
 					send_buffer[tdo_bits_p++] = tdo_bit ? '1' : '0';
 				}
 		}
-
-		LOG_ERROR("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
-						(int)tdi_buffer_count);
-		usleep(10);
+		/* usleep(10); */
 
 		send_buffer[tdo_bits_p] = 0;
 		LOG_DEBUG("send buffer '%s'", send_buffer);
 		if (tdo_bits_p != read_bits) {
+			LOG_ERROR("read_bits %d, tdo_bits %d, tdi cnt %d", read_bits, tdo_bits_p,
+							(int)tdi_buffer_count);
 			buffer[bytes_read] = 0;
 			LOG_ERROR("read bits mismatch!");
 			LOG_ERROR("recv buffer len %d, '%s'", bytes_read, buffer);
