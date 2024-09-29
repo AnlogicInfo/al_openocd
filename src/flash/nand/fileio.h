@@ -20,6 +20,7 @@
 
 #include <helper/time_support.h>
 #include <helper/fileio.h>
+#include <target/image.h>
 
 struct nand_fileio_state {
 	uint32_t address;
@@ -38,6 +39,7 @@ struct nand_fileio_state {
 
 	bool file_opened;
 	struct fileio *fileio;
+	struct image image;
 
 	struct duration bench;
 };
@@ -46,10 +48,18 @@ void nand_fileio_init(struct nand_fileio_state *state);
 int nand_fileio_start(struct command_invocation *cmd,
 		struct nand_device *nand, const char *filename, int filemode,
 		struct nand_fileio_state *state);
+int nand_image_start(struct command_invocation *cmd,
+		struct nand_device *nand, const char *filename, int filemode,
+		const char *filetype, struct nand_fileio_state *state);
 int nand_fileio_cleanup(struct nand_fileio_state *state);
+int nand_image_cleanup(struct nand_fileio_state *state);
 int nand_fileio_finish(struct nand_fileio_state *state);
+int nand_image_finish(struct nand_fileio_state *state);
 
 COMMAND_HELPER(nand_fileio_parse_args, struct nand_fileio_state *state,
+	struct nand_device **dev, enum fileio_access filemode,
+	bool need_size, bool sw_ecc);
+COMMAND_HELPER(nand_image_parse_args, struct nand_fileio_state *state,
 	struct nand_device **dev, enum fileio_access filemode,
 	bool need_size, bool sw_ecc);
 

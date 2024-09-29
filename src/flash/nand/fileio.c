@@ -98,6 +98,51 @@ int nand_fileio_start(struct command_invocation *cmd,
 
 	return ERROR_OK;
 }
+
+int nand_image_start(struct command_invocation *cmd,
+	struct nand_device *nand, const char *filename, int filemode,
+	const char *filetype, struct nand_fileio_state *state)
+{
+	int retval;
+	if (state->address % nand->page_size) {
+		command_print(cmd, "only page-aligned addresses are supported");
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+
+	duration_start(&state->bench);
+
+	if (filename) {
+		retval = image_open(&state->image, filename, filetype);
+		if (retval != ERROR_OK) {
+			const char *msg = (filemode == FILEIO_READ) ? "read" : "write";
+			command_print(cmd, "failed to open '%s' for %s access",
+				filename, msg);
+			return retval;
+		}
+		state->file_opened = true;
+	}
+
+	if (!(state->oob_format & NAND_OOB_ONLY)) {
+		state->page_size = nand->page_size;
+		state->page = malloc(nand->page_size);
+	}
+
+	if (state->oob_format & (NAND_OOB_RAW | NAND_OOB_SW_ECC | NAND_OOB_SW_ECC_KW)) {
+		if (strcmp(nand->controller->name, "smc35x") == 0) {
+			state->oob_size = nand->oob_size;
+		} else if (nand->page_size == 512) {
+			state->oob_size = 16;
+			state->eccpos = nand_oob_16.eccpos;
+		} else if (nand->page_size == 2048)   {
+			state->oob_size = 64;
+			state->eccpos = nand_oob_64.eccpos;
+		}
+		state->oob = malloc(state->oob_size);
+	}
+
+	return ERROR_OK;
+}
+
 int nand_fileio_cleanup(struct nand_fileio_state *state)
 {
 	if (state->file_opened)
@@ -110,9 +155,29 @@ int nand_fileio_cleanup(struct nand_fileio_state *state)
 	state->page = NULL;
 	return ERROR_OK;
 }
+
+int nand_image_cleanup(struct nand_fileio_state *state)
+{
+	if (state->file_opened)
+		image_close(&state->image);
+
+	free(state->oob);
+	state->oob = NULL;
+
+	free(state->page);
+	state->page = NULL;
+	return ERROR_OK;
+}
+
 int nand_fileio_finish(struct nand_fileio_state *state)
 {
 	nand_fileio_cleanup(state);
+	return duration_measure(&state->bench);
+}
+
+int nand_image_finish(struct nand_fileio_state *state)
+{
+	nand_image_cleanup(state);
 	return duration_measure(&state->bench);
 }
 
@@ -212,6 +277,102 @@ COMMAND_HELPER(nand_fileio_parse_args, struct nand_fileio_state *state,
 	return ERROR_OK;
 }
 
+COMMAND_HELPER(nand_image_parse_args, struct nand_fileio_state *state,
+	struct nand_device **dev, enum fileio_access filemode,
+	bool need_size, bool sw_ecc)
+{
+	int retval = ERROR_OK;
+	nand_fileio_init(state);
+	if (0 == CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	if (!strcmp(CMD_ARGV[0], "erase")) {
+		CMD_ARGV++;
+		CMD_ARGC--;
+		state->erase = 1;
+	}
+	if (0 == CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	struct nand_device *nand;
+	if (strspn(CMD_ARGV[0], "0123456789") == strlen(CMD_ARGV[0])) {
+		retval = CALL_COMMAND_HANDLER(nand_command_get_device, 0, &nand);
+		if (retval != ERROR_OK)
+			return retval;
+		if (!nand->device) {
+			retval = CALL_COMMAND_HANDLER(nand_command_auto_probe, 0, &nand);
+			if (retval != ERROR_OK) {
+				command_print(CMD, "#%s: not probed", CMD_ARGV[0]);
+				return ERROR_NAND_DEVICE_NOT_PROBED;
+			}
+		}
+	} else {
+		nand = get_nand_device_by_num(0);
+		if (!nand)
+			return ERROR_FAIL;
+		if (!nand->device) {
+			retval = CALL_COMMAND_HANDLER(nand_command_auto_probe, 0, &nand);
+			if (retval != ERROR_OK) {
+				command_print(CMD, "#0: auto probe fail");
+				return ERROR_NAND_DEVICE_NOT_PROBED;
+			}
+		}
+		CMD_ARGV--;
+		CMD_ARGC++;
+	}
+
+	unsigned minargs = need_size ? 4 : 3;
+	if (!need_size && CMD_ARGC == 2)
+		COMMAND_PARSE_NUMBER(u32, "0", state->address);
+	else if (minargs > CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	else
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], state->address);
+
+	if (need_size) {
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], state->size);
+		if (state->size % nand->page_size) {
+			command_print(CMD, "only page-aligned sizes are supported");
+			return ERROR_COMMAND_SYNTAX_ERROR;
+		}
+	}
+
+	const char *image_type = NULL;
+	if (minargs < CMD_ARGC) {
+		for (unsigned i = minargs; i < CMD_ARGC; i++) {
+			if (!strcmp(CMD_ARGV[i], "erase"))
+				state->erase = 1;
+			else if (!strcmp(CMD_ARGV[i], "bin") || \
+					 !strcmp(CMD_ARGV[i], "ihex") || \
+					 !strcmp(CMD_ARGV[i], "elf") || \
+					 !strcmp(CMD_ARGV[i], "mem") || \
+					 !strcmp(CMD_ARGV[i], "s19") || \
+					 !strcmp(CMD_ARGV[i], "build") || \
+					 !strcmp(CMD_ARGV[i], "sparse"))
+				image_type = CMD_ARGV[i];
+			else if (!strcmp(CMD_ARGV[i], "oob_raw"))
+				state->oob_format |= NAND_OOB_RAW;
+			else if (!strcmp(CMD_ARGV[i], "oob_only"))
+				state->oob_format |= NAND_OOB_RAW | NAND_OOB_ONLY;
+			else if (sw_ecc && !strcmp(CMD_ARGV[i], "oob_softecc"))
+				state->oob_format |= NAND_OOB_SW_ECC;
+			else if (sw_ecc && !strcmp(CMD_ARGV[i], "oob_softecc_kw"))
+				state->oob_format |= NAND_OOB_SW_ECC_KW;
+			else {
+				command_print(CMD, "unknown option: %s", CMD_ARGV[i]);
+				return ERROR_COMMAND_SYNTAX_ERROR;
+			}
+		}
+	}
+
+	retval = nand_image_start(CMD, nand, CMD_ARGV[1], filemode, image_type, state);
+	if (retval != ERROR_OK)
+		return retval;
+
+	*dev = nand;
+
+	return ERROR_OK;
+}
 
 /**
  * @returns If no error occurred, returns number of bytes consumed;
