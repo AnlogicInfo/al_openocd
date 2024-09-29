@@ -572,6 +572,29 @@ int dwcssi_flash_tx_cmd(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
 	return ERROR_OK;
 }
 
+
+static int dwcssi_flash_set_4bytes(struct flash_bank *bank, uint8_t enable)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	int retval = ERROR_FAIL;
+	uint8_t cmd;
+
+	switch(driver_priv->dev->device_id) {
+		/* set winbond 4B mode */
+		case 0x001940ef:
+		case 0x001960ef:
+		case 0x001970ef:
+			cmd = enable ? WINBOND_EN4B : WINBOND_EX4B;
+			retval = dwcssi_flash_tx_cmd(bank, &cmd, 1, STANDARD_SPI_MODE);
+			break;
+		default:
+			retval = ERROR_OK;
+			break;
+	}
+
+	return retval;
+}
+
 static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
 {
 	uint8_t sr;
@@ -860,7 +883,11 @@ static int dwcssi_probe(struct flash_bank *bank)
 		flash_ops = driver_priv->dev->flash_ops;
 		if (flash_ops != NULL)
 			dwcssi_wr_qe(bank, DISABLE);
-		/*flash_ops->quad_dis(bank); */
+
+		/* set addr 4b */
+		if(driver_priv->addr_len == ADDR_L32)
+			dwcssi_flash_set_4bytes(bank, ENABLE);
+
 		return ERROR_OK;
 	} else
 		return ERROR_FAIL;

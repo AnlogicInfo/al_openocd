@@ -120,6 +120,10 @@ extern const struct flash_device flash_devices[];
 #define SPIFLASH_MASS_ERASE		0xC7 /* Mass Erase */
 #define SPIFLASH_READ_SFDP		0x5A /* Read Serial Flash Discoverable Parameters */
 
+/* WINBOND Commands */
+#define WINBOND_EN4B            0xB7
+#define WINBOND_EX4B            0xE9
+
 #define SPIFLASH_DEF_PAGESIZE	256  /* default for non-page-oriented devices (FRAMs) */
 
 #endif /* OPENOCD_FLASH_NOR_SPI_H */
