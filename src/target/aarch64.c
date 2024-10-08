@@ -1959,11 +1959,11 @@ static int aarch64_assert_reset(struct target *target)
 	LOG_DEBUG(" ");
 
 	/* Issue some kind of warm reset. */
-	if (target_has_event_action(target, TARGET_EVENT_RESET_ASSERT))
+	if (target_has_event_action(target, TARGET_EVENT_RESET_ASSERT)) {
 		target_handle_event(target, TARGET_EVENT_RESET_ASSERT);
+	}
 	else if (reset_config & RESET_HAS_SRST) {
 		bool srst_asserted = false;
-
 		if (target->reset_halt) {
 			if (target_was_examined(target)) {
 
@@ -1997,8 +1997,7 @@ static int aarch64_assert_reset(struct target *target)
 		if (!srst_asserted)
 			adapter_assert_reset();
 	} else {
-		LOG_ERROR("%s: how to reset?", target_name(target));
-		return ERROR_FAIL;
+		 mem_ap_write_atomic_u32(armv8->debug_ap, armv8->debug_base + CPUV8_DBG_PRCR, 0x2);
 	}
 
 	/* registers are now invalid */
