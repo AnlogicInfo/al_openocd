@@ -2,6 +2,15 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1118
+1. Fix rbb buffer overflow issue
+2. Add cjtag support
+3. Add fespi & nuspi support
+4. Add aarch64 warm reset
+5. Add sparse image support for NAND
+6. Fix device scan for usb hub device
+
+
 v0.1117
 1. Fix cwc $ apu co-debug issue
 2. Add ps-ps cross trigger debug
