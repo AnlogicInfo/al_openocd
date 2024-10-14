@@ -1997,7 +1997,10 @@ static int aarch64_assert_reset(struct target *target)
 		if (!srst_asserted)
 			adapter_assert_reset();
 	} else {
-		 mem_ap_write_atomic_u32(armv8->debug_ap, armv8->debug_base + CPUV8_DBG_PRCR, 0x2);
+		mem_ap_write_atomic_u32(armv8->debug_ap, armv8->debug_base + CPUV8_DBG_PRCR, 0x2);
+		mem_ap_write_atomic_u32(armv8->debug_ap,
+				armv8->debug_base + CPUV8_DBG_DRCR, DRCR_CSE);
+		retval = aarch64_enable_reset_catch(target, true);
 	}
 
 	/* registers are now invalid */
@@ -2014,6 +2017,8 @@ static int aarch64_assert_reset(struct target *target)
 static int aarch64_deassert_reset(struct target *target)
 {
 	int retval;
+	struct aarch64_common *aarch64 = target_to_aarch64(target);
+	struct armv8_common *armv8 = &aarch64->armv8_common;
 
 	LOG_DEBUG(" ");
 
@@ -2022,6 +2027,12 @@ static int aarch64_deassert_reset(struct target *target)
 
 	if (!target_was_examined(target))
 		return ERROR_OK;
+
+	retval = dap_dp_init_or_reconnect(armv8->arm.dap);
+	if (retval != ERROR_OK) {
+		LOG_TARGET_ERROR(target, "DP initialisation failed");
+		return retval;
+	}
 
 	retval = aarch64_init_debug_access(target);
 	if (retval != ERROR_OK)
@@ -2048,8 +2059,10 @@ static int aarch64_deassert_reset(struct target *target)
 			LOG_WARNING("%s: ran after reset and before halt ...",
 				target_name(target));
 			retval = target_halt(target);
-			if (retval != ERROR_OK)
+			if (retval != ERROR_OK){
+				LOG_ERROR("%s: Halt failed after reset", target_name(target));
 				return retval;
+			}
 		}
 	}
 
