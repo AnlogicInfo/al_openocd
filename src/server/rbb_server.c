@@ -373,6 +373,7 @@ static int rbb_input(struct connection *connection)
 	if (debug_level >= LOG_LVL_DEBUG_IO)
 		LOG_OUTPUT("\n-\n");
 	/* LOG_DEBUG("received length %lld, bits %d", length, bits); */
+	LOG_DEBUG("received length %lld, bits %d", length, bits);
 
 #ifndef RBB_NOT_HANDLE_LAST
 	if (service->last_is_read) { /* Fix some TDO read issue */
