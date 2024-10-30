@@ -220,10 +220,11 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	int bits = 0, read_bits = 0;
 	int last_read_p = 0;
 	// char input[8];
-	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
-	// FILE* fp_input = NULL;
+	// FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
+	FILE* fp_input = NULL;
 
 	// fprintf(fp_input, "length %lld\n", length);
+	LOG_DEBUG("length %lld\n", length);
 	for (i = 0; i < length; i++)
 	{
 		command = rbb_in_buffer[i];
@@ -255,6 +256,10 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 			fprintf(fp_input, "%x\n", command);
 
 	}
+	
+	rbb_in_buffer[i+1] = '\0';
+	LOG_DEBUG("%s", rbb_in_buffer);
+
 
 	if(fp_input != NULL)
 		fclose(fp_input);
@@ -306,14 +311,23 @@ static void rbb_region_init(struct rbb_service* service,
 	region->next_state = next_state;
 	region->buf_size = (region->end - region->begin + 8 -1) / 8;
 
-	region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);;
-	region->tdi_buffer =(uint8_t*)malloc(region->buf_size + 64);
-	if((total_read_bits > 0) && (is_tms == 0)) {
-		region->tdo_buffer = (uint8_t*)malloc(region->buf_size + 64);
-		region->tdo_mask_buffer = (uint8_t*)malloc(region->buf_size + 64);
-	} else {
+	if (is_tms) {
+		region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);
+		region->tdi_buffer = NULL;
 		region->tdo_buffer = NULL;
 		region->tdo_mask_buffer = NULL;
+	}
+	else {
+		region->tms_buffer = NULL;
+		region->tdi_buffer = (uint8_t*)malloc(region->buf_size + 64);
+		if (total_read_bits > 0) {
+			region->tdo_buffer = (uint8_t*)malloc(region->buf_size + 64);
+			region->tdo_mask_buffer = (uint8_t*)malloc(region->buf_size + 64);
+		}
+		else {
+				region->tdo_buffer = NULL;
+				region->tdo_mask_buffer = NULL;
+			}		
 	}
 
 	next_region->begin_state = next_state;
@@ -361,14 +375,6 @@ static void analyze_bitbang(const uint8_t *tms, int total_bits, struct rbb_servi
 	}
 
 	service->state = cur_state;
-	// LOG_DEBUG("end service state %s", tap_state_name(service->state));
-
-	// if (shift_pos != total_bits) {
-	// 	LOG_DEBUG("shift pos %d total bits %d", shift_pos, total_bits);
-		
-	// 	rbb_region_init(service, is_tms, 0, shift_pos, total_bits - 1, cur_state, new_state, total_read_bits);
-	// }
-	// LOG_DEBUG_IO("bit len = %d", total_bits);
 }
 
 #endif
@@ -392,7 +398,6 @@ static int rbb_add_tms_seq(struct jtag_region* region, unsigned char* tms_input,
 {
 	/* clear tms buffer */
 	rbb_create_out_buf(region, tms_input, region->tms_buffer);
-	rbb_create_out_buf(region, tdi_input, region->tdi_buffer);
 	jtag_add_tms_seq(region->end - region->begin, region->tms_buffer, region->end_state);
 
 	return ERROR_OK;
@@ -402,27 +407,13 @@ static int rbb_add_tdi_seq(struct jtag_region* region,
 						   unsigned char* tms_input, unsigned char* tdi_input, unsigned char* read_input,
 						   tap_state_t last_st)
 {
-	// int last_req;
 	if(region->tdo_mask_buffer != NULL)
 	{
 		rbb_create_out_buf(region, read_input, region->tdo_mask_buffer);
 	}
 
-	rbb_create_out_buf(region, tms_input, region->tms_buffer);
+	// rbb_create_out_buf(region, tms_input, region->tms_buffer);
 	rbb_create_out_buf(region, tdi_input, region->tdi_buffer);
-
-	// if(region->flip_tms) {
-	// 	if (region->end_state == TAP_IRSHIFT)
-	// 		next_st = TAP_IREXIT1;
-	// 	else if (region->end_state == TAP_DRSHIFT)
-	// 		next_st = TAP_DREXIT1;
-	// 	else if (region->end_state == TAP_IRPAUSE)
-	// 		next_st = TAP_IREXIT2;
-	// 	else if (region->end_state == TAP_DRPAUSE)
-	// 		next_st = TAP_DREXIT2;
-	// } else {
-	// 	next_st = region->end_state;
-	// }
 
 	LOG_DEBUG("jtag next st %s", tap_state_name(region->next_state));
 	jtag_add_tdi_seq(region->end - region->begin, region->tdi_buffer, region->tdo_buffer, region->next_state);
@@ -641,18 +632,9 @@ static int rbb_input(struct connection *connection)
 		return ERROR_SERVER_REMOTE_CLOSED;
 	}
 	else if (bytes_read < 0) {
-#if 0
-		errno = WSAGetLastError();
-		if (errno == WSAECONNABORTED || errno == WSAECONNRESET) {
-			allow_tap_access = 0;
-			log_socket_error("rbb_server");
-		}
-		return ERROR_SERVER_REMOTE_CLOSED;
-#else
 		allow_tap_access = 0;
 		LOG_ERROR("error during read: %s", strerror(errno));
 		return ERROR_SERVER_REMOTE_CLOSED;
-#endif
 	}
 
 	length = bytes_read;
