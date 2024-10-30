@@ -33,6 +33,7 @@
 #define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log"
 
 #define LOG_TD_IN_FILE "\\td_in.log"
+#define LOG_TD_IN_CMD_FILE "\\td_in_cmd.log"
 #define LOG_TDI_OUT_FILE "\\openocd_tdi.log"
 #define LOG_RBB_FILE "\\openocd_rbb.log"
 
@@ -219,12 +220,16 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
 	int last_read_p = 0;
-	// char input[8];
-	// FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
-	FILE* fp_input = NULL;
+	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
+	FILE* fp_input_command = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
+	// FILE* fp_input = NULL;
+	if(fp_input != NULL)
+		fprintf(fp_input, "length %lld\n", length);
 
-	// fprintf(fp_input, "length %lld\n", length);
-	LOG_DEBUG("length %lld\n", length);
+	if(fp_input != NULL)
+		fprintf(fp_input_command, "length %lld\n", length);
+
+	// LOG_DEBUG("length %lld", length);
 	for (i = 0; i < length; i++)
 	{
 		command = rbb_in_buffer[i];
@@ -252,17 +257,17 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 		} else if (command == 't' || command == 'u') {
 			/* TRST = 1 */
 		}
-		if(fp_input != NULL)
-			fprintf(fp_input, "%x\n", command);
+		if(fp_input_command != NULL)
+			fprintf(fp_input_command, "%x\n", command);
 
 	}
 	
 	rbb_in_buffer[i+1] = '\0';
-	LOG_DEBUG("%s", rbb_in_buffer);
-
-
 	if(fp_input != NULL)
-		fclose(fp_input);
+		fprintf(fp_input, "%s", rbb_in_buffer);
+
+	if(fp_input_command != NULL)
+		fclose(fp_input_command);
 
 	if (read_bits == 1)
 	{
@@ -458,65 +463,67 @@ static int rbb_jtag_drive(struct rbb_service *service, size_t length, size_t tot
 	// int buf_byte_index, buf_bit_index;
 	// int j;
 	// FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
+	FILE *fp_tdi = NULL;
 	// FILE *fp_rbb = fopen(LOG_FOLDER_PATH LOG_RBB_FILE, "a");
-	// FILE *fp_tdo = NULL;	
+	FILE *fp_rbb = NULL;
+	FILE *fp_tdo = NULL;	
 
-	// fprintf(fp_tdi, "length %lld\n", length);
-	// for (i = 0; i < service->region_count; i++) {
-	// 	// if(!service->regions[i].is_tms) 
-	// 	// {
-	// 		fprintf(fp_tdi, "region %d st %s->%s total size %d \n", i, 
-	// 				tap_state_name(service->regions[i].begin_state), tap_state_name(service->regions[i].end_state), 
-	// 				service->regions[i].end - service->regions[i].begin);
-	// 	// }
-	// 	fprintf(fp_rbb, "length %lld\n", length);
-	// 	for (j = service->regions[i].begin; j < (service->regions[i].end); j++) {
-	// 		buf_byte_index = (j - service->regions[i].begin) / 8;
-	// 		buf_bit_index = (j - service->regions[i].begin) % 8;
-	// 		if(service->regions[i].tms_buffer != NULL) {
-	// 			bit = (service->regions[i].tms_buffer[buf_byte_index] >> buf_bit_index) & 1;
-	// 			tms_bit = bit ? '1' : '0';
-	// 		}
-	// 		else
-	// 			tms_bit = '0';
+	if (fp_tdi != NULL) {
+		fprintf(fp_tdi, "length %lld\n", length);
+		for (i = 0; i < service->region_count; i++) {
+			fprintf(fp_tdi, "region %d st %s->%s total size %d \n", i, 
+					tap_state_name(service->regions[i].begin_state), tap_state_name(service->regions[i].end_state), 
+					service->regions[i].end - service->regions[i].begin);
+		}
+	}
 
-	// 		if(service->regions[i].tdi_buffer != NULL) {
-	// 			bit = (service->regions[i].tdi_buffer[buf_byte_index] >> buf_bit_index) & 1;
-	// 			tdi_bit = bit ? '1' : '0';
-	// 		} else
-	// 			tdi_bit = 'X';
+		// fprintf(fp_rbb, "length %lld\n", length);
+		// for (j = service->regions[i].begin; j < (service->regions[i].end); j++) {
+		// 	buf_byte_index = (j - service->regions[i].begin) / 8;
+		// 	buf_bit_index = (j - service->regions[i].begin) % 8;
+		// 	if(service->regions[i].tms_buffer != NULL) {
+		// 		bit = (service->regions[i].tms_buffer[buf_byte_index] >> buf_bit_index) & 1;
+		// 		tms_bit = bit ? '1' : '0';
+		// 	}
+		// 	else
+		// 		tms_bit = '0';
 
-	// 		if(service->regions[i].tdo_buffer != NULL) {
-	// 			if(service->regions[i].tdo_mask_buffer != NULL) {
-	// 				mask = (service->regions[i].tdo_mask_buffer[buf_byte_index] >> buf_bit_index) & 1;
-	// 				bit = (service->regions[i].tdo_buffer[buf_byte_index] >> buf_bit_index) & 1;
-	// 				if(mask == 1) {
-	// 					tdo_bit = bit ? 'H' : 'L';
- 	// 				} else
-	// 					tdo_bit = 'X';
-	// 			}
-	// 			else {
-	// 				tdo_bit = 'X';
-	// 			}
-	// 		} else
-	// 			tdo_bit = 'X';
+		// 	if(service->regions[i].tdi_buffer != NULL) {
+		// 		bit = (service->regions[i].tdi_buffer[buf_byte_index] >> buf_bit_index) & 1;
+		// 		tdi_bit = bit ? '1' : '0';
+		// 	} else
+		// 		tdi_bit = 'X';
 
-	// 		memset(vec_byte, 0x00, sizeof(vec_byte));
-	// 		vec_byte[0] = '1';
-	// 		vec_byte[1] = tms_bit;
-	// 		vec_byte[2] = tdi_bit;
-	// 		vec_byte[3] = tdo_bit;
-	// 		vec_byte[4] = '\0';
-	// 		fprintf(fp_rbb, "%s\n", vec_byte);
-	// 	}
-	// }
+		// 	if(service->regions[i].tdo_buffer != NULL) {
+		// 		if(service->regions[i].tdo_mask_buffer != NULL) {
+		// 			mask = (service->regions[i].tdo_mask_buffer[buf_byte_index] >> buf_bit_index) & 1;
+		// 			bit = (service->regions[i].tdo_buffer[buf_byte_index] >> buf_bit_index) & 1;
+		// 			if(mask == 1) {
+		// 				tdo_bit = bit ? 'H' : 'L';
+ 		// 			} else
+		// 				tdo_bit = 'X';
+		// 		}
+		// 		else {
+		// 			tdo_bit = 'X';
+		// 		}
+		// 	} else
+		// 		tdo_bit = 'X';
 
-	// if(fp_tdi != NULL)
-	// 	fclose(fp_tdi);
-	// if(fp_tdo != NULL)
-	// 	fclose(fp_tdo);
-	// if(fp_rbb != NULL)
-	// 	fclose(fp_rbb);
+		// 	memset(vec_byte, 0x00, sizeof(vec_byte));
+		// 	vec_byte[0] = '1';
+		// 	vec_byte[1] = tms_bit;
+		// 	vec_byte[2] = tdi_bit;
+		// 	vec_byte[3] = tdo_bit;
+		// 	vec_byte[4] = '\0';
+		// 	fprintf(fp_rbb, "%s\n", vec_byte);
+		// }
+
+	if(fp_tdi != NULL)
+		fclose(fp_tdi);
+	if(fp_tdo != NULL)
+		fclose(fp_tdo);
+	if(fp_rbb != NULL)
+		fclose(fp_rbb);
 
 	return retval;
 }
