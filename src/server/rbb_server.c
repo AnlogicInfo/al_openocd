@@ -30,7 +30,8 @@
 #include <helper/time_support.h>
 
 // #define LOG_FOLDER_PATH "E:\\work\\2024\\sw\\debug\\4download_fail\\log"
-#define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log"
+// #define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log"
+#define LOG_FOLDER_PATH "D:\\Anlogic\\FD_2024.7\\toolchain\\openocd\\fpsoc\\log"
 
 #define LOG_TD_IN_FILE "\\td_in.log"
 #define LOG_TD_IN_CMD_FILE "\\td_in_cmd.log"
