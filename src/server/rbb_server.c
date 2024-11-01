@@ -220,9 +220,9 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	size_t i;
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
-	int last_read_p = 0;
 	// FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");;
-	FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
+	// FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
+	FILE* fp_input_cmd = NULL;
 	FILE* fp_input = NULL;
 	if(fp_input != NULL)
 		fprintf(fp_input, "length %lld\n", length);
@@ -245,7 +245,6 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 		else if (command == 'R') {
 			/* read */
 			read_input[bits / 8] |= 1 << (bits % 8);
-			last_read_p = bits;		
 			read_bits++;
 		} else if (command == 'r' || command == 's') {
 			/* TRST = 0 */
@@ -269,12 +268,6 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 
 	if(fp_input != NULL)
 		fclose(fp_input);
-
-	if (read_bits == 1)
-	{
-		LOG_DEBUG("received length %lld bits %d last read %d", length, bits, last_read_p);
-	}
-
 
 #ifndef RBB_NOT_HANDLE_LAST
 	if (service->last_is_read) { /* Fix some TDO read issue */
@@ -340,7 +333,6 @@ static void analyze_bitbang(const uint8_t *tms, int total_bits, struct rbb_servi
 	uint8_t is_tms, is_flip_tms;
 	tap_state_t cur_state = service->state, new_state;
 	service->region_count = 0;
-	LOG_DEBUG("total bits %d read bits %d %s", total_bits, total_read_bits, tap_state_name(service->state));
 
 	service->regions[0].begin_state = cur_state;
 	for (int i = 0; i < total_bits; i++) {
@@ -413,7 +405,6 @@ static int rbb_add_tdi_seq(struct jtag_region* region,
 	rbb_create_out_buf(region, tms_input, region->tms_buffer);
 	rbb_create_out_buf(region, tdi_input, region->tdi_buffer);
 
-	LOG_DEBUG("jtag next st %s", tap_state_name(region->next_state));
 	jtag_add_tdi_seq(region->end - region->begin, region->tdi_buffer, region->tdo_buffer, region->next_state);
 	return ERROR_OK;
 }
@@ -450,7 +441,8 @@ static int rbb_jtag_drive(struct rbb_service *service, size_t length, size_t tot
 		return retval;
 	}
 
-	FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
+	// FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
+	FILE *fp_tdi = NULL;
 
 	if(fp_tdi != NULL) {
 		fprintf(fp_tdi, "length %lld\n", length);
