@@ -220,21 +220,15 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
 	int last_read_p = 0;
-	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
-	FILE* fp_input_command = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
-	// FILE* fp_input = NULL;
+	// FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");;
+	FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
+	FILE* fp_input = NULL;
 	if(fp_input != NULL)
 		fprintf(fp_input, "length %lld\n", length);
-
-	if(fp_input != NULL)
-		fprintf(fp_input_command, "length %lld\n", length);
-
-	// LOG_DEBUG("length %lld", length);
 	for (i = 0; i < length; i++)
 	{
 		command = rbb_in_buffer[i];
-		// if(length < 400)
-		// 	LOG_DEBUG("command %x", command);
+
 
 		if ('0' <= command && command <= '7') {
 			char offset = command - '0';
@@ -257,17 +251,23 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 		} else if (command == 't' || command == 'u') {
 			/* TRST = 1 */
 		}
-		if(fp_input_command != NULL)
-			fprintf(fp_input_command, "%x\n", command);
-
+		if(fp_input != NULL)
+			fprintf(fp_input, "%x\n", command);
 	}
-	
-	rbb_in_buffer[i+1] = '\0';
-	if(fp_input != NULL)
-		fprintf(fp_input, "%s", rbb_in_buffer);
 
-	if(fp_input_command != NULL)
-		fclose(fp_input_command);
+	rbb_in_buffer[i] = '\0';
+	if(fp_input_cmd != NULL) {
+		fprintf(fp_input_cmd, "length %lld", length);
+		fprintf(fp_input_cmd, "\n");
+		fprintf(fp_input_cmd, "%s", rbb_in_buffer);
+		fprintf(fp_input_cmd, "\n");
+	}
+
+	if(fp_input_cmd != NULL)
+		fclose(fp_input_cmd);
+
+	if(fp_input != NULL)
+		fclose(fp_input);
 
 	if (read_bits == 1)
 	{
@@ -316,23 +316,14 @@ static void rbb_region_init(struct rbb_service* service,
 	region->next_state = next_state;
 	region->buf_size = (region->end - region->begin + 8 -1) / 8;
 
-	if (is_tms) {
-		region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);
-		region->tdi_buffer = NULL;
+	region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);;
+	region->tdi_buffer =(uint8_t*)malloc(region->buf_size + 64);
+	if((total_read_bits > 0) && (is_tms == 0)) {
+		region->tdo_buffer = (uint8_t*)malloc(region->buf_size + 64);
+		region->tdo_mask_buffer = (uint8_t*)malloc(region->buf_size + 64);
+	} else {
 		region->tdo_buffer = NULL;
 		region->tdo_mask_buffer = NULL;
-	}
-	else {
-		region->tms_buffer = NULL;
-		region->tdi_buffer = (uint8_t*)malloc(region->buf_size + 64);
-		if (total_read_bits > 0) {
-			region->tdo_buffer = (uint8_t*)malloc(region->buf_size + 64);
-			region->tdo_mask_buffer = (uint8_t*)malloc(region->buf_size + 64);
-		}
-		else {
-				region->tdo_buffer = NULL;
-				region->tdo_mask_buffer = NULL;
-			}		
 	}
 
 	next_region->begin_state = next_state;
@@ -403,6 +394,7 @@ static int rbb_add_tms_seq(struct jtag_region* region, unsigned char* tms_input,
 {
 	/* clear tms buffer */
 	rbb_create_out_buf(region, tms_input, region->tms_buffer);
+	rbb_create_out_buf(region, tdi_input, region->tdi_buffer);
 	jtag_add_tms_seq(region->end - region->begin, region->tms_buffer, region->end_state);
 
 	return ERROR_OK;
@@ -417,7 +409,7 @@ static int rbb_add_tdi_seq(struct jtag_region* region,
 		rbb_create_out_buf(region, read_input, region->tdo_mask_buffer);
 	}
 
-	// rbb_create_out_buf(region, tms_input, region->tms_buffer);
+	rbb_create_out_buf(region, tms_input, region->tms_buffer);
 	rbb_create_out_buf(region, tdi_input, region->tdi_buffer);
 
 	LOG_DEBUG("jtag next st %s", tap_state_name(region->next_state));
@@ -457,73 +449,18 @@ static int rbb_jtag_drive(struct rbb_service *service, size_t length, size_t tot
 		return retval;
 	}
 
-	// char vec_byte[8];
-	// uint8_t bit, mask;
-	// uint8_t tms_bit, tdi_bit, tdo_bit;
-	// int buf_byte_index, buf_bit_index;
-	// int j;
-	// FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
-	FILE *fp_tdi = NULL;
-	// FILE *fp_rbb = fopen(LOG_FOLDER_PATH LOG_RBB_FILE, "a");
-	FILE *fp_rbb = NULL;
-	FILE *fp_tdo = NULL;	
+	FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
 
-	if (fp_tdi != NULL) {
+	if(fp_tdi != NULL) {
 		fprintf(fp_tdi, "length %lld\n", length);
 		for (i = 0; i < service->region_count; i++) {
 			fprintf(fp_tdi, "region %d st %s->%s total size %d \n", i, 
 					tap_state_name(service->regions[i].begin_state), tap_state_name(service->regions[i].end_state), 
 					service->regions[i].end - service->regions[i].begin);
+
 		}
-	}
-
-		// fprintf(fp_rbb, "length %lld\n", length);
-		// for (j = service->regions[i].begin; j < (service->regions[i].end); j++) {
-		// 	buf_byte_index = (j - service->regions[i].begin) / 8;
-		// 	buf_bit_index = (j - service->regions[i].begin) % 8;
-		// 	if(service->regions[i].tms_buffer != NULL) {
-		// 		bit = (service->regions[i].tms_buffer[buf_byte_index] >> buf_bit_index) & 1;
-		// 		tms_bit = bit ? '1' : '0';
-		// 	}
-		// 	else
-		// 		tms_bit = '0';
-
-		// 	if(service->regions[i].tdi_buffer != NULL) {
-		// 		bit = (service->regions[i].tdi_buffer[buf_byte_index] >> buf_bit_index) & 1;
-		// 		tdi_bit = bit ? '1' : '0';
-		// 	} else
-		// 		tdi_bit = 'X';
-
-		// 	if(service->regions[i].tdo_buffer != NULL) {
-		// 		if(service->regions[i].tdo_mask_buffer != NULL) {
-		// 			mask = (service->regions[i].tdo_mask_buffer[buf_byte_index] >> buf_bit_index) & 1;
-		// 			bit = (service->regions[i].tdo_buffer[buf_byte_index] >> buf_bit_index) & 1;
-		// 			if(mask == 1) {
-		// 				tdo_bit = bit ? 'H' : 'L';
- 		// 			} else
-		// 				tdo_bit = 'X';
-		// 		}
-		// 		else {
-		// 			tdo_bit = 'X';
-		// 		}
-		// 	} else
-		// 		tdo_bit = 'X';
-
-		// 	memset(vec_byte, 0x00, sizeof(vec_byte));
-		// 	vec_byte[0] = '1';
-		// 	vec_byte[1] = tms_bit;
-		// 	vec_byte[2] = tdi_bit;
-		// 	vec_byte[3] = tdo_bit;
-		// 	vec_byte[4] = '\0';
-		// 	fprintf(fp_rbb, "%s\n", vec_byte);
-		// }
-
-	if(fp_tdi != NULL)
 		fclose(fp_tdi);
-	if(fp_tdo != NULL)
-		fclose(fp_tdo);
-	if(fp_rbb != NULL)
-		fclose(fp_rbb);
+	}
 
 	return retval;
 }
@@ -639,9 +576,18 @@ static int rbb_input(struct connection *connection)
 		return ERROR_SERVER_REMOTE_CLOSED;
 	}
 	else if (bytes_read < 0) {
+#if 0
+		errno = WSAGetLastError();
+		if (errno == WSAECONNABORTED || errno == WSAECONNRESET) {
+			allow_tap_access = 0;
+			log_socket_error("rbb_server");
+		}
+		return ERROR_SERVER_REMOTE_CLOSED;
+#else
 		allow_tap_access = 0;
 		LOG_ERROR("error during read: %s", strerror(errno));
 		return ERROR_SERVER_REMOTE_CLOSED;
+#endif
 	}
 
 	length = bytes_read;
@@ -652,11 +598,6 @@ static int rbb_input(struct connection *connection)
 	rbb_input_collect(service, buffer, length, 
 					  tms_input, tdi_input, read_input,
 					  &total_bits, &total_read_bits);
-
-	// FILE* fp_in = fopen("D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log\\td_in.log", "a");
-	// fprintf(fp_in, "length %d\n", length);
-	// 	fprintf(fp_in, "%02x\n", buffer[i]);
-
 	// fclose(fp_in);
 	
 	analyze_bitbang((uint8_t *) tms_input, total_bits, service, total_read_bits);
