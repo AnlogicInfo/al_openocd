@@ -212,12 +212,12 @@ static int rbb_connection_read (struct connection *connection, unsigned char* bu
 
 }
 
-static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_in_buffer, size_t length,
+static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_in_buffer, int length,
 							  unsigned char* tms_input, unsigned char* tdi_input, unsigned char* read_input,
 							  size_t* total_bits, size_t* total_read_bits)
 {
 	char command;
-	size_t i;
+	int i;
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
 	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");;
@@ -225,7 +225,7 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	FILE* fp_input_cmd = NULL;
 	// FILE* fp_input = NULL;
 	if(fp_input != NULL)
-		fprintf(fp_input, "length %lld\n", length);
+		fprintf(fp_input, "length %d\n", length);
 	for (i = 0; i < length; i++)
 	{
 		command = rbb_in_buffer[i];
@@ -257,7 +257,7 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 
 	rbb_in_buffer[i] = '\0';
 	if(fp_input_cmd != NULL) {
-		fprintf(fp_input_cmd, "length %lld", length);
+		fprintf(fp_input_cmd, "length %d", length);
 		fprintf(fp_input_cmd, "\n");
 		fprintf(fp_input_cmd, "%s", rbb_in_buffer);
 		fprintf(fp_input_cmd, "\n");
@@ -409,7 +409,7 @@ static int rbb_add_tdi_seq(struct jtag_region* region,
 	return ERROR_OK;
 }
 
-static int rbb_jtag_drive(struct rbb_service *service, size_t length, size_t total_bits,
+static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_bits,
 						  unsigned char* tms_input, unsigned char* tdi_input, unsigned char* read_input)
 {
 	int i;
@@ -445,7 +445,7 @@ static int rbb_jtag_drive(struct rbb_service *service, size_t length, size_t tot
 	// FILE *fp_tdi = NULL;
 
 	if(fp_tdi != NULL) {
-		fprintf(fp_tdi, "length %lld\n", length);
+		fprintf(fp_tdi, "length %d\n", length);
 		for (i = 0; i < service->region_count; i++) {
 			fprintf(fp_tdi, "region %d st %s->%s total size %d \n", i, 
 					tap_state_name(service->regions[i].begin_state), tap_state_name(service->regions[i].end_state), 
@@ -459,11 +459,11 @@ static int rbb_jtag_drive(struct rbb_service *service, size_t length, size_t tot
 }
 
 static int rbb_send_buffer_gen(struct rbb_service *service, unsigned char* read_input,
-							   unsigned char* read_output, size_t total_read_bits)
+							   unsigned char* read_output, int total_read_bits)
 {
 	int i, j;
 	uint8_t read_en, read_bit;
-	size_t read_p = 0;
+	int read_p = 0;
 	int retval = ERROR_OK;
 
 	for (i = 0; i < service->region_count; i++) {
@@ -481,7 +481,7 @@ static int rbb_send_buffer_gen(struct rbb_service *service, unsigned char* read_
 	read_output[read_p] = 0;
 
 	if (read_p != total_read_bits) {
-		LOG_ERROR("read_p %lld read bits %lld", read_p, total_read_bits);
+		LOG_ERROR("read_p %d read bits %d", read_p, total_read_bits);
 		retval = ERROR_FAIL;
 	}
 	return retval;
