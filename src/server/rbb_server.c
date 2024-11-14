@@ -221,8 +221,8 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
 	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");;
-	// FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
-	FILE* fp_input_cmd = NULL;
+	FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
+	// FILE* fp_input_cmd = NULL;
 	// FILE* fp_input = NULL;
 	if(fp_input != NULL)
 		fprintf(fp_input, "length %d\n", length);
