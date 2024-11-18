@@ -30,8 +30,8 @@
 #include <helper/time_support.h>
 
 // #define LOG_FOLDER_PATH "E:\\work\\2024\\sw\\debug\\4download_fail\\log"
-#define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log"
-// #define LOG_FOLDER_PATH "D:\\Anlogic\\FD_2024.7\\toolchain\\openocd\\fpsoc\\log"
+// #define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log"
+#define LOG_FOLDER_PATH "D:\\Anlogic\\FD_2024.7\\toolchain\\openocd\\fpsoc\\log"
 
 #define LOG_TD_IN_FILE "\\td_in.log"
 #define LOG_TD_IN_CMD_FILE "\\td_in_cmd.log"
@@ -220,10 +220,10 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	int i;
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
-	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");;
-	FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
-	// FILE* fp_input_cmd = NULL;
-	// FILE* fp_input = NULL;
+	// FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");;
+	// FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
+	FILE* fp_input_cmd = NULL;
+	FILE* fp_input = NULL;
 	if(fp_input != NULL)
 		fprintf(fp_input, "length %d\n", length);
 	for (i = 0; i < length; i++)
