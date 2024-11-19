@@ -29,15 +29,6 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
-// #define LOG_FOLDER_PATH "E:\\work\\2024\\sw\\debug\\4download_fail\\log"
-// #define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log"
-#define LOG_FOLDER_PATH "D:\\Anlogic\\FD_2024.7\\toolchain\\openocd\\fpsoc\\log"
-
-#define LOG_TD_IN_FILE "\\td_in.log"
-#define LOG_TD_IN_CMD_FILE "\\td_in_cmd.log"
-#define LOG_TDI_OUT_FILE "\\openocd_tdi.log"
-#define LOG_RBB_FILE "\\openocd_rbb.log"
-
 int allow_tap_access;
 int arm_workaround;
 
@@ -220,12 +211,7 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	int i;
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
-	// FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");;
-	// FILE* fp_input_cmd = fopen(LOG_FOLDER_PATH LOG_TD_IN_CMD_FILE, "a");
-	FILE* fp_input_cmd = NULL;
-	FILE* fp_input = NULL;
-	if(fp_input != NULL)
-		fprintf(fp_input, "length %d\n", length);
+
 	for (i = 0; i < length; i++)
 	{
 		command = rbb_in_buffer[i];
@@ -251,23 +237,10 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 		} else if (command == 't' || command == 'u') {
 			/* TRST = 1 */
 		}
-		if(fp_input != NULL)
-			fprintf(fp_input, "%x\n", command);
 	}
 
 	rbb_in_buffer[i] = '\0';
-	if(fp_input_cmd != NULL) {
-		fprintf(fp_input_cmd, "length %d", length);
-		fprintf(fp_input_cmd, "\n");
-		fprintf(fp_input_cmd, "%s", rbb_in_buffer);
-		fprintf(fp_input_cmd, "\n");
-	}
 
-	if(fp_input_cmd != NULL)
-		fclose(fp_input_cmd);
-
-	if(fp_input != NULL)
-		fclose(fp_input);
 
 #ifndef RBB_NOT_HANDLE_LAST
 	if (service->last_is_read) { /* Fix some TDO read issue */
@@ -441,20 +414,6 @@ static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_
 		return retval;
 	}
 
-	FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
-	// FILE *fp_tdi = NULL;
-
-	if(fp_tdi != NULL) {
-		fprintf(fp_tdi, "length %d\n", length);
-		for (i = 0; i < service->region_count; i++) {
-			fprintf(fp_tdi, "region %d st %s->%s total size %d \n", i, 
-					tap_state_name(service->regions[i].begin_state), tap_state_name(service->regions[i].end_state), 
-					service->regions[i].end - service->regions[i].begin);
-
-		}
-		fclose(fp_tdi);
-	}
-
 	return retval;
 }
 
@@ -591,7 +550,6 @@ static int rbb_input(struct connection *connection)
 	rbb_input_collect(service, buffer, length, 
 					  tms_input, tdi_input, read_input,
 					  &total_bits, &total_read_bits);
-	// fclose(fp_in);
 	
 	analyze_bitbang((uint8_t *) tms_input, total_bits, service, total_read_bits);
 
