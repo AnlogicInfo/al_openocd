@@ -2374,8 +2374,6 @@ static int aarch64_read_cpu_memory(struct target *target,
 	struct arm *arm = &armv8->arm;
 	uint32_t dscr;
 
-	LOG_DEBUG("Reading CPU memory address 0x%016" PRIx64 " size %" PRIu32 " count %" PRIu32,
-			address, size, count);
 
 	if (target->state != TARGET_HALTED) {
 		LOG_WARNING("target not halted");
