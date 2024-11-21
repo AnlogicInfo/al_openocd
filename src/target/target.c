@@ -2855,9 +2855,6 @@ int target_read_u32(struct target *target, target_addr_t address, uint32_t *valu
 
 	if (retval == ERROR_OK) {
 		*value = target_buffer_get_u32(target, value_buf);
-		LOG_DEBUG("address: " TARGET_ADDR_FMT ", value: 0x%8.8" PRIx32 "",
-				  address,
-				  *value);
 	} else {
 		*value = 0x0;
 		LOG_DEBUG("address: " TARGET_ADDR_FMT " failed",
@@ -2944,9 +2941,6 @@ int target_write_u32(struct target *target, target_addr_t address, uint32_t valu
 		return ERROR_FAIL;
 	}
 	
-	LOG_DEBUG("address: " TARGET_ADDR_FMT ", value: 0x%8.8" PRIx32 "",
-			  address,
-			  value);
 
 	target_buffer_set_u32(target, value_buf, value);
 	retval = target_write_memory(target, address, 4, 1, value_buf);
