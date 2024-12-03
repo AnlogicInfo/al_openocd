@@ -29,6 +29,11 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
+#define LOG_FOLDER_PATH "D:\\work\\2024\\sw\\16ph1p35_cwc_fail\\log"
+
+#define LOG_TD_IN_FILE "\\td_in.log"
+#define LOG_TDI_OUT_FILE "\\openocd_tdi.log"
+
 int allow_tap_access;
 int arm_workaround;
 
@@ -356,7 +361,7 @@ static int rbb_input(struct connection *connection)
 	memset(read_input, 0x00, sizeof(read_input));
 	LOG_DEBUG_IO("Here comes receive buffer");
 
-	FILE* fp_in = fopen("D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log\\td_in_pass.log", "a");
+	FILE* fp_in = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
 	for (i = 0; i < length; i++) {
 		command = buffer[i];
 
@@ -370,7 +375,6 @@ static int rbb_input(struct connection *connection)
 		int tms = (offset >> 1) & 1;
 		int tdi = (offset >> 0) & 1;
 		if (tck) {
-			fprintf(fp_in, "%x\n", command);
 			tms_input[bits / 8] |= tms << (bits % 8);
 			tdi_input[bits / 8] |= tdi << (bits % 8);
 			bits++;
@@ -385,11 +389,14 @@ static int rbb_input(struct connection *connection)
 			/* TRST = 1 */
 		}
 		
+		if(fp_in != NULL)
+			fprintf(fp_in, "%x\n", command);		
 	}
 	if (debug_level >= LOG_LVL_DEBUG_IO)
 		LOG_OUTPUT("\n-\n");
 	/* LOG_DEBUG("received length %lld, bits %d", length, bits); */
-	fclose(fp_in);
+	if(fp_in != NULL)
+		fclose(fp_in);
 #ifndef RBB_NOT_HANDLE_LAST
 	if (service->last_is_read) { /* Fix some TDO read issue */
 		int firstbit = 0;
@@ -442,6 +449,8 @@ static int rbb_input(struct connection *connection)
 		assert(read_bits == 0);
 	}
 #endif
+	FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
+
 	for (i = 0; i < service->region_count; i++) {
 		int do_read = 0;
 
@@ -549,7 +558,20 @@ static int rbb_input(struct connection *connection)
 			else /* Probably just RTI/PDR/PIR */
 				jtag_add_tdi_seq(service->regions[i].end - service->regions[i].begin,
 					tdi_buffer[tdi_buffer_count], scan_out_buf, last_st);
+
+			if ((service->regions[i].beginstate == TAP_DRSHIFT) || 	(service->regions[i].beginstate == TAP_IRSHIFT)) {
+				// fprintf(fp_tdi, "length %lld\n", length);
+				fprintf(fp_tdi, "st %s total size %d \n", tap_state_name(service->regions[i].beginstate), 
+						service->regions[i].end - service->regions[i].begin);
+				int region_size = (service->regions[i].end - service->regions[i].begin + 7) / 8;
+				for (int byte_index =0; byte_index < region_size; byte_index++) {
+					fprintf(fp_tdi, "%02x ", tdi_buffer[tdi_buffer_count][byte_index]);
+				}
+				fprintf(fp_tdi, "\n");
+			}
+
 			tdi_buffer_count++;
+
 		}
 		last_st = service->regions[i].endstate;
 
@@ -572,17 +594,6 @@ static int rbb_input(struct connection *connection)
 		return retval;
 	}
 
-	// FILE *fp_tdi = fopen("E:\\work\\2024\\sw\\debug\\4download_fail\\rbb_input_pass.log", "a");
-	// FILE *fp_tdi = fopen("D:\\work\\projs\\openocd_tester\\tools\\win\\bit_download_fail\\log\\openocd_tdi.log", "a");
-	// FILE * fp_tdo = NULL;
-	// FILE *fp_tdo = fopen("E:\\work\\2024\\sw\\debug\\4download_fail\\rbb_output_pass.log", "a");
-	// fprintf(fp_tdi, "length %lld\n", length);
-	// for (i = 0; i < service->region_count; i++) {
-	// 	fprintf(fp_tdi, "region %lld st %s->%s total size %d \n", 
-	// 			i,
-	// 			tap_state_name(service->regions[i].beginstate), tap_state_name(service->regions[i].endstate), 
-	// 			service->regions[i].end - service->regions[i].begin);
-	// }
 
 
 	// int k, tdo_byte, total_tdo_bytes = 0;
@@ -602,7 +613,9 @@ static int rbb_input(struct connection *connection)
 
 	int tdo_bits_p = 0;
 	if (read_bits != 0) {
+		// fprintf(fp_tdi, "read bits %d tdi buf cnt %lld\n", read_bits, tdi_buffer_count);
 		for (i = 0; i < tdi_buffer_count; i++) { /* Post-process the buffer into RBB style buffer */
+			// fprintf(fp_tdi, "%02x ", tdo_read_bits[i]);
 			LOG_DEBUG_IO("buf %d, bits %d", tdo_read_bits[i], tdo_read_bits[i]);
 			if (tdo_read_bits[i] != 0)
 				for (j = 0; j < tdo_read_bits[i]; j++) {
@@ -610,6 +623,7 @@ static int rbb_input(struct connection *connection)
 					send_buffer[tdo_bits_p++] = tdo_bit ? '1' : '0';
 				}
 		}
+		// fprintf(fp_tdi, "\n");
 		/* usleep(10); */
 
 		send_buffer[tdo_bits_p] = 0;
@@ -645,8 +659,8 @@ static int rbb_input(struct connection *connection)
 	if (cmd_queue_cur_state == TAP_IDLE || cmd_queue_cur_state == TAP_RESET)
 		allow_tap_access = 0;
 #endif
-	// if (fp_tdi != NULL)
-	// 	fclose(fp_tdi);
+	if (fp_tdi != NULL)
+		fclose(fp_tdi);
 	// if (fp_tdo != NULL)
 	// 	fclose(fp_tdo);
 	return ERROR_OK;
