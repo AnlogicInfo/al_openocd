@@ -467,7 +467,8 @@ static void ftdi_execute_tdi(struct jtag_command *cmd)
 
 	LOG_DEBUG_IO("tap_end_st %s", tap_state_name(cmd->cmd.scan->end_state));
 
-	if (cmd->cmd.scan->end_state == TAP_DREXIT1 || cmd->cmd.scan->end_state == TAP_IREXIT1) {
+	if (cmd->cmd.scan->end_state == TAP_DREXIT1 || cmd->cmd.scan->end_state == TAP_IREXIT1 ||
+		cmd->cmd.scan->end_state == TAP_DREXIT2 || cmd->cmd.scan->end_state == TAP_IREXIT2) {
 		DO_CLOCK_DATA(mpsse_ctx,
 					field->out_value,
 					0,
