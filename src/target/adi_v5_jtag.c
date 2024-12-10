@@ -41,7 +41,7 @@
 #include <jtag/swd.h>
 #include <server/rbb_server.h>
 
-/*#define DEBUG_WAIT*/
+#define DEBUG_WAIT
 
 /* JTAG instructions/registers for JTAG-DP and SWJ-DP */
 #define JTAG_DP_ABORT		0xF8
