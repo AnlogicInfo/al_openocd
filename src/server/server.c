@@ -100,7 +100,7 @@ static int add_connection(struct service *service, struct command_context *cmd_c
 			sizeof(int));			/* length of option value */
 
 		if (!strcmp(service->name, "rbb"))
-			LOG_DEBUG("accepting '%s' connection on tcp/%s", service->name, service->port);
+			LOG_INFO("accepting '%s' connection on tcp/%s", service->name, service->port);
 		else
 			LOG_INFO("accepting '%s' connection on tcp/%s", service->name, service->port);
 		retval = service->new_connection(c);
@@ -588,7 +588,7 @@ int server_loop(struct command_context *command_context)
 							}
 							remove_connection(service, c);
 							if (!strcmp(service->name, "rbb"))
-								LOG_DEBUG("dropped '%s' connection",
+								LOG_INFO("dropped '%s' connection",
 									service->name);
 							else
 								LOG_INFO("dropped '%s' connection",

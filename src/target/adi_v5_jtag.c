@@ -41,7 +41,7 @@
 #include <jtag/swd.h>
 #include <server/rbb_server.h>
 
-/*#define DEBUG_WAIT*/
+#define DEBUG_WAIT
 
 /* JTAG instructions/registers for JTAG-DP and SWJ-DP */
 #define JTAG_DP_ABORT		0xF8
@@ -57,7 +57,7 @@ static int jtag_ap_q_abort(struct adiv5_dap *dap, uint8_t *ack);
 
 int old_tap_st;
 
-// #define DEBUG_WAIT
+#define DEBUG_WAIT
 
 #ifdef DEBUG_WAIT
 static const char *dap_reg_name(int instr, int reg_addr)
@@ -250,7 +250,13 @@ static int adi_jtag_dp_scan_cmd(struct adiv5_dap *dap, struct dap_cmd *cmd, uint
 	struct jtag_tap *tap = dap->tap;
 	int retval;
 
-	retval = arm_jtag_set_instr(tap, cmd->instr, NULL, TAP_IDLE);
+	if (arm_workaround) {
+		retval = arm_jtag_set_instr_inner(tap, cmd->instr, NULL, TAP_IDLE);
+		arm_workaround = 0;
+	} else {
+		retval = arm_jtag_set_instr(tap, cmd->instr, NULL, TAP_IDLE);
+	}
+
 	if (retval != ERROR_OK)
 		return retval;
 
