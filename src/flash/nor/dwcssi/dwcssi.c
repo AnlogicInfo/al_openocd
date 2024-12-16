@@ -1,10 +1,4 @@
 /*
- * Author: Tianyi Wang (tywang@anlogic.com)
- * Date:  2022-04-20
- * Modified By: Tianyi Wang (tywang@anlogic.com>)
- * Last Modified: 2022-04-27
- */
-/*
 The AL9000 QSPI controller is based on DWC_ssi 1.02a
 */
 #include "dwcssi.h"

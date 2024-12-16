@@ -1,12 +1,3 @@
-/*
- * File: fileio.c
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-11-29
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-11-29
- */
-
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif

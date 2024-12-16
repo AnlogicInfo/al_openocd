@@ -1,6 +1,5 @@
 /***************************************************************************
  *	 Copyright (C) 2024 Ruigang Wan										*
- *	 ruigang.wan@anlogic.com												 *
  *																		 *
  *	 This program is free software; you can redistribute it and/or modify	*
  *	 it under the terms of the GNU General Public License as published by	*
@@ -29,9 +28,7 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
-// #define LOG_FOLDER_PATH "E:\\work\\2024\\sw\\debug\\5ph1p35_cwc_fail\\log"
 #define LOG_FOLDER_PATH "D:\\work\\2024\\sw\\16ph1p35_cwc_fail\\log"
-// #define LOG_FOLDER_PATH "D:\\Anlogic\\FD_2024.7\\toolchain\\openocd\\fpsoc\\log"
 
 #define LOG_TD_IN_FILE "\\td_in.log"
 #define LOG_REGION_BUF_FILE "\\openocd_region.log"
@@ -422,7 +419,6 @@ static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_
 static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service)
 {
 	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
-	// FILE* fp_input = NULL;
 	char command;
 	int i;
 	int tck, tdi, tms;
@@ -858,7 +854,7 @@ static const struct command_registration rbb_server_command_handlers[] = {
 static const struct command_registration rbb_command_handlers[] = {
 	{.name = "rbb",
 	 .mode = COMMAND_ANY,
-	 .help = "Remote Bitbang server for Anlogic TD",
+	 .help = "Remote Bitbang server",
 	 .usage = "",
 	 .chain = rbb_server_command_handlers},
 	COMMAND_REGISTRATION_DONE};

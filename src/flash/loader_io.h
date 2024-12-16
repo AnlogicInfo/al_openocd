@@ -1,11 +1,3 @@
-/*
- * File: loader_io.h
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2023-01-12
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2023-01-12
- */
-
 #ifndef OPENOCD_LOADER_IO_H
 #define OPENOCD_LOADER_IO_H
 

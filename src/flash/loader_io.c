@@ -1,13 +1,3 @@
-/*
- * File: loader_io.c
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2023-01-12
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2023-01-12
- */
-
-
-
 #include "loader_io.h"
 
 char *rv_reg_params[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"};

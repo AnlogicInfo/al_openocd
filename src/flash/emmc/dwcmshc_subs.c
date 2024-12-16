@@ -1,10 +1,3 @@
-/*
- * File: dwcmshc_subs.c
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-11-08
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-11-08
- */
 #include "dwcmshc_subs.h"
 int dwcmshc_mio_init(struct emmc_device *emmc)
 {

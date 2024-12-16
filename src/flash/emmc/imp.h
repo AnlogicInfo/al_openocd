@@ -1,11 +1,3 @@
-/*
- * File: imp.h
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-10-31
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-10-31
- */
-
 #ifndef OPENOCD_FALSH_EMMC_IMP_H
 #define OPENOCD_FLASH_EMMC_IMP_H
 #include <stdbool.h>

@@ -1,12 +1,4 @@
 /*
- * File: dwcmshc_regs.h
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-11-14
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-11-14
- */
-
-/*
  * Register Offsets
  */
 #ifndef OPENOCD_FLASH_EMMC_DWCMSHC_REGS_H

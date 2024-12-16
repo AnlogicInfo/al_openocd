@@ -1,9 +1,3 @@
-/*
- * Author: Tianyi Wang (tywang@anlogic.com)
- * Date:  2022-04-27
- * Modified By: Tianyi Wang (tywang@anlogic.com>)
- * Last Modified: 2022-04-27
- */
 #ifndef OPENOCD_FLASH_NOR_DWCSSI_H
 #define OPENOCD_FLASH_NOR_DWCSSI_H
 

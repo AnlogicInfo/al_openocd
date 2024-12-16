@@ -1,9 +1,3 @@
-/*
- * Author: Tianyi Wang (tywang@anlogic.com)
- * Date:  2022-05-11
- * Modified By: Tianyi Wang (tywang@anlogic.com>)
- * Last Modified: 2022-05-11
- */
 #include "dwcssi.h"
 
 #define	SPIFLASH_BSY		0

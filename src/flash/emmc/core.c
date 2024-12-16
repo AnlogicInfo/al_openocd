@@ -1,11 +1,3 @@
-/*
- * File: core.c
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-11-02
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-11-02
- */
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif

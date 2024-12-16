@@ -1,11 +1,3 @@
-/*
- * File: dwcmshc_mmc.h
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-11-08
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-11-08
- */
-
 #ifndef OPENOCD_FLASH_EMMC_DWCMSHC_SUBS_H
 #define OPENOCD_FLASH_EMMC_DWCMSHC_SUBS_H
 #ifdef HAVE_CONFIG_H

@@ -1,10 +1,3 @@
-/*
- * File: dwcmshc.c
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-10-31
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-10-31
- */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif

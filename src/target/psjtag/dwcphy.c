@@ -1,13 +1,3 @@
-/*
- * File: dwcphy.c
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2023-10-24
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2023-10-24
- */
-
-
-
 #include <assert.h>
 #include <stdlib.h>
 #include <time.h>

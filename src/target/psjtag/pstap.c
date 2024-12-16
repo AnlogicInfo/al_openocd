@@ -1,12 +1,3 @@
-/*
- * File: pstap.c
- * Author: Tianyi Wang (tianyi.wang@anlogic.com)
- * Date:  2022-12-12
- * Modified By: Tianyi Wang (tianyi.wang@anlogic.com>)
- * Last Modified: 2022-12-12
- */
-
-
 #include <assert.h>
 #include <stdlib.h>
 #include <time.h>
