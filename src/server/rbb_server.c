@@ -29,11 +29,11 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
-// #define LOG_FOLDER_PATH "E:\\work\\2024\\sw\\debug\\7apu_cwc_debug\\log"
-#define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\apu_cwc\\log"
+// #define LOG_FOLDER_PATH "E:\\work\\2024\\sw\\debug\\5ph1p35_cwc_fail\\log"
+#define LOG_FOLDER_PATH "D:\\work\\2024\\sw\\16ph1p35_cwc_fail\\log"
+// #define LOG_FOLDER_PATH "D:\\Anlogic\\FD_2024.7\\toolchain\\openocd\\fpsoc\\log"
 
 #define LOG_TD_IN_FILE "\\td_in.log"
-#define LOG_TD_IN_DETAIL_FILE "\\td_in_ans.log"
 #define LOG_REGION_BUF_FILE "\\openocd_region.log"
 #define LOG_TDI_OUT_FILE "\\openocd_tdi.log"
 
@@ -111,10 +111,8 @@ static int rbb_connection_closed(struct connection *connection)
 		if (retval != ERROR_OK)
 			LOG_ERROR("JTAG queue execute failed!");
 	}
-	
 	allow_tap_access = 0;
 	arm_workaround = 1;
-
 	service->lasttime = timeval_ms(); /* Record the time when client disconnects */
 	LOG_DEBUG("rbb: Connection for channel %u closed", service->channel);
 
@@ -424,7 +422,7 @@ static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_
 static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service)
 {
 	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
-	FILE* fp_input_detail = fopen(LOG_FOLDER_PATH LOG_TD_IN_DETAIL_FILE, "a");
+	// FILE* fp_input = NULL;
 	char command;
 	int i;
 	int tck, tdi, tms;
@@ -432,10 +430,9 @@ static void rbb_command_prt(unsigned char* command_in, int command_size, struct 
 	tap_state_t cur_state, new_state;
 
 	cur_state = service->state;
-	if(fp_input_detail != NULL) {
+	if(fp_input != NULL) {
 		for (i = 0; i < command_size; i++) {
 			command = command_in[i];
-			fprintf(fp_input, "%x\n", command);
 			if ('0' <= command && command <= '7') {
 				char offset = command - '0';
 				tck = (offset >> 2) & 1;
@@ -444,44 +441,44 @@ static void rbb_command_prt(unsigned char* command_in, int command_size, struct 
 				if(tck) {
 					new_state = next_state(cur_state, tms);
 					bits ++;
-					fprintf(fp_input_detail, "cmd_index %08d %x ", i, command);
-					fprintf(fp_input_detail, "buf_index %08d ", bits);
-					fprintf(fp_input_detail, "TCK: %d TMS: %d TDI: %d ", tck, tms, tdi);
-					fprintf(fp_input_detail, "st %s -> %s\n", tap_state_name(cur_state), tap_state_name(new_state));
+					fprintf(fp_input, "cmd_index %08d %x ", i, command);
+					fprintf(fp_input, "buf_index %08d ", bits);
+					fprintf(fp_input, "TCK: %d TMS: %d TDI: %d ", tck, tms, tdi);
+					fprintf(fp_input, "st %s -> %s\n", tap_state_name(cur_state), tap_state_name(new_state));
 
 				}
 				else {
 					new_state = cur_state;
-					fprintf(fp_input_detail, "cmd_index %08d %x ", i, command);
-					fprintf(fp_input_detail, "TCK: %d\n", tck);
+					fprintf(fp_input, "cmd_index %08d %x ", i, command);
+					fprintf(fp_input, "TCK: %d\n", tck);
 				}
 			} else if (command == 'R') {
 				new_state = cur_state;
-				fprintf(fp_input_detail, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input_detail, "buf_index %08d ", bits);
-				fprintf(fp_input_detail, "Read\n");
+				fprintf(fp_input, "cmd_index %08d %x ", i, command);
+				fprintf(fp_input, "buf_index %08d ", bits);
+				fprintf(fp_input, "Read\n");
 			} else if (command == 'r' || command == 's') {
 				new_state = cur_state;
-				fprintf(fp_input_detail, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input_detail, "TRST = 0\n");
+				fprintf(fp_input, "cmd_index %08d %x ", i, command);
+				fprintf(fp_input, "TRST = 0\n");
 			} else if (command == 't' || command == 'u') {
 				new_state = cur_state;
-				fprintf(fp_input_detail, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input_detail, "TRST = 1\n");
+				fprintf(fp_input, "cmd_index %08d %x ", i, command);
+				fprintf(fp_input, "TRST = 1\n");
 			} else {
 				new_state = cur_state;
-				fprintf(fp_input_detail, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input_detail, "Unknown\n");
+				fprintf(fp_input, "cmd_index %08d %x ", i, command);
+				fprintf(fp_input, "Unknown\n");
 			}
 
 			cur_state = new_state;
 		}
 	
 		if (service->last_is_read)
-			fprintf(fp_input_detail, "last is read\n");
-		fclose(fp_input_detail);
+			fprintf(fp_input, "last is read\n");
 		fclose(fp_input);
 	}
+		
 }
 
 static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, unsigned char* tms_buf, unsigned char* read_input)
@@ -734,7 +731,7 @@ static int rbb_input(struct connection *connection)
 					  tms_input, tdi_input, read_input,
 					  &total_bits, &total_read_bits);
 
-	if(1)
+	if(0)
 		rbb_command_prt(buffer, length, service);
 
 	free(buffer);
@@ -760,7 +757,7 @@ static int rbb_input(struct connection *connection)
 		rbb_send_buffer_gen(service, send_buffer, total_read_bits);
 		connection_write(connection, send_buffer, total_read_bits);
 	}
-	if(1)
+	if(0)
 		rbb_debug_prt(service, send_buffer, total_read_bits);
 
 	free(send_buffer);
