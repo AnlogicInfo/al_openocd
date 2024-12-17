@@ -462,6 +462,8 @@ static void ftdi_execute_tms(struct jtag_command *cmd)
 static void ftdi_execute_tdi(struct jtag_command *cmd)
 {
 	struct scan_field *field = cmd->cmd.scan->fields;
+	LOG_DEBUG_IO("TDI: %d bits, %s", field->num_bits,
+		field->in_value == NULL ? "WRITE" : "READ");
 
 	LOG_DEBUG_IO("tap_end_st %s", tap_state_name(cmd->cmd.scan->end_state));
 
@@ -499,8 +501,6 @@ static void ftdi_execute_tdi(struct jtag_command *cmd)
 			ftdi_jtag_mode);
 	}
 
-	LOG_DEBUG("TDI: %d bits, %s", field->num_bits,
-		field->in_value == NULL ? "WRITE" : "READ");
 }
 
 
@@ -648,7 +648,7 @@ static void ftdi_execute_scan(struct jtag_command *cmd)
 	if (tap_get_state() != tap_get_end_state())
 		move_to_state(tap_get_end_state());
 
-	LOG_DEBUG("%s scan, %i bits, end in %s",
+	LOG_DEBUG_IO("%s scan, %i bits, end in %s",
 		(cmd->cmd.scan->ir_scan) ? "IR" : "DR", scan_size,
 		tap_state_name(tap_get_end_state()));
 }
@@ -728,7 +728,6 @@ static void ftdi_execute_stableclocks(struct jtag_command *cmd)
 
 static void ftdi_execute_command(struct jtag_command *cmd)
 {
-	LOG_INFO("ftdi execute command %d %p", cmd->type, cmd);
 	switch (cmd->type) {
 #if BUILD_FTDI_CJTAG == 1
 		case JTAG_RESET:
@@ -780,7 +779,6 @@ static int ftdi_execute_queue(void)
 	if (led)
 		ftdi_set_signal(led, '1');
 
-	LOG_INFO("ftdi execute queue");
 	for (struct jtag_command *cmd = jtag_command_queue; cmd; cmd = cmd->next) {
 		/* fill the write buffer with the desired command */
 		ftdi_execute_command(cmd);
@@ -792,7 +790,7 @@ static int ftdi_execute_queue(void)
 	int retval = mpsse_flush(mpsse_ctx);
 	if (retval != ERROR_OK)
 		LOG_ERROR("error while flushing MPSSE queue: %d", retval);
-	LOG_INFO("ftdi execute queue end");
+
 	return retval;
 }
 

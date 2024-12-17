@@ -295,13 +295,11 @@ static int aarch64_check_state_one(struct target *target,
 	struct armv8_common *armv8 = target_to_armv8(target);
 	uint32_t prsr=0;
 	int retval;
-	LOG_DEBUG("check state one start");
+
+	// LOG_DEBUG("check state one addr %" PRIx64 "", (armv8->debug_base + CPUV8_DBG_PRSR));
 
 	retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 			armv8->debug_base + CPUV8_DBG_PRSR, &prsr);
-
-	LOG_DEBUG("check state one addr %" PRIx64 " val %x ", (armv8->debug_base + CPUV8_DBG_PRSR), prsr);
-
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -529,8 +527,6 @@ static int aarch64_poll(struct target *target)
 	if (allow_tap_access == 1)
 		return ERROR_OK;
 
-	LOG_INFO("aarch poll start");
-
 	retval = aarch64_check_state_one(target,
 				PRSR_HALT, PRSR_HALT, &halted, NULL);
 	if (retval != ERROR_OK)
@@ -569,8 +565,6 @@ static int aarch64_poll(struct target *target)
 		}
 	} else
 		target->state = TARGET_RUNNING;
-
-	LOG_INFO("aarch poll end");
 
 	return retval;
 }

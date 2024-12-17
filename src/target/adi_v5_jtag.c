@@ -41,7 +41,7 @@
 #include <jtag/swd.h>
 #include <server/rbb_server.h>
 
-#define DEBUG_WAIT
+/*#define DEBUG_WAIT*/
 
 /* JTAG instructions/registers for JTAG-DP and SWJ-DP */
 #define JTAG_DP_ABORT		0xF8
@@ -249,6 +249,8 @@ static int adi_jtag_dp_scan_cmd(struct adiv5_dap *dap, struct dap_cmd *cmd, uint
 {
 	struct jtag_tap *tap = dap->tap;
 	int retval;
+
+	log_dap_cmd("SCAN", cmd);
 
 	if (arm_workaround) {
 		retval = arm_jtag_set_instr_inner(tap, cmd->instr, NULL, TAP_IDLE);
@@ -687,12 +689,7 @@ static int jtag_connect(struct adiv5_dap *dap)
 
 static int jtag_check_reconnect(struct adiv5_dap *dap)
 {
-#if 0
-	if (arm_workaround) {
-		arm_workaround = 0;
-		dap->do_reconnect = true;
-	}
-#endif
+
 	if (dap->do_reconnect)
 		return jtag_connect(dap);
 

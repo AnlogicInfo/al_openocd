@@ -218,12 +218,9 @@ static void mem_ap_update_tar_cache(struct adiv5_ap *ap)
 static int mem_ap_setup_transfer(struct adiv5_ap *ap, uint32_t csw, target_addr_t tar)
 {
 	int retval;
-	LOG_DEBUG("ap setup csw");
 	retval = mem_ap_setup_csw(ap, csw);
 	if (retval != ERROR_OK)
 		return retval;
-
-	LOG_DEBUG("ap setup tar");
 	retval = mem_ap_setup_tar(ap, tar);
 	if (retval != ERROR_OK)
 		return retval;
@@ -249,7 +246,6 @@ int mem_ap_read_u32(struct adiv5_ap *ap, target_addr_t address,
 	/* Use banked addressing (REG_BDx) to avoid some link traffic
 	 * (updating TAR) when reading several consecutive addresses.
 	 */
-
 	retval = mem_ap_setup_transfer(ap,
 			CSW_32BIT | (ap->csw_value & CSW_ADDRINC_MASK),
 			address & 0xFFFFFFFFFFFFFFF0ull);
@@ -288,11 +284,10 @@ int mem_ap_read_atomic_u32(struct adiv5_ap *ap, target_addr_t address,
 		uint32_t *value)
 {
 	int retval;
-	LOG_DEBUG("ap read atomic start");
 	retval = mem_ap_read_u32(ap, address, value);
 	if (retval != ERROR_OK)
 		return retval;
-	LOG_DEBUG("ap read atomic end");
+
 	return dap_run(ap->dap);
 }
 
