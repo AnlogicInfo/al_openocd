@@ -35,6 +35,7 @@
 #include "jtag/interface.h"
 #include "smp.h"
 #include <helper/time_support.h>
+#include <server/rbb_server.h>
 
 enum restart_mode {
 	RESTART_LAZY,
@@ -522,6 +523,9 @@ static int aarch64_poll(struct target *target)
 	enum target_state prev_target_state;
 	int retval = ERROR_OK;
 	int halted;
+
+	if (allow_tap_access == 1)
+		return ERROR_OK;
 
 	retval = aarch64_check_state_one(target,
 				PRSR_HALT, PRSR_HALT, &halted, NULL);
