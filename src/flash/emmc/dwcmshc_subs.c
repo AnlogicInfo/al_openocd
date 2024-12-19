@@ -32,7 +32,7 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 		LOG_DEBUG("mio init addr %"TARGET_PRIxADDR " val %x", mio_addr, mio_val);
 	}
 
-	status = target_write_u32(target, emio_addr, 0x1);
+	// status = target_write_u32(target, emio_addr, 0x1);
 
 	return status;
 }
