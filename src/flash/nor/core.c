@@ -317,8 +317,10 @@ int get_flash_bank_by_addr(struct target *target,
 
 	/* cycle through bank list */
 	for (c = flash_banks; c; c = c->next) {
-		if (c->target != target)
+		if (c->target != target) {
+			LOG_INFO("bank target %s cur target %s", c->target->cmd_name, target->cmd_name);
 			continue;
+		}
 
 		int retval;
 		retval = c->driver->auto_probe(c);

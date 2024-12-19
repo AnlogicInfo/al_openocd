@@ -88,8 +88,10 @@ static int qspi_mio_init(struct flash_bank *bank)
 				return ERROR_FAIL;
 		}
 
-		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK)
-			return ERROR_FAIL;
+		if(0) {
+			if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK)
+				return ERROR_FAIL;
+		}
 	}
 
 	return ERROR_OK;
