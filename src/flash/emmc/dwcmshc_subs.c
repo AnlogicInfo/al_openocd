@@ -3,24 +3,26 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 {
 	struct target *target = emmc->target;
 	struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-	target_addr_t mio_addr, emio_addr;
+	target_addr_t mio_addr, emio_addr, mio_base;
 	uint32_t mio_val, value = 0, status = ERROR_OK;
 	uint8_t mio_num, mio_start, mio_end;
 
 	if (dwcmshc_emmc->io_location == 0) {
 		mio_start = 40;
 		mio_end = 50;
+		mio_base = TOP_PIN_201_BASE_ADDR;
 		mio_val = 0xb;
 		emio_addr = EMIO_SEL11;
 	} else {
 		mio_start = 10;
 		mio_end = 16;
+		mio_base = TOP_PIN_BASE_ADDR;
 		mio_val = 0xa;
 		emio_addr = EMIO_SEL12;
 	}
 
 	for (mio_num = mio_start; mio_num < mio_end; mio_num = mio_num + 1) {
-		mio_addr = MIO_BASE + (mio_num << 2);
+		mio_addr = mio_base + (mio_num << 2);
 		status = target_read_u32(target, mio_addr, &value);
 		if (status != ERROR_OK)
 			return status;
@@ -34,20 +36,39 @@ int dwcmshc_mio_init(struct emmc_device *emmc)
 
 	status = target_write_u32(target, emio_addr, 0x1);
 
+	LOG_DEBUG("emio init addr %"TARGET_PRIxADDR " val %x", emio_addr, 0x1);
+
 	return status;
 }
 
 int dwcmshc_fast_mode(struct emmc_device *emmc)
 {
 	struct target *target = emmc->target;
+	struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
 	target_addr_t addr;
-	uint32_t status = ERROR_OK;
+	uint32_t status = ERROR_OK, value;
 	uint8_t num;
-	for (num = 0; num < 10; num = num + 1) {
-		addr = FAST_MODE_BASE + (num << 3);
-		status = target_write_u32(target,  addr, 0x88000007);
-		if (status != ERROR_OK)
-			return status;
+	if(dwcmshc_emmc->io_location == 0) {
+		for (num = 40; num < 50; num = num + 1) {
+			addr = MIO_PARM_BASE + (num << 3);
+			if(num == 40)
+				value = 0x04000007;
+			else
+				value = 0x05000007;
+			status = target_write_u32(target,  addr, value);
+			LOG_DEBUG("fast mode addr %"TARGET_PRIxADDR " val %x", addr, value);
+			if (status != ERROR_OK)
+				return status;
+		}
+	} else {
+		for (num = 10; num < 16; num = num + 1) {
+			addr = FAST_MODE_BASE + (num << 3);
+			value = 0x0d000002;
+			status = target_write_u32(target,  addr, value);
+			LOG_DEBUG("fast mode addr %"TARGET_PRIxADDR " val %x", addr, value);
+			if (status != ERROR_OK)
+				return status;
+		}
 	}
 
 	return status;
@@ -258,6 +279,7 @@ static int dwcmshc_emmc_poll_int(struct emmc_device *emmc, uint8_t flag_offset, 
 			break;
 		int64_t now = timeval_ms();
 		if ((now - start) > timeout) {
+			LOG_ERROR("DWCMSHC POLL INIT TIMEOUT");
 			status = ERROR_TIMEOUT_REACHED;
 			break;
 		}

@@ -76,15 +76,17 @@ struct dwcmshc_emmc_controller {
 
 #define MMC_DELAY_SCALE						(2)
 
-//AL9000 config
-#define MIO_BASE                             0xF8803000ULL
-#define EMIO_SEL11                           0xF880342CULL
+//AL9100 config
+#define TOP_PIN_BASE_ADDR                    0xF8803000ULL
+#define TOP_PIN_201_BASE_ADDR                0xF8808000ULL
+#define EMIO_SEL11                           0xF880842CULL
 #define EMIO_SEL12                           0xF8803430ULL
 #define CFG_CTRL_SDIO1                       0xF8800150ULL
 #define CFG_CTRL_SDIO2                       0xF8800154ULL
 
-#define IO_BANK1_REF                         0xF8803C04ULL
-#define FAST_MODE_BASE                       0xF8803940ULL
+#define IO_BANK1_REF                         0xF8808C04ULL
+#define MIO_PARM_BASE                        0xF8808800ULL
+#define FAST_MODE_BASE                       0xF8803800ULL
 
 #define MMC_IO_BANK1_SUPPORT_1V8(reg)	     (reg & 0x1)
 #define MMC_IO_BANK1_SUPPORT_2V5(reg)	     ((reg & 0x2) >> 1)

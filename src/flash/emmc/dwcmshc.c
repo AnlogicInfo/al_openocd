@@ -51,12 +51,17 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 	}
 
 	status = dwcmshc_mio_init(emmc);
+	dwcmshc_fast_mode(emmc);
 	dwcmshc_emmc_ctl_init(emmc);
 	dwcmshc_emmc_interrupt_init(emmc);
 
+
 	status = dwcmshc_emmc_card_init(emmc, in_field);
-	if (status != ERROR_OK)
+	if (status != ERROR_OK) 
+	{
+		LOG_ERROR("card init fail");
 		return ERROR_FAIL;
+	}
 
 	status = dwcmshc_emmc_rd_ext_csd(emmc, in_field + 8);
 
@@ -64,7 +69,6 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 
 	dwcmshc_emmc_set_bus_width(emmc);
 
-	dwcmshc_fast_mode(emmc);
 	return status;
 }
 
