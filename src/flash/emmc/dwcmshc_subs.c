@@ -63,7 +63,10 @@ int dwcmshc_fast_mode(struct emmc_device *emmc)
 	} else {
 		for (num = 10; num < 16; num = num + 1) {
 			addr = FAST_MODE_BASE + (num << 3);
-			value = 0x0d000002;
+			if(num == 12)
+				value = 0x0c000007;
+			else
+				value = 0x0d000007;
 			status = target_write_u32(target,  addr, value);
 			LOG_DEBUG("fast mode addr %"TARGET_PRIxADDR " val %x", addr, value);
 			if (status != ERROR_OK)

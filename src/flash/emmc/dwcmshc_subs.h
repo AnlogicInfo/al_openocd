@@ -79,8 +79,8 @@ struct dwcmshc_emmc_controller {
 //AL9100 config
 #define TOP_PIN_BASE_ADDR                    0xF8803000ULL
 #define TOP_PIN_201_BASE_ADDR                0xF8808000ULL
-#define EMIO_SEL11                           0xF880842CULL
-#define EMIO_SEL12                           0xF8803430ULL
+#define EMIO_SEL11                           0xF880342CULL
+#define EMIO_SEL12                           0xF8808430ULL
 #define CFG_CTRL_SDIO1                       0xF8800150ULL
 #define CFG_CTRL_SDIO2                       0xF8800154ULL
 

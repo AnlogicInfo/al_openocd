@@ -2,60 +2,6 @@ This file includes highlights of the changes made in the OpenOCD
 source archive release.
 
 # history
-v0.1118
-1. Fix rbb buffer overflow issue
-2. Add cjtag support
-3. Add fespi & nuspi support
-4. Add sparse image support for NAND
-5. Fix device scan for usb hub device
-6. Updata rbb server code
-7. Add config for onecable setup
-8. Add script to exit lockdown state
-
-
-v0.1117
-1. Fix cwc $ apu co-debug issue
-2. Add ps-ps cross trigger debug
-3. Fix arm mode debug
-4. Enable EMMC 4bit mode
-5. Add sparse image support
-6. Update FTDI PID
-
-v0.1116
-1. Gd25q256d & Gd25lq255e support
-2. P25q128sh support
-3. EMMC1 program support
-4. Onecable support
-
-v0.1115
-1. Fix erase command for w25q01jv & gd25b512me
-
-v0.1114
-1. Add cache flush after load_image
-2. Update config file
-3. Udpate tap info
-4. Add process print for flash erase/write
-5. Fix jtag speed set
-
-v0.1113
-1. Add x4 support for qspi
-2. Add drive strength fos qspi mio
-3. Add print for reset process
-
-v0.1112
-1. Add custom mode for qspi flash
-2. Fix apu reset issue
-3. Add more spi flash support
-
-v0.1111
-1. Enable nand write image for dv board
-2. Enable emmc write image for dv/demo board
-3. Add emmc compatible mode
-4. Fix qspi verify issue
-
-v0.1110
-1. Workaround for apu step issue
-
-v0.1109
-1. Init release of openocd bring up version
-2. Enable qspi write image
+v1.0
+1. init release of openocd soc version
+2. enable qspi & emmc flash
