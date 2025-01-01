@@ -791,7 +791,7 @@ static int execute_abstract_command(struct target *target, uint32_t command)
 	if (debug_level >= LOG_LVL_DEBUG) {
 		switch (get_field(command, DM_COMMAND_CMDTYPE)) {
 			case 0:
-				LOG_DEBUG("command=0x%x; access register, size=%d, postexec=%d, "
+				LOG_DEBUG_IO("command=0x%x; access register, size=%d, postexec=%d, "
 						"transfer=%d, write=%d, regno=0x%x",
 						command,
 						8 << get_field(command, AC_ACCESS_REGISTER_AARSIZE),
@@ -801,7 +801,7 @@ static int execute_abstract_command(struct target *target, uint32_t command)
 						get_field(command, AC_ACCESS_REGISTER_REGNO));
 				break;
 			default:
-				LOG_DEBUG("command=0x%x", command);
+				LOG_DEBUG_IO("command=0x%x", command);
 				break;
 		}
 	}
@@ -1309,7 +1309,7 @@ static bool has_sufficient_progbuf(struct target *target, unsigned size)
 static int register_write_direct(struct target *target, unsigned number,
 		uint64_t value)
 {
-	LOG_TARGET_DEBUG(target, "%s <- 0x%" PRIx64, gdb_regno_name(number), value);
+	LOG_TARGET_DEBUG_IO(target, "%s <- 0x%" PRIx64, gdb_regno_name(number), value);
 
 	int result = register_write_abstract(target, number, value,
 			register_size(target, number));
@@ -1489,7 +1489,7 @@ static int register_read_direct(struct target *target, uint64_t *value, uint32_t
 	}
 
 	if (result == ERROR_OK)
-		LOG_TARGET_DEBUG(target, "%s = 0x%" PRIx64, gdb_regno_name(number), *value);
+		LOG_TARGET_DEBUG_IO(target, "%s = 0x%" PRIx64, gdb_regno_name(number), *value);
 
 	return result;
 }
@@ -2531,7 +2531,7 @@ static void log_memory_access(target_addr_t address, uint64_t value,
 		default:
 			assert(false);
 	}
-	LOG_DEBUG(fmt, value);
+	LOG_DEBUG_IO(fmt, value);
 }
 
 /* Read the relevant sbdata regs depending on size, and put the results into
@@ -2872,7 +2872,7 @@ static void log_mem_access_result(struct target *target, bool success, int metho
 	if (warn)
 		LOG_WARNING("%s", msg);
 	else
-		LOG_DEBUG("%s", msg);
+		LOG_DEBUG_IO("%s", msg);
 }
 
 static bool mem_should_skip_progbuf(struct target *target, target_addr_t address,
@@ -3292,7 +3292,7 @@ static int read_memory_progbuf_inner(struct target *target, target_addr_t addres
 		assert(index >= 2);
 		for (unsigned j = index - 2; j < index + reads; j++) {
 			assert(j < count);
-			LOG_DEBUG("index=%d, reads=%d, next_index=%d, ignore_last=%d, j=%d",
+			LOG_DEBUG_IO("index=%d, reads=%d, next_index=%d, ignore_last=%d, j=%d",
 				index, reads, next_index, ignore_last, j);
 			if (j + 3 + ignore_last > next_index)
 				break;
@@ -3451,7 +3451,7 @@ static int read_memory_progbuf(struct target *target, target_addr_t address,
 
 	int result = ERROR_OK;
 
-	LOG_DEBUG("reading %d words of %d bytes from 0x%" TARGET_PRIxADDR, count,
+	LOG_DEBUG_IO("reading %d words of %d bytes from 0x%" TARGET_PRIxADDR, count,
 			size, address);
 
 	if (dm013_select_target(target) != ERROR_OK)
@@ -3821,7 +3821,7 @@ static int write_memory_progbuf(struct target *target, target_addr_t address,
 		return ERROR_FAIL;
 	}
 
-	LOG_DEBUG("writing %d words of %d bytes to 0x%08lx", count, size, (long)address);
+	LOG_DEBUG_IO("writing %d words of %d bytes to 0x%08lx", count, size, (long)address);
 
 	select_dmi(target);
 
@@ -3877,9 +3877,9 @@ static int write_memory_progbuf(struct target *target, target_addr_t address,
 	riscv_addr_t cur_addr = address;
 	riscv_addr_t distance = (riscv_addr_t)count * size;
 	bool setup_needed = true;
-	LOG_DEBUG("writing until final address 0x%016" PRIx64, cur_addr + distance);
+	LOG_DEBUG_IO("writing until final address 0x%016" PRIx64, cur_addr + distance);
 	while (cur_addr - address < distance) {
-		LOG_DEBUG("transferring burst starting at address 0x%016" PRIx64,
+		LOG_DEBUG_IO("transferring burst starting at address 0x%016" PRIx64,
 				cur_addr);
 
 		struct riscv_batch *batch = riscv_batch_alloc(
@@ -3958,7 +3958,7 @@ static int write_memory_progbuf(struct target *target, target_addr_t address,
 				return ERROR_FAIL;
 		info->cmderr = get_field(abstractcs, DM_ABSTRACTCS_CMDERR);
 		if (info->cmderr == CMDERR_NONE && !dmi_busy_encountered) {
-			LOG_DEBUG("successful (partial?) memory write");
+			LOG_DEBUG_IO("successful (partial?) memory write");
 		} else if (info->cmderr == CMDERR_BUSY || dmi_busy_encountered) {
 			if (info->cmderr == CMDERR_BUSY)
 				LOG_DEBUG("Memory write resulted in abstract command busy response.");
@@ -4083,7 +4083,7 @@ struct target_type riscv013_target = {
 static int riscv013_get_register(struct target *target,
 		riscv_reg_t *value, int rid)
 {
-	LOG_DEBUG("[%s] reading register %s", target_name(target),
+	LOG_DEBUG_IO("[%s] reading register %s", target_name(target),
 			gdb_regno_name(rid));
 
 	if (dm013_select_target(target) != ERROR_OK)
@@ -4380,7 +4380,7 @@ int riscv013_write_debug_buffer(struct target *target, unsigned index, riscv_ins
 			return ERROR_FAIL;
 		dm->progbuf_cache[index] = data;
 	} else {
-		LOG_DEBUG("cache hit for 0x%" PRIx32 " @%d", data, index);
+		LOG_DEBUG_IO("cache hit for 0x%" PRIx32 " @%d", data, index);
 	}
 	return ERROR_OK;
 }

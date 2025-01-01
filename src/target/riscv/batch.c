@@ -88,7 +88,7 @@ bool riscv_batch_full(struct riscv_batch *batch)
 int riscv_batch_run(struct riscv_batch *batch)
 {
 	if (batch->used_scans == 0) {
-		LOG_DEBUG("Ignoring empty batch.");
+		LOG_DEBUG_IO("Ignoring empty batch.");
 		return ERROR_OK;
 	}
 
@@ -207,13 +207,13 @@ void dump_field(int idle, const struct scan_field *field)
 		unsigned int in_data = get_field(in, DTM_DMI_DATA);
 		unsigned int in_address = in >> DTM_DMI_ADDRESS_OFFSET;
 
-		log_printf_lf(LOG_LVL_DEBUG,
+		log_printf_lf(LOG_LVL_DEBUG_IO,
 				__FILE__, __LINE__, __PRETTY_FUNCTION__,
 				"%db %s %08x @%02x -> %s %08x @%02x; %di",
 				field->num_bits, op_string[out_op], out_data, out_address,
 				status_string[in_op], in_data, in_address, idle);
 	} else {
-		log_printf_lf(LOG_LVL_DEBUG,
+		log_printf_lf(LOG_LVL_DEBUG_IO,
 				__FILE__, __LINE__, __PRETTY_FUNCTION__, "%db %s %08x @%02x -> ?; %di",
 				field->num_bits, op_string[out_op], out_data, out_address, idle);
 	}
