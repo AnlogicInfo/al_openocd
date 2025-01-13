@@ -1515,6 +1515,7 @@ static int aarch64_unset_breakpoint(struct target *target, struct breakpoint *br
 	struct aarch64_common *aarch64 = target_to_aarch64(target);
 	struct armv8_common *armv8 = &aarch64->armv8_common;
 	struct aarch64_brp *brp_list = aarch64->brp_list;
+	uint8_t instr[8] = {0};
 
 	if (!breakpoint->is_set) {
 		LOG_WARNING("breakpoint not set");
@@ -1636,6 +1637,20 @@ static int aarch64_unset_breakpoint(struct target *target, struct breakpoint *br
 		armv8_cache_i_inner_inval_virt(armv8,
 				breakpoint->address & 0xFFFFFFFFFFFFFFFE,
 				breakpoint->length);
+
+
+		target_read_memory(target, breakpoint->address & 0xFFFFFFFFFFFFFFFE,
+		breakpoint->length, 1, instr);
+		if(instr != breakpoint->orig_instr) {
+			LOG_DEBUG("rewrite bp");
+			retval = target_write_memory(target,
+					breakpoint->address & 0xFFFFFFFFFFFFFFFE,
+					breakpoint->length, 1, breakpoint->orig_instr);
+
+			if(retval != ERROR_OK)
+				return retval;
+		}
+
 	}
 	breakpoint->is_set = false;
 
@@ -2378,8 +2393,6 @@ static int aarch64_read_cpu_memory(struct target *target,
 	struct arm *arm = &armv8->arm;
 	uint32_t dscr;
 
-	LOG_DEBUG("Reading CPU memory address 0x%016" PRIx64 " size %" PRIu32 " count %" PRIu32,
-			address, size, count);
 
 	if (target->state != TARGET_HALTED) {
 		LOG_WARNING("target not halted");
