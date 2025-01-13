@@ -2,6 +2,10 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1119
+1. Fix apu ir reset issued when cwc is on
+2. Fix apu breakpoint unset issue
+
 v0.1118
 1. Fix rbb buffer overflow issue
 2. Add cjtag support
