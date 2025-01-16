@@ -630,21 +630,18 @@ static int vexriscv_parse_cpu_file(struct command_context *cmd_ctx, struct targe
 				if(strcmp((char*)token.data.scalar.value,"iBus") == 0){
 					vexriscv->iBus = malloc(sizeof(struct BusInfo));
 					vexriscv_parse_busInfo(&parser, vexriscv->iBus);
-				}
-				else{
+				} else {
 					LOG_DEBUG("vexriscv YAML file did not declare IBUS\n");
 				}
 				if(strcmp((char*)token.data.scalar.value,"dBus") == 0){
 					vexriscv->dBus = malloc(sizeof(struct BusInfo));
 					vexriscv_parse_busInfo(&parser, vexriscv->dBus);
-				}
-				else{
+				} else {
 					LOG_DEBUG("vexriscv YAML file did not declare DBUS\n");
 				}
 				if(strcmp((char*)token.data.scalar.value,"debug") == 0){
 					vexriscv_parse_debugReport(&parser, vexriscv);
-				}
-				else{
+				} else {
 					LOG_DEBUG("vexriscv YAML file did not declare DM info\n");
 				}
 				break;
@@ -785,10 +782,10 @@ static int vexriscv_flush_caches(struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	int error;
-	if(vexriscv->iBus !=0 ){
-		if(vexriscv->iBus->flushInstructionsSize!=0)
-		{
-			if((error = vexriscv_flush_bus(target,vexriscv->iBus)) != ERROR_OK)
+	if (vexriscv->iBus != 0 ){
+		if (vexriscv->iBus->flushInstructionsSize != 0) {
+			error = vexriscv_flush_bus(target , vexriscv->iBus);
+			if (error != ERROR_OK)
 				return error;
 		}
 		else
@@ -796,17 +793,14 @@ static int vexriscv_flush_caches(struct target *target)
 	}
 	else
 		LOG_INFO("IBus data struct not init! why?");
-	if(vexriscv->dBus != 0)
-	{
-		if(vexriscv->dBus->flushInstructionsSize!=0)
-		{	
-			if((error = vexriscv_flush_bus(target,vexriscv->dBus)) != ERROR_OK)
+	if (vexriscv->dBus != 0) {
+		if (vexriscv->dBus->flushInstructionsSize != 0){
+			error = vexriscv_flush_bus(target , vexriscv->dBus);
+			if (error != ERROR_OK)
 				return error;
-		}
-		else
+		} else
 			LOG_INFO("System have no D-Cache, No need to flush D-Cache");
-	}
-	else
+	} else
 		LOG_INFO("DBus data struct not init! why?");
 	return ERROR_OK;
 }
@@ -819,11 +813,12 @@ static int vexriscv_save_context(struct target *target)
 
 
 	uint32_t flags;
-	if((error = vexriscv_readStatusRegister(target, true, &flags)) != ERROR_OK)
+	error = vexriscv_readStatusRegister(target, true, &flags);
+	if (error != ERROR_OK)
 		return error;
 
 	//get PC in case of breakpoint before losing the value
-	if(flags & vexriscv_FLAGS_HALTED_BY_BREAK){
+	if (flags & vexriscv_FLAGS_HALTED_BY_BREAK) {
 		struct reg* reg = &vexriscv->regs->pc;
 		vexriscv_readInstructionResult32(target, false, reg->value);
 		reg->valid = 1;
@@ -832,10 +827,12 @@ static int vexriscv_save_context(struct target *target)
 
 	for(uint32_t regId = 0;regId < 32;regId++){
 		struct reg* reg = &vexriscv->core_cache->reg_list[regId];
-		vexriscv_pushInstruction(target, false, 0x13 | (reg->number << 15)); //ADDI x0, x?, 0
+		//ADDI x0, x?, 0
+		vexriscv_pushInstruction(target, false, 0x13 | (reg->number << 15));
 		vexriscv_readInstructionResult32(target, false, reg->value);
 		reg->valid = 1;
-		reg->dirty = reg->number == 1 ? 1 : 0; //For safety, invalidate x1 for debugger purposes
+		//For safety, invalidate x1 for debugger purposes
+		reg->dirty = reg->number == 1 ? 1 : 0; 
 	}
 
 	// Mark all CSRs as "invalid"
@@ -848,7 +845,9 @@ static int vexriscv_save_context(struct target *target)
 	if(vexriscv_execute_jtag_queue(target))
 		return ERROR_FAIL;
 
-	if((error = vexriscv_flush_caches(target)) != ERROR_OK) //Flush instruction cache
+	//Flush instruction cache
+	error = vexriscv_flush_caches(target);
+	if (error != ERROR_OK) 
 		return error;
 
 	return ERROR_OK;
@@ -890,12 +889,14 @@ static int vexriscv_debug_entry(struct target *target)
 	int error;
 	LOG_DEBUG("-");
 
-	if ((error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET)) != ERROR_OK) {
+	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Impossible to stall the CPU");
 		return error;
 	}
 
-	if ((error = vexriscv_save_context(target)) != ERROR_OK) {
+	error = vexriscv_save_context(target);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Error while calling vexriscv_save_context");
 		return error;
 	}
@@ -923,7 +924,8 @@ static int vexriscv_halt(struct target *target)
 		}
 	}
 
-	if ((error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET)) != ERROR_OK) {
+	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Impossible to stall the CPU");
 		return error;
 	}
@@ -1140,13 +1142,13 @@ static int vexriscv_assert_reset(struct target *target)
 	LOG_DEBUG("vexriscv_assert_reset\n");
 	target->state = TARGET_RESET;
 
-	if ((error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET)) != ERROR_OK) {
+	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	if (error != ERROR_OK)
 		return error;
-	}
 
-	if ((error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET | vexriscv_FLAGS_RESET_SET)) != ERROR_OK) {
+	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET | vexriscv_FLAGS_RESET_SET);
+	if (error != ERROR_OK)
 		return error;
-	}
 
 
 	// Resetting the CPU causes the program counter to jump to the reset vector.
@@ -1162,9 +1164,9 @@ static int vexriscv_deassert_reset(struct target *target)
 	int error;
 	LOG_DEBUG("vexriscv_deassert_reset\n");
 
-	if ((error = vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_CLEAR)) != ERROR_OK) {
+	error = vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_CLEAR);
+	if (error != ERROR_OK)
 		return error;
-	}
 
 	usleep(200000);
 
@@ -2154,16 +2156,18 @@ static int vexriscv_soft_reset_halt(struct target *target)
 	int error;
 	LOG_DEBUG("-");
 
-
-	if ((error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET)) != ERROR_OK) {
+	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Error while soft_reset_halt the CPU");
 		return error;
 	}
-	if ((error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_SET)) != ERROR_OK) {
+	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_SET);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Error while soft_reset_halt the CPU");
 		return error;
 	}
-	if ((error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_CLEAR)) != ERROR_OK) {
+	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_CLEAR);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Error while soft_reset_halt the CPU");
 		return error;
 	}
