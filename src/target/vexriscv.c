@@ -44,29 +44,6 @@
 #define FALSE 0
 #define TRUE 1
 
-/* Contains constants relevant to the Altera Virtual JTAG
- * device, which are not included in the BSDL.
- * As of this writing, these are constant across every
- * device which supports virtual JTAG.
- */
-
-/* These are commands for the FPGA's IR. */
-// #define ALTERA_CYCLONE_CMD_USER1 0x0E
-// #define ALTERA_CYCLONE_CMD_USER0 0x0C
-
-// /* These defines are for the virtual IR (not the FPGA's)
-//  * The virtual TAP was defined in hardware to match the OpenCores native
-//  * TAP in both IR size and DEBUG command.
-//  */
-// #define ALT_VJTAG_IR_SIZE 4
-// #define ALT_VJTAG_CMD_DEBUG 0x8
-
-// /* SLD node ID. */
-// #define JTAG_TO_AVALON_NODE_ID 0x84
-// #define VJTAG_NODE_ID 0x08
-// #define SIGNAL_TAP_NODE_ID 0x00
-
-// #define SERIAL_FLASH_LOADER_NODE_ID 0x04
 
 #define VER(x) ((x >> 27) & 0x1f)
 #define NB_NODES(x) ((x >> 19) & 0xff)
@@ -75,44 +52,6 @@
 #define M_WIDTH(x) ((x >> 0) & 0xff)
 #define INST_ID(x) ((x >> 0) & 0xff)
 
-// Some helper functions for VJTAG implementation
-/*
-static const char *id_to_string(unsigned char id)
-{
-	switch (id)
-	{
-	case VJTAG_NODE_ID:
-		return "Virtual JTAG";
-	case JTAG_TO_AVALON_NODE_ID:
-		return "JTAG to avalon bridge";
-	case SIGNAL_TAP_NODE_ID:
-		return "Signal TAP";
-	case SERIAL_FLASH_LOADER_NODE_ID:
-		return "Serial Flash Loader";
-	}
-	return "unknown";
-}
-struct VJTAGParams
-{
-	int vjtag_node_address;
-	int nb_nodes;
-	int m_width;
-};
-*/
-/*
-static unsigned char guess_addr_width(unsigned char number_of_nodes)
-{
-	unsigned char width = 0;
-
-	while (number_of_nodes)
-	{
-		number_of_nodes >>= 1;
-		width++;
-	}
-
-	return width;
-}
-*/
 struct BusInfo{
 	uint32_t flushInstructionsSize;
 	uint32_t *flushInstructions;
@@ -149,8 +88,6 @@ struct vexriscv_common {
     uint32_t jtagCmdHeader;
     uint32_t jtagCmdHeaderSize;
     uint32_t jtagCmdIgnoreSize;
-	// bool useVJTAG;
-	// struct VJTAGParams *vjtagParams;
 };
 
 static inline struct vexriscv_common *
@@ -221,9 +158,6 @@ void vexriscv_semihosting_init(struct target *target)
 	semihosting_common_init(target, vexriscv_semihosting_setup,
 		vexriscv_semihosting_post_result);
 }
-
-
-
 
 
 static int vexriscv_create_reg_list(struct target *target)
@@ -316,18 +250,19 @@ int vexriscv_write_regfile(struct target* target, bool execute,uint32_t regId,ui
 	assert(regId <= 32);
 	if(value & 0xFFFFF800){ //Require LUI
 		uint32_t high = value & 0xFFFFF000, low = value & 0x00000FFF;
-		if(low & 0x800){
+
+		if (low & 0x800)
 			high += 0x1000;
-		}
+
 		if(low){ //require ADDI
 			vexriscv_pushInstruction(target, false , 0x37 | (regId << 7) | high); //LUI regId, high
 			return vexriscv_pushInstruction(target, execute , 0x13 | (regId << 7) | (regId << 15) | (low << 20));//ADDI regId, regId, low
-		} else {
+		} else
 			return vexriscv_pushInstruction(target, execute , 0x37 | (regId << 7) | high); //LUI regId, high
-		}
-	}else {
+
+	} else
 		return vexriscv_pushInstruction(target,execute , 0x13 | (regId << 7) | (6 << 12) | (value << 20)); //ORI regId, x0, value
-	}
+
 }
 
 
@@ -342,9 +277,9 @@ static int vexriscv_get_core_reg(struct reg *reg)
 		return ERROR_TARGET_NOT_HALTED;
 
 	if (!reg->valid) {
-		if(reg->number < 32){
+		if (reg->number < 32)
 			return ERROR_FAIL;
-		}else if(reg->number == 32){
+		else if (reg->number == 32) {
 			vexriscv_pushInstruction(target, false, 0x17); //AUIPC x0,0
 			vexriscv_readInstructionResult32(target, true, reg->value);
 		}else if (vexriscv_reg->is_csr) {
@@ -359,11 +294,8 @@ static int vexriscv_get_core_reg(struct reg *reg)
 				| (0x73 << 0)	// SYSTEM
 			);
 			vexriscv_readInstructionResult32(target, false, reg->value);
-		}
-		else {
+		} else
 			buf_set_u32(reg->value, 0, 32, 0xDEADBEEF);
-		}
-
 		reg->valid = true;
 		reg->dirty = false;
 	}
@@ -490,44 +422,13 @@ static void vexriscv_set_instr(struct target *target, uint32_t new_instr)
 	if(!target->tap->bypass && buf_get_u32(target->tap->cur_instr, 0, target->tap->ir_length) == new_instr) return;
 	vexriscv->bridgeInstruction = new_instr;
 	
-	// if (vexriscv->useVJTAG)
-	// {
-	// 	uint8_t t[4] = {0};
-
-	// 	// If using VJTAG an IR must be converted to a VIR like so
-
-	// 	/* Select VIR */
-	// 	buf_set_u32(t, 0, tap->ir_length, ALTERA_CYCLONE_CMD_USER1);
-	// 	field.num_bits = tap->ir_length;
-	// 	field.out_value = t;
-	// 	field.in_value = NULL;
-	// 	jtag_add_ir_scan(tap, &field, TAP_IDLE);
-
-	// 	/* Send the DEBUG command to the VJTAG IR */
-	// 	int dr_length = guess_addr_width(vexriscv->vjtagParams->nb_nodes) + vexriscv->vjtagParams->m_width;
-	// 	buf_set_u32(t, 0, dr_length, (vexriscv->vjtagParams->vjtag_node_address << vexriscv->vjtagParams->m_width) | new_instr);
-	// 	field.num_bits = dr_length;
-	// 	field.out_value = t;
-	// 	field.in_value = NULL;
-	// 	jtag_add_dr_scan(tap, 1, &field, TAP_IDLE);
-
-	// 	/* Select the VJTAG DR */
-	// 	buf_set_u32(t, 0, tap->ir_length, ALTERA_CYCLONE_CMD_USER0);
-	// 	field.num_bits = tap->ir_length;
-	// 	field.out_value = t;
-	// 	field.in_value = NULL;
-	// 	jtag_add_ir_scan(tap, &field, TAP_IDLE);
-	// }
-	// else
-	// {
-		field.num_bits = tap->ir_length;
-		uint8_t *t = calloc(DIV_ROUND_UP(field.num_bits, 8), 1);
-		field.out_value = t;
-		buf_set_u32(t, 0, field.num_bits, new_instr);
-		field.in_value = NULL;
-		jtag_add_ir_scan(tap, &field, TAP_IDLE);
-		free(t);
-	// }
+	field.num_bits = tap->ir_length;
+	uint8_t *t = calloc(DIV_ROUND_UP(field.num_bits, 8), 1);
+	field.out_value = t;
+	buf_set_u32(t, 0, field.num_bits, new_instr);
+	field.in_value = NULL;
+	jtag_add_ir_scan(tap, &field, TAP_IDLE);
+	free(t);
 }
 
 static void vexriscv_yaml_ignore_block(yaml_parser_t *parser){
@@ -1901,205 +1802,6 @@ static int vexriscv_examine(struct target *target)
 
 		target_set_examined(target);
 
-		// initalise the VJTAG (code directly from or1k_tap_vjtag.c)
-		//if (vexriscv->useVJTAG)
-		// {
-		// 	LOG_DEBUG("Initialising Altera Virtual JTAG TAP");
-
-		// 	/* Put TAP into state where it can talk to the debug interface
-		// 	 * by shifting in correct value to IR.
-		// 	 */
-
-		// 	/* Ensure TAP is reset - maybe not necessary*/
-		// 	jtag_add_tlr();
-
-		// 	/* You can use a custom JTAG controller to discover transactions
-		// 	 * necessary to enumerate all Virtual JTAG megafunction instances
-		// 	 * from your design at runtime. All SLD nodes and the virtual JTAG
-		// 	 * registers that they contain are targeted by two Instruction Register
-		// 	 * values, USER0 and USER1.
-		// 	 *
-		// 	 * The USER1 instruction targets the virtual IR of either the sld_hub
-		// 	 * or a SLD node. That is,when the USER1 instruction is issued to
-		// 	 * the device, the subsequent DR scans target a specific virtual
-		// 	 * IR chain based on an address field contained within the DR scan.
-		// 	 * The table below shows how the virtual IR, the DR target of the
-		// 	 * USER1 instruction is interpreted.
-		// 	 *
-		// 	 * The VIR_VALUE in the table below is the virtual IR value for the
-		// 	 * target SLD node. The width of this field is m bits in length,
-		// 	 * where m is the length of the largest VIR for all of the SLD nodes
-		// 	 * in the design. All SLD nodes with VIR lengths of fewer than m
-		// 	 * bits must pad VIR_VALUE with zeros up to a length of m.
-		// 	 *
-		// 	 * -------------------------------+-------------------------------
-		// 	 * m + n - 1                   m  |  m -1                       0
-		// 	 * -------------------------------+-------------------------------
-		// 	 *     ADDR [(n – 1)..0]          |     VIR_VALUE [(m – 1)..0]
-		// 	 * -------------------------------+-------------------------------
-		// 	 *
-		// 	 * The ADDR bits act as address values to signal the active SLD node
-		// 	 * that the virtual IR shift targets. ADDR is n bits in length, where
-		// 	 * n bits must be long enough to encode all SLD nodes within the design,
-		// 	 * as shown below.
-		// 	 *
-		// 	 * n = CEIL(log2(Number of SLD_nodes +1))
-		// 	 *
-		// 	 * The SLD hub is always 0 in the address map.
-		// 	 *
-		// 	 * Discovery and enumeration of the SLD instances within a design
-		// 	 * requires interrogation of the sld_hub to determine the dimensions
-		// 	 * of the USER1 DR (m and n) and associating each SLD instance, specifically
-		// 	 * the Virtual JTAG megafunction instances, with an address value
-		// 	 * contained within the ADDR bits of the USER1 DR.
-		// 	 *
-		// 	 * The SLD hub contains the HUB IP Configuration Register and SLD_NODE_INFO
-		// 	 * register for each SLD node in the design. The HUB IP configuration register provides
-		// 	 * information needed to determine the dimensions of the USER1 DR chain. The
-		// 	 * SLD_NODE_INFO register is used to determine the address mapping for Virtual
-		// 	 * JTAG instance in your design. This register set is shifted out by issuing the
-		// 	 * HUB_INFO instruction. Both the ADDR bits for the SLD hub and the HUB_INFO
-		// 	 * instruction is 0 × 0.
-		// 	 * Because m and n are unknown at this point, the DR register
-		// 	 * (ADDR bits + VIR_VALUE) must be filled with zeros. Shifting a sequence of 64 zeroes
-		// 	 * into the USER1 DR is sufficient to cover the most conservative case for m and n.
-		// 	 */
-
-		// 	uint8_t t[4] = {0};
-		// 	struct scan_field field;
-		// 	struct jtag_tap *tap = vexriscv->tap;
-
-		// 	/* Select VIR */
-		// 	buf_set_u32(t, 0, tap->ir_length, ALTERA_CYCLONE_CMD_USER1);
-		// 	field.num_bits = tap->ir_length;
-		// 	field.out_value = t;
-		// 	field.in_value = NULL;
-		// 	jtag_add_ir_scan(tap, &field, TAP_IDLE);
-
-		// 	/* Select the SLD Hub */
-		// 	field.num_bits = 64;
-		// 	field.out_value = NULL;
-		// 	field.in_value = NULL;
-		// 	jtag_add_dr_scan(tap, 1, &field, TAP_IDLE);
-
-		// 	/* HUB IP Configuration Register
-		// 	 *
-		// 	 * When the USER1 and HUB_INFO instruction sequence is issued, the
-		// 	 * USER0 instruction must be applied to enable the target register
-		// 	 * of the HUB_INFO instruction. The HUB IP configuration register
-		// 	 * is shifted out using eight four-bit nibble scans of the DR register.
-		// 	 * Each four-bit scan must pass through the UPDATE_DR state before
-		// 	 * the next four-bit scan. The 8 scans are assembled into a 32-bit
-		// 	 * value with the definitions shown in the table below.
-		// 	 *
-		// 	 * --------------------------------------------------------------------------------
-		// 	 *  NIBBLE7 | NIBBLE6 | NIBBLE5 | NIBBLE4 | NIBBLE3 | NIBBLE2 | NIBBLE1 | NIBBLE0
-		// 	 * ----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+-----
-		// 	 *     |    |    |    |    |    |    |    |    |    |    |    |    |    |    |
-		// 	 * ----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+-----
-		// 	 * HUB IP version|         N         | ALTERA_MFG_ID (0x06E)  |     SUM (m, n)
-		// 	 * --------------+-------------------+------------------------+--------------------
-		// 	 */
-
-		// 	/* Select VDR */
-		// 	buf_set_u32(t, 0, tap->ir_length, ALTERA_CYCLONE_CMD_USER0);
-		// 	field.num_bits = tap->ir_length;
-		// 	field.out_value = t;
-		// 	field.in_value = NULL;
-		// 	jtag_add_ir_scan(tap, &field, TAP_IDLE);
-
-		// 	int retval = jtag_execute_queue();
-		// 	if (retval != ERROR_OK)
-		// 		return retval;
-
-		// 	uint8_t nibble;
-		// 	uint32_t hub_info = 0;
-
-		// 	for (int i = 0; i < 8; i++)
-		// 	{
-		// 		field.num_bits = 4;
-		// 		field.out_value = NULL;
-		// 		field.in_value = &nibble;
-		// 		jtag_add_dr_scan(tap, 1, &field, TAP_IDLE);
-		// 		retval = jtag_execute_queue();
-		// 		if (retval != ERROR_OK)
-		// 			return retval;
-		// 		hub_info = ((hub_info >> 4) | ((nibble & 0xf) << 28));
-		// 	}
-
-		// 	int nb_nodes = NB_NODES(hub_info);
-		// 	int m_width = M_WIDTH(hub_info);
-
-		// 	LOG_DEBUG("SLD HUB Configuration register");
-		// 	LOG_DEBUG("------------------------------");
-		// 	LOG_DEBUG("m_width         = %d", m_width);
-		// 	LOG_DEBUG("manufacturer_id = 0x%02" PRIx32, MANUF(hub_info));
-		// 	LOG_DEBUG("nb_of_node      = %d", nb_nodes);
-		// 	LOG_DEBUG("version         = %" PRIu32, VER(hub_info));
-		// 	LOG_DEBUG("VIR length      = %d", guess_addr_width(nb_nodes) + m_width);
-
-		// 	/* Because the number of SLD nodes is now known, the Nodes on the hub can be
-		// 	 * enumerated by repeating the 8 four-bit nibble scans, once for each Node,
-		// 	 * to yield the SLD_NODE_INFO register of each Node. The DR nibble shifts
-		// 	 * are a continuation of the HUB_INFO DR shift used to shift out the Hub IP
-		// 	 * Configuration register.
-		// 	 *
-		// 	 * The order of the Nodes as they are shifted out determines the ADDR
-		// 	 * values for the Nodes, beginning with, for the first Node SLD_NODE_INFO
-		// 	 * shifted out, up to and including, for the last node on the hub. The
-		// 	 * tables below show the SLD_NODE_INFO register and a their functional descriptions.
-		// 	 *
-		// 	 *  --------------+-----------+---------------+----------------
-		// 	 *   31        27 | 26     19 | 18          8 | 7            0
-		// 	 *  --------------+-----------+---------------+----------------
-		// 	 *   Node Version |  NODE ID  |  NODE MFG_ID  |  NODE INST ID
-		// 	 *
-		// 	 */
-
-		// 	int vjtag_node_address = -1;
-		// 	int node_index;
-		// 	uint32_t node_info = 0;
-		// 	for (node_index = 0; node_index < nb_nodes; node_index++)
-		// 	{
-
-		// 		for (int i = 0; i < 8; i++)
-		// 		{
-		// 			field.num_bits = 4;
-		// 			field.out_value = NULL;
-		// 			field.in_value = &nibble;
-		// 			jtag_add_dr_scan(tap, 1, &field, TAP_IDLE);
-		// 			retval = jtag_execute_queue();
-		// 			if (retval != ERROR_OK)
-		// 				return retval;
-		// 			node_info = ((node_info >> 4) | ((nibble & 0xf) << 28));
-		// 		}
-
-		// 		LOG_DEBUG("Node info register");
-		// 		LOG_DEBUG("--------------------");
-		// 		LOG_DEBUG("instance_id     = %" PRIu32, ID(node_info));
-		// 		LOG_DEBUG("manufacturer_id = 0x%02" PRIx32, MANUF(node_info));
-		// 		LOG_DEBUG("node_id         = %" PRIu32 " (%s)", ID(node_info),
-		// 				  id_to_string(ID(node_info)));
-		// 		LOG_DEBUG("version         = %" PRIu32, VER(node_info));
-
-		// 		if (ID(node_info) == VJTAG_NODE_ID)
-		// 			vjtag_node_address = node_index + 1;
-		// 	}
-
-		// 	if (vjtag_node_address < 0)
-		// 	{
-		// 		LOG_ERROR("No VJTAG TAP instance found !");
-		// 		return ERROR_FAIL;
-		// 	}
-		// 	else
-		// 	{
-		// 		vexriscv->vjtagParams = malloc(sizeof(struct VJTAGParams));
-		// 		vexriscv->vjtagParams->vjtag_node_address = vjtag_node_address;
-		// 		vexriscv->vjtagParams->nb_nodes = nb_nodes;
-		// 		vexriscv->vjtagParams->m_width = m_width;
-		// 	}
-		// }
-
 		uint32_t halted;
 		int retval = vexriscv_is_halted(target,&halted);
 
@@ -2363,19 +2065,7 @@ COMMAND_HANDLER(vexriscv_handle_networkProtocol_command)
 	}
 	return ERROR_OK;
 }
-/*
-COMMAND_HANDLER(vexriscv_handle_useVjtag_command)
-{
-	if (CMD_ARGC != 1)
-		return ERROR_COMMAND_ARGUMENT_INVALID;
 
-	struct target *target = get_current_target(CMD_CTX);
-	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	COMMAND_PARSE_BOOL(CMD_ARGV[0], vexriscv->useVJTAG, "true", "false");
-
-	return ERROR_OK;
-}
-*/
 static const struct command_registration vexriscv_exec_command_handlers[] = {
         {
             .name = "jtagMapping",
@@ -2408,14 +2098,7 @@ static const struct command_registration vexriscv_exec_command_handlers[] = {
 			.mode = COMMAND_CONFIG,
 			.help = "Network protocol to use (iverilog, etherbone)",
 			.usage = "iverilog,etherbone",
-		}/*,
-		{
-		.name = "useVjtag",
-		.handler = vexriscv_handle_useVjtag_command,
-		.mode = COMMAND_CONFIG,
-		.help = "Use Intel VJTAG instead of JTAG, used for Altera FPGAs (VexRiscV must be configured to use VJTAG)",
-		.usage = "true/false",
-		}*/,
+		},
 	COMMAND_REGISTRATION_DONE
 };
 
