@@ -631,12 +631,21 @@ static int vexriscv_parse_cpu_file(struct command_context *cmd_ctx, struct targe
 					vexriscv->iBus = malloc(sizeof(struct BusInfo));
 					vexriscv_parse_busInfo(&parser, vexriscv->iBus);
 				}
+				else{
+					LOG_DEBUG("vexriscv YAML file did not declare IBUS\n");
+				}
 				if(strcmp((char*)token.data.scalar.value,"dBus") == 0){
 					vexriscv->dBus = malloc(sizeof(struct BusInfo));
 					vexriscv_parse_busInfo(&parser, vexriscv->dBus);
 				}
+				else{
+					LOG_DEBUG("vexriscv YAML file did not declare DBUS\n");
+				}
 				if(strcmp((char*)token.data.scalar.value,"debug") == 0){
 					vexriscv_parse_debugReport(&parser, vexriscv);
+				}
+				else{
+					LOG_DEBUG("vexriscv YAML file did not declare DM info\n");
 				}
 				break;
 			case YAML_BLOCK_ENTRY_TOKEN: vexriscv_yaml_ignore_block(&parser); break;
@@ -776,20 +785,29 @@ static int vexriscv_flush_caches(struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	int error;
-	if(vexriscv->iBus->flushInstructionsSize!=0)
+	if(vexriscv->iBus !=0 ){
+		if(vexriscv->iBus->flushInstructionsSize!=0)
+		{
+			if((error = vexriscv_flush_bus(target,vexriscv->iBus)) != ERROR_OK)
+				return error;
+		}
+		else
+			LOG_INFO("System have no I-Cache, No need to flush I-Cache");
+	}
+	else
+		LOG_INFO("IBus data struct not init! why?");
+	if(vexriscv->dBus != 0)
 	{
-		if((error = vexriscv_flush_bus(target,vexriscv->iBus)) != ERROR_OK)
-			return error;
+		if(vexriscv->dBus->flushInstructionsSize!=0)
+		{	
+			if((error = vexriscv_flush_bus(target,vexriscv->dBus)) != ERROR_OK)
+				return error;
+		}
+		else
+			LOG_INFO("System have no D-Cache, No need to flush D-Cache");
 	}
 	else
-		LOG_INFO("System have no I-Cache, No need to flush I-Cache");
-	if(vexriscv->dBus->flushInstructionsSize!=0)
-	{	
-		if((error = vexriscv_flush_bus(target,vexriscv->dBus)) != ERROR_OK)
-			return error;
-	}
-	else
-		LOG_INFO("System have no D-Cache, No need to flush D-Cache");
+		LOG_INFO("DBus data struct not init! why?");
 	return ERROR_OK;
 }
 
