@@ -1,6 +1,8 @@
 /***************************************************************************
  *   Copyright (C) 2015 by Esben Haabendal                                 *
  *   eha@deif.com                                                          *
+ *   2024 by Xiaoyu Hong                                                   *
+ *   <xiaoyu.hong@anlogic.com>											   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -47,7 +49,6 @@
 #define FALSE 0
 #define TRUE 1
 
-
 #define VER(x) ((x >> 27) & 0x1f)
 #define NB_NODES(x) ((x >> 19) & 0xff)
 #define ID(x) ((x >> 19) & 0xff)
@@ -55,7 +56,7 @@
 #define M_WIDTH(x) ((x >> 0) & 0xff)
 #define INST_ID(x) ((x >> 0) & 0xff)
 
-struct BusInfo{
+struct BusInfo {
 	uint32_t flushInstructionsSize;
 	uint32_t *flushInstructions;
 };
@@ -68,38 +69,36 @@ struct vexriscv_common {
 	struct vexriscv_core_reg *arch_info;
 	uint32_t dbgBase;
 	uint32_t readWaitCycles;
-	char* cpuConfigFile;
+	char *cpuConfigFile;
 	char *targetAddress;
-	struct BusInfo* iBus, *dBus;
+	struct BusInfo *iBus, *dBus;
 	int hardwareBreakpointsCount;
 	bool *hardwareBreakpointUsed;
 	uint32_t bridgeInstruction;
-    uint32_t jtagRspInstruction;
-    uint32_t jtagRspHeader;
-    uint32_t jtagRspHeaderSize;
-    uint32_t jtagRspIgnoreSize;
-    uint32_t jtagCmdInstruction;
-    uint32_t jtagCmdHeader;
-    uint32_t jtagCmdHeaderSize;
-    uint32_t jtagCmdIgnoreSize;
+	uint32_t jtagRspInstruction;
+	uint32_t jtagRspHeader;
+	uint32_t jtagRspHeaderSize;
+	uint32_t jtagRspIgnoreSize;
+	uint32_t jtagCmdInstruction;
+	uint32_t jtagCmdHeader;
+	uint32_t jtagCmdHeaderSize;
+	uint32_t jtagCmdIgnoreSize;
 };
 
-static inline struct vexriscv_common *
-target_to_vexriscv(struct target *target)
+static inline struct vexriscv_common *target_to_vexriscv(struct target *target)
 {
 	return (struct vexriscv_common *)target->arch_info;
 }
 
 struct vexriscv_core_reg {
 	const char *name;
-	uint32_t list_num;   /* Index in register cache */
-	uint32_t csr_num;    /* Number in architecture's SPR space */
-	uint32_t is_csr;     /* False for x0, x1, etc. */
+	uint32_t list_num;	/* Index in register cache */
+	uint32_t csr_num;	/* Number in architecture's SPR space */
+	uint32_t is_csr;	/* False for x0, x1, etc. */
 	uint32_t inHaltOnly;
 	struct target *target;
 	struct vexriscv_common *vexriscv_common;
 };
-
 
 static struct vexriscv_core_reg *vexriscv_core_reg_list_arch_info;
 
@@ -150,9 +149,8 @@ static int vexriscv_semihosting_post_result(struct target *target);
 void vexriscv_semihosting_init(struct target *target)
 {
 	semihosting_common_init(target, vexriscv_semihosting_setup,
-		vexriscv_semihosting_post_result);
+				vexriscv_semihosting_post_result);
 }
-
 
 static int vexriscv_create_reg_list(struct target *target)
 {
@@ -161,100 +159,109 @@ static int vexriscv_create_reg_list(struct target *target)
 
 	unsigned int i;
 
-	// GDB CSR numbers are offset by 65.  That is, Risc-V CSR0 is
-	// GDB register number 65.
+	/* GDB CSR numbers are offset by 65.  That is, Risc-V CSR0 is */
+	/* GDB register number 65. */
 	for (i = 0; i < ARRAY_SIZE(vexriscv_init_reg_list); i++)
-		if (vexriscv_init_reg_list[i].is_csr && (vexriscv_init_reg_list[i].csr_num > vexriscv->largest_csr))
-			vexriscv->largest_csr = vexriscv_init_reg_list[i].csr_num;
+		if (vexriscv_init_reg_list[i].is_csr
+		    && (vexriscv_init_reg_list[i].csr_num >
+			vexriscv->largest_csr))
+			vexriscv->largest_csr =
+			    vexriscv_init_reg_list[i].csr_num;
 	vexriscv->largest_csr += 65;
 
-	vexriscv_core_reg_list_arch_info = malloc((vexriscv->largest_csr+1) *
-				       sizeof(struct vexriscv_core_reg));
-	memset(vexriscv_core_reg_list_arch_info, 0, (vexriscv->largest_csr+1) *
-				       sizeof(struct vexriscv_core_reg));
+	vexriscv_core_reg_list_arch_info = malloc((vexriscv->largest_csr + 1) *
+						  sizeof(struct
+							 vexriscv_core_reg));
+	memset(vexriscv_core_reg_list_arch_info, 0,
+	       (vexriscv->largest_csr + 1) * sizeof(struct vexriscv_core_reg));
 
 	for (i = 0; i < (int)ARRAY_SIZE(vexriscv_init_reg_list); i++) {
 		int gdb_reg_num = i;
 
-		// Offset the CSR register numbers by 65 in the array.
+		/* Offset the CSR register numbers by 65 in the array. */
 		if (vexriscv_init_reg_list[i].is_csr)
 			gdb_reg_num = 65 + vexriscv_init_reg_list[i].csr_num;
 
-		vexriscv_core_reg_list_arch_info[gdb_reg_num].name = vexriscv_init_reg_list[i].name;
+		vexriscv_core_reg_list_arch_info[gdb_reg_num].name =
+		    vexriscv_init_reg_list[i].name;
 
-		// csr_num is the value that's used for instruction encoding.
-		vexriscv_core_reg_list_arch_info[gdb_reg_num].csr_num = vexriscv_init_reg_list[i].csr_num;
+		/* csr_num is the value that's used for instruction encoding. */
+		vexriscv_core_reg_list_arch_info[gdb_reg_num].csr_num =
+		    vexriscv_init_reg_list[i].csr_num;
 
-		vexriscv_core_reg_list_arch_info[gdb_reg_num].is_csr = vexriscv_init_reg_list[i].is_csr;
-		vexriscv_core_reg_list_arch_info[gdb_reg_num].inHaltOnly = vexriscv_init_reg_list[i].inHaltOnly;
+		vexriscv_core_reg_list_arch_info[gdb_reg_num].is_csr =
+		    vexriscv_init_reg_list[i].is_csr;
+		vexriscv_core_reg_list_arch_info[gdb_reg_num].inHaltOnly =
+		    vexriscv_init_reg_list[i].inHaltOnly;
 		vexriscv_core_reg_list_arch_info[gdb_reg_num].list_num = i;
 		vexriscv_core_reg_list_arch_info[gdb_reg_num].target = NULL;
-		vexriscv_core_reg_list_arch_info[gdb_reg_num].vexriscv_common = NULL;
+		vexriscv_core_reg_list_arch_info[gdb_reg_num].vexriscv_common =
+		    NULL;
 	}
 
 	vexriscv->nb_regs = vexriscv->largest_csr;
 
-
 	return ERROR_OK;
 }
 
-
-static int vexriscv_target_create(struct target *target, Jim_Interp *interp)
+static int vexriscv_target_create(struct target *target, Jim_Interp * interp)
 {
 	LOG_DEBUG("vexriscv_target_create\n");
 	if (target->tap == NULL)
 		return ERROR_FAIL;
 
-	struct vexriscv_common *vexriscv = calloc(1, sizeof(struct vexriscv_common));
+	struct vexriscv_common *vexriscv =
+	    calloc(1, sizeof(struct vexriscv_common));
 	target->arch_info = vexriscv;
 	vexriscv->dbgBase = target->dbgbase;
 	vexriscv->tap = target->tap;
-    vexriscv->readWaitCycles = 10;
+	vexriscv->readWaitCycles = 10;
 
-
-    vexriscv->jtagCmdInstruction = 2;
-    vexriscv->jtagRspInstruction = 3;
-    vexriscv->jtagCmdHeader = 0;
-    vexriscv->jtagRspHeader = 0;
-    vexriscv->jtagCmdHeaderSize = 0;
-    vexriscv->jtagRspHeaderSize = 0;
-    vexriscv->jtagCmdIgnoreSize = 0;
-    vexriscv->jtagRspIgnoreSize = 0;
+	vexriscv->jtagCmdInstruction = 2;
+	vexriscv->jtagRspInstruction = 3;
+	vexriscv->jtagCmdHeader = 0;
+	vexriscv->jtagRspHeader = 0;
+	vexriscv->jtagCmdHeaderSize = 0;
+	vexriscv->jtagRspHeaderSize = 0;
+	vexriscv->jtagCmdIgnoreSize = 0;
+	vexriscv->jtagRspIgnoreSize = 0;
 
 	vexriscv_create_reg_list(target);
 	vexriscv->hardwareBreakpointsCount = 0;
 	vexriscv->bridgeInstruction = -1;
 
-
 	return ERROR_OK;
 }
 
-static int vexriscv_execute_jtag_queue(struct target *target) {
-
+static int vexriscv_execute_jtag_queue(struct target *target)
+{
 	return jtag_execute_queue();
 }
 
-int vexriscv_write_regfile(struct target* target, bool execute,uint32_t regId,uint32_t value){
+int vexriscv_write_regfile(struct target *target, bool execute, uint32_t regId,
+			   uint32_t value)
+{
 	assert(regId <= 32);
-	if(value & 0xFFFFF800){ //Require LUI
+	/* Require LUI */
+	if (value & 0xFFFFF800) {
 		uint32_t high = value & 0xFFFFF000, low = value & 0x00000FFF;
 
 		if (low & 0x800)
 			high += 0x1000;
-
-		if(low){ //require ADDI
-			vexriscv_pushInstruction(target, false , 0x37 | (regId << 7) | high); //LUI regId, high
-			return vexriscv_pushInstruction(target, execute , 0x13 | (regId << 7) | (regId << 15) | (low << 20));//ADDI regId, regId, low
+		/* require ADDI */
+		if (low) {
+			vexriscv_pushInstruction(target, false, 0x37 | (regId << 7) | high);	/* LUI regId, high */
+			return vexriscv_pushInstruction(target, execute, 0x13 | (regId << 7) |
+				(regId << 15) | (low << 20));	/* ADDI regId, regId, low */
 		} else
-			return vexriscv_pushInstruction(target, execute , 0x37 | (regId << 7) | high); //LUI regId, high
+			return vexriscv_pushInstruction(target, execute, 0x37 | (regId << 7) | high);	/* LUI regId, high */
 
 	} else
-		return vexriscv_pushInstruction(target,execute , 0x13 | (regId << 7) | (6 << 12) | (value << 20)); //ORI regId, x0, value
+		return vexriscv_pushInstruction(target, execute, 0x13 | (regId << 7) |
+			(6 << 12) | (value << 20));	/* ORI regId, x0, value */
 
+	LOG_DEBUG("Writing GPR %d=0x%" PRIx32 "", regId, value);
 }
-
-
-
 
 static int vexriscv_get_core_reg(struct reg *reg)
 {
@@ -268,36 +275,39 @@ static int vexriscv_get_core_reg(struct reg *reg)
 		if (reg->number < 32)
 			return ERROR_FAIL;
 		else if (reg->number == 32) {
-			vexriscv_pushInstruction(target, false, 0x17); //AUIPC x0,0
-			vexriscv_readInstructionResult32(target, true, reg->value);
-			uint32_t dump_value;
-			memcpy(&dump_value,reg->value,4);
-			LOG_DEBUG("Read Reg %" PRId32 " = 0x%" PRIx32 "!",reg->number,dump_value);
-		}else if (vexriscv_reg->is_csr) {
-			// Perform a CSRRW which does a Read/Write.  If rs1 is $x0, then the write
-			// is ignored and side-effect free.  Set rd to $x1 to make the read 
-			// not side-effect free.
+			vexriscv_pushInstruction(target, false, 0x17);	/* AUIPC x0,0 */
+			vexriscv_readInstructionResult32(target, true,
+							 reg->value);
+			LOG_DEBUG("Read Reg %" PRId32 " = 0x%" PRIx32 "!",
+				  reg->number,
+				  buf_get_u32((uint8_t *) reg->value, 0, 32));
+		} else if (vexriscv_reg->is_csr) {
+			/* Perform a CSRRW which does a Read/Write.  If rs1 is $x0, then the write */
+			/* is ignored and side-effect free.  Set rd to $x1 to make the read */
+			/* not side-effect free. */
 			vexriscv_pushInstruction(target, false, 0
-				| ((vexriscv_reg->csr_num & 0x1fff) << 20)
-				| (0 << 15)	// rs1: x0
-				| (2 << 12)	// CSRRW
-				| (1 << 7)	// rd: x1
-				| (0x73 << 0)	// SYSTEM
-			);
-			vexriscv_readInstructionResult32(target, false, reg->value);
-			uint32_t value_dump;
-			memcpy(&value_dump,reg->value,4);
-			LOG_DEBUG("Read CSR %"PRId32 " = 0x%"PRIx32 "!",reg->number,value_dump);
+						 |
+						 ((vexriscv_reg->
+						   csr_num & 0x1fff) << 20)
+						 | (0 << 15)	/* rs1: x0 */
+						 | (2 << 12)	/* CSRRW */
+						 | (1 << 7)	/* rd: x1 */
+						 | (0x73 << 0)	/* SYSTEM */
+			    );
+			vexriscv_readInstructionResult32(target, true,
+							 reg->value);
+			LOG_DEBUG("Read CSR %" PRId32 " = 0x%" PRIx32 "!",
+				  reg->number,
+				  buf_get_u32((uint8_t *) reg->value, 0, 32));
 		} else
 			buf_set_u32(reg->value, 0, 32, 0xDEADBEEF);
 		reg->valid = true;
 		reg->dirty = false;
 	} else
-		LOG_DEBUG("Escape Reg %d read!",reg->number);
+		LOG_DEBUG("Escape Reg %d read!", reg->number);
 
 	return ERROR_OK;
 }
-
 
 static int vexriscv_set_core_reg(struct reg *reg, uint8_t *buf)
 {
@@ -317,30 +327,35 @@ static int vexriscv_set_core_reg(struct reg *reg, uint8_t *buf)
 	buf_set_u32(reg->value, 0, 32, value);
 
 	if (vexriscv_reg->is_csr) {
-		// Perform a CSRRW which does a Read/Write.  If rd is $x0, then the read
-		// is ignored and side-effect free.  Set rs1 to $x1 to make the write 
-		// not side-effect free.
+		/* Perform a CSRRW which does a Read/Write.  If rd is $x0, then the read */
+		/* is ignored and side-effect free.  Set rs1 to $x1 to make the write */
+		/* not side-effect free. */
 		// 
-		// cccc cccc cccc ssss s fff ddddd ooooooo
-		// c: CSR number
-		// s: rs1 (source register)
-		// f: Function
-		// d: rd (destination register)
-		// o: opcode - 0x73
+		/* cccc cccc cccc ssss s fff ddddd ooooooo */
+		/* c: CSR number */
+		/* s: rs1 (source register) */
+		/* f: Function */
+		/* d: rd (destination register) */
+		/* o: opcode - 0x73 */
 
-		vexriscv_write_regfile(target, false, 1, buf_get_u32((uint8_t *)reg->value, 0, 32));
-		vexriscv_pushInstruction(target, false, 0
-			| ((vexriscv_reg->csr_num & 0x1fff) << 20)
-			| (1 << 15)	// rs1: x1
-			| (1 << 12)	// CSRRW
-			| (0 << 7)	// rd: x0
-			| (0x73 << 0)	// SYSTEM
-		);
+		vexriscv_write_regfile(target, false, 1,
+				       buf_get_u32((uint8_t *) reg->value, 0,
+						   32));
+		vexriscv_pushInstruction(target, false,
+					 0 | ((vexriscv_reg->csr_num & 0x1fff)
+					      << 20)
+					 | (1 << 15)	/* rs1: x1 */
+					 | (1 << 12)	/* CSRRW */
+					 | (0 << 7)	/* rd: x0 */
+					 | (0x73 << 0)	/* SYSTEM */
+		    );
+		LOG_DEBUG("Setting CSR %s=0x%" PRIx32 "", reg->name,
+			  buf_get_u32((uint8_t *) reg->value, 0, 32));
 		reg->dirty = 0;
 		reg->valid = 1;
-	}
-	else {
-		//TODO: why do nothing but dirty flag?
+	} else {
+		/* TODO: why do nothing but dirty flag? */
+		LOG_DEBUG("Ignore setting reg %s? ", reg->name);
 		reg->dirty = 1;
 		reg->valid = 1;
 	}
@@ -355,11 +370,12 @@ static const struct reg_arch_type vexriscv_reg_type = {
 static struct reg_cache *vexriscv_build_reg_cache(struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	struct reg_cache **cache_p = register_get_last_cache_p(&target->reg_cache);
+	struct reg_cache **cache_p =
+	    register_get_last_cache_p(&target->reg_cache);
 	struct reg_cache *cache = malloc(sizeof(struct reg_cache));
 	struct reg *reg_list = calloc(vexriscv->nb_regs, sizeof(struct reg));
 	struct vexriscv_core_reg *arch_info =
-		malloc((vexriscv->nb_regs) * sizeof(struct vexriscv_core_reg));
+	    malloc((vexriscv->nb_regs) * sizeof(struct vexriscv_core_reg));
 
 	LOG_DEBUG("Start Build vex reg cache");
 
@@ -371,8 +387,9 @@ static struct reg_cache *vexriscv_build_reg_cache(struct target *target)
 	(*cache_p) = cache;
 	vexriscv->core_cache = cache;
 	vexriscv->arch_info = arch_info;
-	assert(sizeof(struct reg)*vexriscv->nb_regs >= sizeof(struct vexriscv_reg_mapping));
-	vexriscv->regs = (struct vexriscv_reg_mapping*)reg_list;
+	assert(sizeof(struct reg) * vexriscv->nb_regs >=
+	       sizeof(struct vexriscv_reg_mapping));
+	vexriscv->regs = (struct vexriscv_reg_mapping *)reg_list;
 
 	static struct reg_feature feature_cpu = {
 		.name = "org.gnu.gdb.riscv.cpu"
@@ -415,9 +432,12 @@ static void vexriscv_set_instr(struct target *target, uint32_t new_instr)
 	struct scan_field field;
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	struct jtag_tap *tap = target->tap;
-	if(!target->tap->bypass && buf_get_u32(target->tap->cur_instr, 0, target->tap->ir_length) == new_instr) return;
+	if ((!target->tap->bypass)
+	    && (buf_get_u32(target->tap->cur_instr, 0, target->tap->ir_length)
+		== new_instr))
+		return;
 	vexriscv->bridgeInstruction = new_instr;
-	
+
 	field.num_bits = tap->ir_length;
 	uint8_t *t = calloc(DIV_ROUND_UP(field.num_bits, 8), 1);
 	field.out_value = t;
@@ -427,90 +447,125 @@ static void vexriscv_set_instr(struct target *target, uint32_t new_instr)
 	free(t);
 }
 
-static void vexriscv_yaml_ignore_block(yaml_parser_t *parser){
-	yaml_token_t  token;
+static void vexriscv_yaml_ignore_block(yaml_parser_t *parser)
+{
+	yaml_token_t token;
 	int32_t level = 0;
-	while(1){
+	while (1) {
 		yaml_parser_scan(parser, &token);
-		switch(token.type){
-		case YAML_BLOCK_SEQUENCE_START_TOKEN: level++; break;
-		case YAML_BLOCK_ENTRY_TOKEN:          level++; break;
-		case YAML_BLOCK_END_TOKEN:            level--; break;
-		default: break;
+		switch (token.type) {
+		case YAML_BLOCK_SEQUENCE_START_TOKEN:
+			level++;
+			break;
+		case YAML_BLOCK_ENTRY_TOKEN:
+			level++;
+			break;
+		case YAML_BLOCK_END_TOKEN:
+			level--;
+			break;
+		default:
+			break;
 		}
 
-		if(level == -1)
+		if (level == -1)
 			break;
 	}
 }
 
-static void vexriscv_parse_debugReport(yaml_parser_t *parser, struct vexriscv_common *target){
-	yaml_token_t  token;
+static void vexriscv_parse_debugReport(yaml_parser_t *parser,
+				       struct vexriscv_common *target)
+{
+	yaml_token_t token;
 	target->hardwareBreakpointsCount = 0;
-	while(1){
+	while (1) {
 		yaml_parser_scan(parser, &token);
-		switch(token.type){
-			case YAML_SCALAR_TOKEN:
-				if(strcmp((char*)token.data.scalar.value,"hardwareBreakpointCount") == 0){
-					while(1){
-						yaml_parser_scan(parser, &token);
-						switch(token.type){
-							case YAML_SCALAR_TOKEN:
-								target->hardwareBreakpointsCount = atoi((char*)token.data.scalar.value);
-								return;
-								break;
-							default: break;
-						}
+		switch (token.type) {
+		case YAML_SCALAR_TOKEN:
+			if (strcmp
+			    ((char *)token.data.scalar.value,
+			     "hardwareBreakpointCount") == 0) {
+				while (1) {
+					yaml_parser_scan(parser, &token);
+					switch (token.type) {
+					case YAML_SCALAR_TOKEN:
+						target->
+						    hardwareBreakpointsCount =
+						    atoi((char *)token.data.
+							 scalar.value);
+						return;
+						break;
+					default:
+						break;
 					}
 				}
+			}
 			break;
-			default: break;
+		default:
+			break;
 		}
 	}
 }
 
-static void vexriscv_parse_busInfo(yaml_parser_t *parser, struct BusInfo *busInfo){
-	yaml_token_t  token;
+static void vexriscv_parse_busInfo(yaml_parser_t *parser,
+				   struct BusInfo *busInfo)
+{
+	yaml_token_t token;
 	busInfo->flushInstructions = NULL;
-	while(1){
+	while (1) {
 		yaml_parser_scan(parser, &token);
-		switch(token.type){
-			case YAML_SCALAR_TOKEN:
-				if(strcmp((char*)token.data.scalar.value,"flushInstructions") == 0){
-					busInfo->flushInstructions = malloc(4*4096);
-					busInfo->flushInstructionsSize = 0;
-					while(1){
-						yaml_parser_scan(parser, &token);
-						switch(token.type){
-							case YAML_SCALAR_TOKEN:
-								busInfo->flushInstructions[busInfo->flushInstructionsSize] = atoi((char*)token.data.scalar.value);
-								busInfo->flushInstructionsSize++;
-								assert(busInfo->flushInstructionsSize <= 4096);
-								break;
-							default: break;
-						}
-						if(token.type == YAML_FLOW_SEQUENCE_END_TOKEN)
-							break;
+		switch (token.type) {
+		case YAML_SCALAR_TOKEN:
+			if (strcmp
+			    ((char *)token.data.scalar.value,
+			     "flushInstructions") == 0) {
+				busInfo->flushInstructions = malloc(4 * 4096);
+				busInfo->flushInstructionsSize = 0;
+				while (1) {
+					yaml_parser_scan(parser, &token);
+					switch (token.type) {
+					case YAML_SCALAR_TOKEN:
+						busInfo->
+						    flushInstructions[busInfo->
+								      flushInstructionsSize]
+						    =
+						    atoi((char *)token.data.
+							 scalar.value);
+						busInfo->
+						    flushInstructionsSize++;
+						assert(busInfo->
+						       flushInstructionsSize <=
+						       4096);
+						break;
+					default:
+						break;
 					}
+					if (token.type ==
+					    YAML_FLOW_SEQUENCE_END_TOKEN)
+						break;
 				}
+			}
 			break;
-			default: break;
+		default:
+			break;
 		}
-		if(busInfo->flushInstructions != NULL)
+		if (busInfo->flushInstructions != NULL)
 			break;
 	}
 }
 
-static int vexriscv_parse_cpu_file(struct command_context *cmd_ctx, struct target *target){
+static int vexriscv_parse_cpu_file(struct command_context *cmd_ctx,
+				   struct target *target)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	yaml_parser_t parser;
-	yaml_token_t  token;
+	yaml_token_t token;
 	int done = 0;
 	yaml_parser_initialize(&parser);
-	LOG_DEBUG("Opening cpuConfigFile %s",vexriscv->cpuConfigFile);
+	LOG_DEBUG("Opening cpuConfigFile %s", vexriscv->cpuConfigFile);
 	FILE *input = fopen(vexriscv->cpuConfigFile, "rb");
-	if(!input){
-		LOG_ERROR("cpuConfigFile %s not found", vexriscv->cpuConfigFile);
+	if (!input) {
+		LOG_ERROR("cpuConfigFile %s not found",
+			  vexriscv->cpuConfigFile);
 		goto error;
 	}
 
@@ -522,37 +577,45 @@ static int vexriscv_parse_cpu_file(struct command_context *cmd_ctx, struct targe
 		if (!yaml_parser_scan(&parser, &token))
 			goto error;
 
-		switch(token.type){
-			case YAML_SCALAR_TOKEN:
-				if(strcmp((char*)token.data.scalar.value,"iBus") == 0){
-					vexriscv->iBus = malloc(sizeof(struct BusInfo));
-					vexriscv_parse_busInfo(&parser, vexriscv->iBus);
-				} else {
-					LOG_DEBUG("vexriscv YAML file did not declare IBUS\n");
-				}
-				if(strcmp((char*)token.data.scalar.value,"dBus") == 0){
-					vexriscv->dBus = malloc(sizeof(struct BusInfo));
-					vexriscv_parse_busInfo(&parser, vexriscv->dBus);
-				} else {
-					LOG_DEBUG("vexriscv YAML file did not declare DBUS\n");
-				}
-				if(strcmp((char*)token.data.scalar.value,"debug") == 0){
-					vexriscv_parse_debugReport(&parser, vexriscv);
-				} else {
-					LOG_DEBUG("vexriscv YAML file did not declare DM info\n");
-				}
-				break;
-			case YAML_BLOCK_ENTRY_TOKEN: vexriscv_yaml_ignore_block(&parser); break;
-			default: break;
+		switch (token.type) {
+		case YAML_SCALAR_TOKEN:
+			if (strcmp((char *)token.data.scalar.value, "iBus") ==
+			    0) {
+				vexriscv->iBus = malloc(sizeof(struct BusInfo));
+				vexriscv_parse_busInfo(&parser, vexriscv->iBus);
+			} else {
+				LOG_INFO
+				    ("Warning: vexriscv YAML file did not declare IBUS info!\n");
+			}
+			if (strcmp((char *)token.data.scalar.value, "dBus") ==
+			    0) {
+				vexriscv->dBus = malloc(sizeof(struct BusInfo));
+				vexriscv_parse_busInfo(&parser, vexriscv->dBus);
+			} else {
+				LOG_INFO
+				    ("Warning: vexriscv YAML file did not declare DBUS info!\n");
+			}
+			if (strcmp((char *)token.data.scalar.value, "debug") ==
+			    0) {
+				vexriscv_parse_debugReport(&parser, vexriscv);
+			} else {
+				LOG_INFO
+				    ("Warning: vexriscv YAML file did not declare DM info!\n");
+			}
+			break;
+		case YAML_BLOCK_ENTRY_TOKEN:
+			vexriscv_yaml_ignore_block(&parser);
+			break;
+		default:
+			break;
 		}
-
 
 		/* The application is responsible for destroying the event object. */
 
-	    if(token.type != YAML_STREAM_END_TOKEN)
-	      yaml_token_delete(&token);
-	    else
-	    	done = 1;
+		if (token.type != YAML_STREAM_END_TOKEN)
+			yaml_token_delete(&token);
+		else
+			done = 1;
 
 	}
 
@@ -561,7 +624,7 @@ static int vexriscv_parse_cpu_file(struct command_context *cmd_ctx, struct targe
 	return ERROR_OK;
 
 	/* On error. */
-	error:
+ error:
 
 	/* Destroy the Parser object. */
 	yaml_parser_delete(&parser);
@@ -569,18 +632,22 @@ static int vexriscv_parse_cpu_file(struct command_context *cmd_ctx, struct targe
 	return ERROR_FAIL;
 }
 
-static int vexriscv_init_target(struct command_context *cmd_ctx, struct target *target)
+static int vexriscv_init_target(struct command_context *cmd_ctx,
+				struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	LOG_DEBUG("start init target!");
 
 	vexriscv->iBus = NULL;
 	vexriscv->dBus = NULL;
-	if(vexriscv_parse_cpu_file(cmd_ctx, target))
+	if (vexriscv_parse_cpu_file(cmd_ctx, target))
 		return ERROR_FAIL;
-	LOG_DEBUG("Target have %d HwBreakpoints!",vexriscv->hardwareBreakpointsCount);
-	vexriscv->hardwareBreakpointUsed = malloc(sizeof(bool)*vexriscv->hardwareBreakpointsCount);
-	for(int i = 0;i < vexriscv->hardwareBreakpointsCount;i++) vexriscv->hardwareBreakpointUsed[i] = 0;
+	LOG_DEBUG("Target have %d HwBreakpoints!",
+		  vexriscv->hardwareBreakpointsCount);
+	vexriscv->hardwareBreakpointUsed =
+	    malloc(sizeof(bool) * vexriscv->hardwareBreakpointsCount);
+	for (int i = 0; i < vexriscv->hardwareBreakpointsCount; i++)
+		vexriscv->hardwareBreakpointUsed[i] = 0;
 
 	vexriscv_build_reg_cache(target);
 
@@ -595,11 +662,12 @@ static int vexriscv_arch_state(struct target *target)
 	return ERROR_OK;
 }
 
-
-static int vexriscv_is_halted(struct target * target,uint32_t *halted){
+static int vexriscv_is_halted(struct target *target, uint32_t *halted)
+{
 	uint32_t flags;
 	int error;
-	if((error = vexriscv_readStatusRegister(target, true, &flags)) != ERROR_OK){
+	error = vexriscv_readStatusRegister(target, true, &flags);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Error while calling vexriscv_is_cpu_running");
 		return error;
 	}
@@ -608,32 +676,39 @@ static int vexriscv_is_halted(struct target * target,uint32_t *halted){
 	return ERROR_OK;
 }
 
-
-static int vexriscv_is_running(struct target * target,uint32_t *running){
+static int vexriscv_is_running(struct target *target, uint32_t *running)
+{
 	uint32_t flags;
 	int error;
-	if((error = vexriscv_readStatusRegister(target, true, &flags)) != ERROR_OK){
+	error = vexriscv_readStatusRegister(target, true, &flags);
+	if (error != ERROR_OK) {
 		LOG_ERROR("Error while calling vexriscv_is_cpu_running");
 		return error;
 	}
-	*running = (flags & vexriscv_FLAGS_PIP_BUSY) || !(flags & vexriscv_FLAGS_HALT);
+	*running = (flags & vexriscv_FLAGS_PIP_BUSY)
+	    || !(flags & vexriscv_FLAGS_HALT);
 
 	return ERROR_OK;
 }
 
-static int vexriscv_flush_bus(struct target *target,struct BusInfo * busInfo){
+static int vexriscv_flush_bus(struct target *target, struct BusInfo *busInfo)
+{
 	int error;
-	if(!busInfo) return ERROR_OK;
-	for(uint32_t idx = 0;idx < busInfo->flushInstructionsSize;idx++){
-		vexriscv_pushInstruction(target, true, busInfo->flushInstructions[idx]);
+	if (!busInfo)
+		return ERROR_OK;
+	for (uint32_t idx = 0; idx < busInfo->flushInstructionsSize; idx++) {
+		vexriscv_pushInstruction(target, true,
+					 busInfo->flushInstructions[idx]);
 	}
-	if((error = vexriscv_execute_jtag_queue(target)) != ERROR_OK)
+	error = vexriscv_execute_jtag_queue(target);
+	if (error != ERROR_OK)
 		return error;
-	while(1){
+	while (1) {
 		uint32_t running;
-		if((error = vexriscv_is_running(target,&running)) != ERROR_OK)
+		error = vexriscv_is_running(target, &running);
+		if (error != ERROR_OK)
 			return error;
-		if(!running)
+		if (!running)
 			break;
 	}
 	return ERROR_OK;
@@ -643,26 +718,27 @@ static int vexriscv_flush_caches(struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	int error;
-	if (vexriscv->iBus != 0 ){
+	if (vexriscv->iBus != 0) {
 		if (vexriscv->iBus->flushInstructionsSize != 0) {
-			error = vexriscv_flush_bus(target , vexriscv->iBus);
-			if (error != ERROR_OK)
-				return error;
-		}
-		else
-			LOG_INFO("System have no I-Cache, No need to flush I-Cache");
-	}
-	else
-		LOG_DEBUG("IBus data struct not init! why?");
-	if (vexriscv->dBus != 0) {
-		if (vexriscv->dBus->flushInstructionsSize != 0){
-			error = vexriscv_flush_bus(target , vexriscv->dBus);
+			error = vexriscv_flush_bus(target, vexriscv->iBus);
 			if (error != ERROR_OK)
 				return error;
 		} else
-			LOG_INFO("System have no D-Cache, No need to flush D-Cache");
-	} else
-		LOG_DEBUG("DBus data struct not init! why?");
+			LOG_INFO
+			    ("System have no I-Cache, No need to flush I-Cache");
+	}
+	/*else
+	   LOG_DEBUG("IBus data struct not init! why?"); */
+	if (vexriscv->dBus != 0) {
+		if (vexriscv->dBus->flushInstructionsSize != 0) {
+			error = vexriscv_flush_bus(target, vexriscv->dBus);
+			if (error != ERROR_OK)
+				return error;
+		} else
+			LOG_INFO
+			    ("System have no D-Cache, No need to flush D-Cache");
+	}			/*else
+				   LOG_DEBUG("DBus data struct not init! why?"); */
 	return ERROR_OK;
 }
 
@@ -671,71 +747,86 @@ static int vexriscv_save_context(struct target *target)
 	int error;
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 
-
 	uint32_t flags;
 	error = vexriscv_readStatusRegister(target, true, &flags);
 	if (error != ERROR_OK)
 		return error;
-	
-	LOG_DEBUG("Status Reg: 0x%"PRIx32" ",flags);
-	//get PC in case of breakpoint before losing the value
+
+	LOG_DEBUG("Status Reg: 0x%" PRIx32 " ", flags);
+	/* get PC in case of breakpoint before losing the value */
 	if (flags & vexriscv_FLAGS_HALTED_BY_BREAK) {
-		struct reg* reg = &vexriscv->regs->pc;
+		struct reg *reg = &vexriscv->regs->pc;
 		vexriscv_readInstructionResult32(target, false, reg->value);
+		LOG_DEBUG("Save PC: 0x%" PRIx32 " ",
+			  buf_get_u32((uint8_t *) reg->value, 0, 32));
 		reg->valid = 1;
 		reg->dirty = 1;
 	}
 
-	for(uint32_t regId = 0;regId < 32;regId++){
-		struct reg* reg = &vexriscv->core_cache->reg_list[regId];
-		//ADDI x0, x?, 0
-		vexriscv_pushInstruction(target, false, 0x13 | (reg->number << 15));
+	for (uint32_t regId = 0; regId < 32; regId++) {
+		struct reg *reg = &vexriscv->core_cache->reg_list[regId];
+		/* ADDI x0, x?, 0 */
+		vexriscv_pushInstruction(target, false,
+					 0x13 | (reg->number << 15));
 		vexriscv_readInstructionResult32(target, false, reg->value);
 		reg->valid = 1;
-		//For safety, invalidate x1 for debugger purposes
-		reg->dirty = reg->number == 1 ? 1 : 0; 
+		/* For safety, invalidate x1 for debugger purposes */
+		reg->dirty = reg->number == 1 ? 1 : 0;
+		LOG_DEBUG("Save reg %d : 0x%" PRIx32 " ", regId,
+			  buf_get_u32((uint8_t *) reg->value, 0, 32));
 	}
 
-	// Mark all CSRs as "invalid"
+	/* Mark all CSRs as "invalid" */
 	for (uint32_t regId = 65; regId < vexriscv->nb_regs; regId++) {
-		struct reg* reg = &vexriscv->core_cache->reg_list[regId];
+		struct reg *reg = &vexriscv->core_cache->reg_list[regId];
 		reg->valid = 0;
 	}
 
-	//Flush commands
-	if(vexriscv_execute_jtag_queue(target))
+	/* Flush commands */
+	if (vexriscv_execute_jtag_queue(target))
 		return ERROR_FAIL;
 
-	//Flush instruction cache
+	/* Flush instruction cache */
 	error = vexriscv_flush_caches(target);
-	if (error != ERROR_OK) 
+	if (error != ERROR_OK)
 		return error;
 
 	return ERROR_OK;
 }
 
-static void vexriscv_cpu_write_pc(struct target *target, bool execute, uint32_t value){
-	vexriscv_write_regfile(target, false, 1,value);
-	vexriscv_pushInstruction(target, false, 0x67 | (1 << 15)); //JALR x1
-	if(execute) jtag_execute_queue();
+static void vexriscv_cpu_write_pc(struct target *target, bool execute,
+				  uint32_t value)
+{
+	vexriscv_write_regfile(target, false, 1, value);
+	vexriscv_pushInstruction(target, false, 0x67 | (1 << 15));	/* JALR x1 */
+	if (execute)
+		jtag_execute_queue();
 }
 
 static int vexriscv_restore_context(struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	LOG_DEBUG("-");
 
-	//PC
-	if(vexriscv->regs->pc.valid){
-		vexriscv_cpu_write_pc(target, false, buf_get_u32((uint8_t *)vexriscv->regs->pc.value, 0, 32));
+	/* PC */
+	if (vexriscv->regs->pc.valid) {
+		LOG_DEBUG("restore PC @ 0x%" PRIx32 "",
+			  buf_get_u32((uint8_t *) vexriscv->regs->pc.value, 0,
+				      32));
+		vexriscv_cpu_write_pc(target, false,
+				      buf_get_u32((uint8_t *) vexriscv->regs->
+						  pc.value, 0, 32));
 		vexriscv->regs->pc.valid = false;
 		vexriscv->regs->pc.dirty = false;
 	}
 
-	for(uint32_t i = 0;i < 32;i++){
+	for (uint32_t i = 0; i < 32; i++) {
 		struct reg *reg = vexriscv->core_cache->reg_list + i;
-		if(reg->valid && reg->dirty){
-			vexriscv_write_regfile(target, false, i, buf_get_u32((uint8_t *)reg->value, 0, 32));
+		if (reg->valid && reg->dirty) {
+			LOG_DEBUG("restore reg %d @ 0x%" PRIx32 "", i,
+				  buf_get_u32((uint8_t *) reg->value, 0, 32));
+			vexriscv_write_regfile(target, false, i,
+					       buf_get_u32((uint8_t *) reg->
+							   value, 0, 32));
 			reg->valid = false;
 			reg->dirty = false;
 		}
@@ -744,40 +835,41 @@ static int vexriscv_restore_context(struct target *target)
 	return vexriscv_execute_jtag_queue(target);
 }
 
-
 static int vexriscv_debug_entry(struct target *target)
 {
 	int error;
-	LOG_DEBUG("-");
 
-	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	error =
+	    vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
 	if (error != ERROR_OK) {
-		LOG_ERROR("Impossible to stall the CPU");
+		LOG_ERROR("Write SR: Impossible to stall the CPU");
 		return error;
 	}
-
+	LOG_DEBUG("Start saving context");
 	error = vexriscv_save_context(target);
 	if (error != ERROR_OK) {
 		LOG_ERROR("Error while calling vexriscv_save_context");
 		return error;
 	}
 
-	//YY Flush caches
+	/* YY Flush caches */
 	return ERROR_OK;
 }
 
 static int vexriscv_halt(struct target *target)
 {
 	int error;
-	LOG_DEBUG("target->state: %s",target_state_name(target));
+	LOG_DEBUG("target->state: %s", target_state_name(target));
 
 	if (target->state == TARGET_UNKNOWN)
-		LOG_WARNING("Target was in unknown state when halt was requested");
+		LOG_WARNING
+		    ("Target was in unknown state when halt was requested");
 
 	if (target->state == TARGET_RESET) {
 		if ((jtag_get_reset_config() & RESET_SRST_PULLS_TRST) &&
 		    jtag_get_srst()) {
-			LOG_ERROR("Can't request a halt while in reset if nSRST pulls nTRST");
+			LOG_ERROR
+			    ("Can't request a halt while in reset if nSRST pulls nTRST");
 			return ERROR_TARGET_FAILURE;
 		} else {
 			target->debug_reason = DBG_REASON_DBGRQ;
@@ -785,7 +877,8 @@ static int vexriscv_halt(struct target *target)
 		}
 	}
 
-	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	error =
+	    vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
 	if (error != ERROR_OK) {
 		LOG_ERROR("Impossible to stall the CPU");
 		return error;
@@ -795,9 +888,6 @@ static int vexriscv_halt(struct target *target)
 
 	return ERROR_OK;
 }
-
-
-
 
 /**
  * Check for and process a semihosting request using the ARM protocol). This
@@ -813,7 +903,7 @@ static int vexriscv_halt(struct target *target)
  */
 int vexriscv_semihosting(struct target *target, int *retval)
 {
-    struct vexriscv_common *vexriscv = target_to_vexriscv(target);
+	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 
 	struct semihosting *semihosting = target->semihosting;
 	if (!semihosting)
@@ -822,23 +912,22 @@ int vexriscv_semihosting(struct target *target, int *retval)
 	if (!semihosting->is_active)
 		return 0;
 
-    uint32_t pc = 0xdeadbeef;
-    
-    vexriscv_get_core_reg(&vexriscv->core_cache->reg_list[32]);
-    pc = buf_get_u32((uint8_t *)vexriscv->core_cache->reg_list[32].value, 0, 32);
+	uint32_t pc = 0xdeadbeef;
 
-    
-    LOG_DEBUG("semihosting pc: %08x", pc);
-    // todo proper error handling
-    if (pc == 0xdeadbeef) {
-        return 0;
-    }
+	vexriscv_get_core_reg(&vexriscv->core_cache->reg_list[32]);
+	pc = buf_get_u32((uint8_t *) vexriscv->core_cache->reg_list[32].value,
+			 0, 32);
+
+	LOG_DEBUG("semihosting pc: %08x", pc);
+	/* todo proper error handling */
+	if (pc == 0xdeadbeef)
+		return 0;
 
 	uint8_t tmp[12];
 	/* Read the current instruction, including the bracketing */
-    /*int result =*/ vexriscv_read_memory(target, pc-4, sizeof(uint16_t), 6, tmp);
+	vexriscv_read_memory(target, pc - 4, sizeof(uint16_t), 6, tmp);
 
-    // todo error handling
+	/* todo error handling */
 
 	/*
 	 * The instructions that trigger a semihosting call,
@@ -851,7 +940,8 @@ int vexriscv_semihosting(struct target *target, int *retval)
 	uint32_t pre = target_buffer_get_u32(target, tmp);
 	uint32_t ebreak = target_buffer_get_u32(target, tmp + 4);
 	uint32_t post = target_buffer_get_u32(target, tmp + 8);
-	LOG_DEBUG("semihosting check %08x %08x %08x from 0x%" PRIx64 "-4", pre, ebreak, post, (uint64_t) pc);
+	LOG_DEBUG("semihosting check %08x %08x %08x from 0x%" PRIx64 "-4", pre,
+		  ebreak, post, (uint64_t) pc);
 
 	if (pre != 0x01f01013 || ebreak != 0x00100073 || post != 0x40705013) {
 
@@ -866,23 +956,25 @@ int vexriscv_semihosting(struct target *target, int *retval)
 	if (!semihosting->hit_fileio) {
 
 		/* RISC-V uses A0 and A1 to pass function arguments */
-        uint32_t r0;
-        uint32_t r1;
-        
-        vexriscv_get_core_reg(&vexriscv->core_cache->reg_list[10]);
-        r0 = buf_get_u32((uint8_t *)vexriscv->core_cache->reg_list[10].value, 0, 32);
-        
-        vexriscv_get_core_reg(&vexriscv->core_cache->reg_list[11]);
-        r1 = buf_get_u32((uint8_t *)vexriscv->core_cache->reg_list[11].value, 0, 32);
-        
-        LOG_DEBUG("semihosting  r0: %08x", r0);
-        LOG_DEBUG("semihosting  r1: %08x", r1);
-        
+		uint32_t r0;
+		uint32_t r1;
+
+		vexriscv_get_core_reg(&vexriscv->core_cache->reg_list[10]);
+		r0 = buf_get_u32((uint8_t *) vexriscv->core_cache->reg_list[10].
+				 value, 0, 32);
+
+		vexriscv_get_core_reg(&vexriscv->core_cache->reg_list[11]);
+		r1 = buf_get_u32((uint8_t *) vexriscv->core_cache->reg_list[11].
+				 value, 0, 32);
+
+		LOG_DEBUG("semihosting  r0: %08x", r0);
+		LOG_DEBUG("semihosting  r1: %08x", r1);
+
 		semihosting->op = r0;
 		semihosting->param = r1;
-		semihosting->word_size_bytes = sizeof(uint32_t);//riscv_xlen(target) / 8;
+		semihosting->word_size_bytes = sizeof(uint32_t);	/* riscv_xlen(target) / 8; */
 
-        /* Check for ARM operation numbers. */
+		/* Check for ARM operation numbers. */
 		if (0 <= semihosting->op && semihosting->op <= 0x31) {
 			*retval = semihosting_common(target);
 			if (*retval != ERROR_OK) {
@@ -900,25 +992,27 @@ int vexriscv_semihosting(struct target *target, int *retval)
 	 * operation to complete.
 	 */
 	if (semihosting->is_resumable && !semihosting->hit_fileio) {
-        // resume only if it was running
-        if (target->debug_reason == DBG_REASON_NOTHALTED) {
-            /* Resume right after the EBREAK 4 bytes instruction. */
-            *retval = target_resume(target, 0, pc+4, 0, 0);
-            if (*retval != ERROR_OK) {
-                LOG_ERROR("Failed to resume target");
-                return 0;
-            }
-            return 2;
-        } else if (target->debug_reason == DBG_REASON_SINGLESTEP) {
-            // otherwise
-            // set PC to next address instead of resuming
-            pc += 4;
-            vexriscv_set_core_reg(&vexriscv->core_cache->reg_list[32], (uint8_t*) &pc);
-            return 1;
-        } else {
-            LOG_INFO("unknown debug_reason: %d\n", target->debug_reason);
-            return 0;
-        }
+		/* resume only if it was running */
+		if (target->debug_reason == DBG_REASON_NOTHALTED) {
+			/* Resume right after the EBREAK 4 bytes instruction. */
+			*retval = target_resume(target, 0, pc + 4, 0, 0);
+			if (*retval != ERROR_OK) {
+				LOG_ERROR("Failed to resume target");
+				return 0;
+			}
+			return 2;
+		} else if (target->debug_reason == DBG_REASON_SINGLESTEP) {
+			/* otherwise */
+			/* set PC to next address instead of resuming */
+			pc += 4;
+			vexriscv_set_core_reg(&vexriscv->core_cache->
+					      reg_list[32], (uint8_t *) &pc);
+			return 1;
+		} else {
+			LOG_INFO("unknown debug_reason: %d\n",
+				 target->debug_reason);
+			return 0;
+		}
 	}
 
 	return 0;
@@ -930,7 +1024,7 @@ static int vexriscv_poll(struct target *target)
 	int retval;
 
 	uint32_t running;
-	retval = vexriscv_is_running(target,&running);
+	retval = vexriscv_is_running(target, &running);
 	if (retval != ERROR_OK) {
 		return retval;
 	}
@@ -945,48 +1039,52 @@ static int vexriscv_poll(struct target *target)
 
 			retval = vexriscv_debug_entry(target);
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while calling vexriscv_debug_entry");
+				LOG_ERROR
+				    ("Error while calling vexriscv_debug_entry");
 				return retval;
 			}
-			if (target->debug_reason == DBG_REASON_SINGLESTEP || target->debug_reason == DBG_REASON_NOTHALTED) {
+			if (target->debug_reason == DBG_REASON_SINGLESTEP
+			    || target->debug_reason == DBG_REASON_NOTHALTED) {
 				if (vexriscv_semihosting(target, &retval) == 2) {
-					return ERROR_OK; // don't call event handler if not in single-step
+					return ERROR_OK;	/* don't call event handler if not in single-step */
 				}
 			}
 
-			target_call_event_callbacks(target,TARGET_EVENT_HALTED);
+			target_call_event_callbacks(target,
+						    TARGET_EVENT_HALTED);
 		} else if (target->state == TARGET_DEBUG_RUNNING) {
-			// don't know what this is for ...
+			/* don't know what this is for ... */
 			target->state = TARGET_HALTED;
 
-			target_call_event_callbacks(target,TARGET_EVENT_DEBUG_HALTED);
+			target_call_event_callbacks(target,
+						    TARGET_EVENT_DEBUG_HALTED);
 		}
-	} else { /* ... target is running */
+	} else {		/* ... target is running */
 
 		LOG_DEBUG("Target is running!");
 		/* If target was supposed to be stalled, stall it again */
 		/*if  (target->state == TARGET_HALTED) {
 
-			target->state = TARGET_RUNNING;
+		   target->state = TARGET_RUNNING;
 
-			retval = vexriscv_halt(target);
-			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while calling vexriscv_halt");
-				return retval;
-			}
+		   retval = vexriscv_halt(target);
+		   if (retval != ERROR_OK) {
+		   LOG_ERROR("Error while calling vexriscv_halt");
+		   return retval;
+		   }
 
-			retval = vexriscv_debug_entry(target);
-			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while calling vexriscv_debug_entry");
-				return retval;
-			}
+		   retval = vexriscv_debug_entry(target);
+		   if (retval != ERROR_OK) {
+		   LOG_ERROR("Error while calling vexriscv_debug_entry");
+		   return retval;
+		   }
 
-			target_call_event_callbacks(target,
-						    TARGET_EVENT_DEBUG_HALTED);
-		}
+		   target_call_event_callbacks(target,
+		   TARGET_EVENT_DEBUG_HALTED);
+		   }
 
-		target->state = TARGET_RUNNING;
-*/
+		   target->state = TARGET_RUNNING;
+		 */
 	}
 
 	return ERROR_OK;
@@ -999,17 +1097,20 @@ static int vexriscv_assert_reset(struct target *target)
 	LOG_DEBUG("vexriscv_assert_reset\n");
 	target->state = TARGET_RESET;
 
-	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	error =
+	    vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
 	if (error != ERROR_OK)
 		return error;
 
-	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET | vexriscv_FLAGS_RESET_SET);
+	error =
+	    vexriscv_writeStatusRegister(target, true,
+					 vexriscv_FLAGS_HALT_SET |
+					 vexriscv_FLAGS_RESET_SET);
 	if (error != ERROR_OK)
 		return error;
 
-
-	// Resetting the CPU causes the program counter to jump to the reset vector.
-	// Our copy is no longer valid.
+	/* Resetting the CPU causes the program counter to jump to the reset vector. */
+	/* Our copy is no longer valid. */
 	vexriscv->regs->pc.valid = false;
 
 	LOG_DEBUG("%s", __func__);
@@ -1021,41 +1122,45 @@ static int vexriscv_deassert_reset(struct target *target)
 	int error;
 	LOG_DEBUG("vexriscv_deassert_reset\n");
 
-	error = vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_CLEAR);
+	error =
+	    vexriscv_writeStatusRegister(target, true,
+					 vexriscv_FLAGS_RESET_CLEAR);
 	if (error != ERROR_OK)
 		return error;
 
 	usleep(200000);
 
 	uint32_t isRunning;
-	if(vexriscv_is_running(target,&isRunning)) return ERROR_FAIL;
+	if (vexriscv_is_running(target, &isRunning))
+		return ERROR_FAIL;
 	target->state = isRunning ? TARGET_RUNNING : TARGET_HALTED;
 
 	LOG_DEBUG("%s", __func__);
 	return ERROR_OK;
 }
 
-static void vexriscv_memory_cmd(struct target *target, uint32_t address,uint32_t data,int32_t size, int read)
+static void vexriscv_memory_cmd(struct target *target, uint32_t address,
+				uint32_t data, int32_t size, int read)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	struct jtag_tap *tap = target->tap;
 	struct scan_field field;
 	uint8_t cmd[20];
-    memset(cmd, 0, 20);
+	memset(cmd, 0, 20);
 
 	vexriscv_set_instr(target, vexriscv->jtagCmdInstruction);
 
 	uint8_t inst = 0x00;
-	switch(size){
+	switch (size) {
 	case 1:
 		size = 0;
 		data &= 0xFF;
-		data = data | (data<<8)  | (data<<16)  | (data<<24);
+		data = data | (data << 8) | (data << 16) | (data << 24);
 		break;
 	case 2:
 		size = 1;
 		data &= 0xFFFF;
-		data = data | (data<<16);
+		data = data | (data << 16);
 		break;
 	case 4:
 		size = 2;
@@ -1064,61 +1169,80 @@ static void vexriscv_memory_cmd(struct target *target, uint32_t address,uint32_t
 		assert(0);
 		break;
 	}
-    uint8_t write = read ? 0 : 1;
-    uint32_t waitCycles = 0;
-    int32_t ignoreWidth = vexriscv->jtagCmdHeaderSize ? vexriscv->jtagCmdIgnoreSize - jtag_tap_count() + 1 : 0;
-	field.num_bits = 8+32+32+1+2 + vexriscv->jtagCmdHeaderSize + ignoreWidth + waitCycles;
+	uint8_t write = read ? 0 : 1;
+	uint32_t waitCycles = 0;
+	int32_t ignoreWidth =
+	    vexriscv->jtagCmdHeaderSize ? vexriscv->jtagCmdIgnoreSize -
+	    jtag_tap_count() + 1 : 0;
+	field.num_bits =
+	    8 + 32 + 32 + 1 + 2 + vexriscv->jtagCmdHeaderSize + ignoreWidth +
+	    waitCycles;
 	field.out_value = cmd;
 	uint32_t offset = 0;
 
-	if(ignoreWidth < 0){
-	    LOG_ERROR("To support VexRiscv jtag header and multiple tap on the jtag chain, you need to provision more 'jtagIgnoreWidth'\n");
-        exit(1);
+	if (ignoreWidth < 0) {
+		LOG_ERROR
+		    ("To support VexRiscv jtag header and multiple tap on the jtag chain, "
+				"you need to provision more 'jtagIgnoreWidth'\n");
+		exit(1);
 	}
 
 	offset += ignoreWidth;
-    bit_copy(cmd,offset,(uint8_t*)&vexriscv->jtagCmdHeader,0,vexriscv->jtagCmdHeaderSize); offset += vexriscv->jtagCmdHeaderSize;
-	bit_copy(cmd,offset,&inst,0,8); offset += 8 + waitCycles;
-	bit_copy(cmd,offset,(uint8_t*)&address,0,32); offset += 32;
-	bit_copy(cmd,offset,(uint8_t*)&data,0,32); offset += 32;
-	bit_copy(cmd,offset,&write,0,1); offset += 1;
-	bit_copy(cmd,offset ,(uint8_t*)&size,0,2); offset += 2;
+	bit_copy(cmd, offset, (uint8_t *) &vexriscv->jtagCmdHeader, 0,
+		 vexriscv->jtagCmdHeaderSize);
+	offset += vexriscv->jtagCmdHeaderSize;
+	bit_copy(cmd, offset, &inst, 0, 8);
+	offset += 8 + waitCycles;
+	bit_copy(cmd, offset, (uint8_t *) &address, 0, 32);
+	offset += 32;
+	bit_copy(cmd, offset, (uint8_t *) &data, 0, 32);
+	offset += 32;
+	bit_copy(cmd, offset, &write, 0, 1);
+	offset += 1;
+	bit_copy(cmd, offset, (uint8_t *) &size, 0, 2);
+	offset += 2;
 	field.in_value = NULL;
 	field.check_value = NULL;
 	field.check_mask = NULL;
 	jtag_add_dr_scan(tap, 1, &field, TAP_IDLE);
-	
+
 }
 
-static void vexriscv_read_rsp(struct target *target,uint8_t *value, uint32_t size)
+static void vexriscv_read_rsp(struct target *target, uint8_t *value,
+			      uint32_t size)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	struct jtag_tap *tap = target->tap;
 	struct scan_field feilds[3];
-    uint8_t header[20];
-    int32_t ignoreWidth = vexriscv->jtagRspHeaderSize ? vexriscv->jtagRspIgnoreSize - jtag_tap_count() + 1 : 0;
-    memset(header, 0, 20);
+	uint8_t header[20];
+	int32_t ignoreWidth =
+	    vexriscv->jtagRspHeaderSize ? vexriscv->jtagRspIgnoreSize -
+	    jtag_tap_count() + 1 : 0;
+	memset(header, 0, 20);
 
-    if(ignoreWidth < 0){
-        LOG_ERROR("To support VexRiscv jtag header and multiple tap on the jtag chain, you need to provision more 'jtagIgnoreWidth'\n");
-        exit(1);
-    }
+	if (ignoreWidth < 0) {
+		LOG_ERROR
+		    ("To support VexRiscv jtag header and multiple tap on the jtag chain, "
+				"you need to provision more 'jtagIgnoreWidth'\n");
+		exit(1);
+	}
 
-    bit_copy(header, ignoreWidth, (uint8_t*)&vexriscv->jtagRspHeader, 0, vexriscv->jtagRspHeaderSize);
+	bit_copy(header, ignoreWidth, (uint8_t *) &vexriscv->jtagRspHeader, 0,
+		 vexriscv->jtagRspHeaderSize);
 
-	feilds[0].num_bits = 2 + vexriscv->jtagRspHeaderSize + vexriscv->jtagRspIgnoreSize; //TODO !!!
+	feilds[0].num_bits = 2 + vexriscv->jtagRspHeaderSize + vexriscv->jtagRspIgnoreSize;	/* TODO !!! */
 	feilds[0].out_value = header;
 	feilds[0].in_value = NULL;
 	feilds[0].check_value = NULL;
 	feilds[0].check_mask = NULL;
 
-	feilds[1].num_bits = 8*size;
+	feilds[1].num_bits = 8 * size;
 	feilds[1].out_value = NULL;
-	feilds[1].in_value = (uint8_t*)value;
+	feilds[1].in_value = (uint8_t *) value;
 	feilds[1].check_value = NULL;
 	feilds[1].check_mask = NULL;
 
-	feilds[2].num_bits = 32-8*size;
+	feilds[2].num_bits = 32 - 8 * size;
 	feilds[2].out_value = NULL;
 	feilds[2].in_value = NULL;
 	feilds[2].check_value = NULL;
@@ -1127,37 +1251,42 @@ static void vexriscv_read_rsp(struct target *target,uint8_t *value, uint32_t siz
 	jtag_add_clocks(vexriscv->readWaitCycles);
 	vexriscv_set_instr(target, vexriscv->jtagRspInstruction);
 	jtag_add_dr_scan(tap, size == 4 ? 2 : 3, feilds, TAP_IDLE);
-	
+
 }
 
 static int vexriscv_read_memory(struct target *target, target_addr_t address,
-			       uint32_t size, uint32_t count, uint8_t *buffer)
+				uint32_t size, uint32_t count, uint8_t *buffer)
 {
 	/* since this is 32b core, we dont'care about H32 bit */
 	LOG_DEBUG("Reading memory at physical address 0x%" PRIx32
-		  "; size %" PRId32 "; count %" PRId32, (uint32_t)address, size, count);
+		  "; size %" PRId32 "; count %" PRId32, (uint32_t) address,
+		  size, count);
 
 	assert(target->state == TARGET_HALTED);
 	if (count == 0 || buffer == NULL)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	for(uint32_t idx = 0;idx < count;idx++){
+	for (uint32_t idx = 0; idx < count; idx++) {
 		vexriscv_write_regfile(target, false, 1, address);
 
-		switch(size){
+		switch (size) {
 		case 4:
-			buffer[0] = 0; buffer[1] = 0; buffer[2] = 0; buffer[3] = 0;
-			vexriscv_pushInstruction(target, false, (1 << 15) | (0x2 << 12) | (1 << 7) | 0x3); //LW x1, 0(x1)
+			buffer[0] = 0;
+			buffer[1] = 0;
+			buffer[2] = 0;
+			buffer[3] = 0;
+			vexriscv_pushInstruction(target, false, (1 << 15) | (0x2 << 12) | (1 << 7) | 0x3);	/* LW x1, 0(x1) */
 			vexriscv_readInstructionResult32(target, false, buffer);
 			break;
 		case 2:
-			buffer[0] = 0; buffer[1] = 0;
-			vexriscv_pushInstruction(target, false, (1 << 15) | (0x5 << 12) | (1 << 7) | 0x3); //LHU x1, 0(x1)
+			buffer[0] = 0;
+			buffer[1] = 0;
+			vexriscv_pushInstruction(target, false, (1 << 15) | (0x5 << 12) | (1 << 7) | 0x3);	/* LHU x1, 0(x1) */
 			vexriscv_readInstructionResult16(target, false, buffer);
 			break;
 		case 1:
 			buffer[0] = 0;
-			vexriscv_pushInstruction(target, false, (1 << 15) | (0x4 << 12) | (1 << 7) | 0x3); //LBU x1, 0(x1)
+			vexriscv_pushInstruction(target, false, (1 << 15) | (0x4 << 12) | (1 << 7) | 0x3);	/* LBU x1, 0(x1) */
 			vexriscv_readInstructionResult8(target, false, buffer);
 			break;
 		}
@@ -1168,107 +1297,150 @@ static int vexriscv_read_memory(struct target *target, target_addr_t address,
 	return vexriscv_execute_jtag_queue(target);
 }
 
-
-struct vexriscv_mem_access{
+struct vexriscv_mem_access {
 	uint32_t address;
 	uint32_t data;
 };
 
-int vexriscv_mem_access_comp (const void * elem1, const void * elem2)
+int vexriscv_mem_access_comp(const void *elem1, const void *elem2)
 {
-	uint32_t f = ((struct vexriscv_mem_access*)elem1)->data;
-	uint32_t s = ((struct vexriscv_mem_access*)elem2)->data;
-    return (f > s) - (f < s);
+	uint32_t f = ((struct vexriscv_mem_access *)elem1)->data;
+	uint32_t s = ((struct vexriscv_mem_access *)elem2)->data;
+	return (f > s) - (f < s);
 }
 
 static int vexriscv_write_memory(struct target *target, target_addr_t address,
-				uint32_t size, uint32_t count,
-				const uint8_t *buffer)
+				 uint32_t size, uint32_t count,
+				 const uint8_t *buffer)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	LOG_DEBUG("Writing memory at physical address 0x%" PRIx32
-		  "; size %" PRId32 "; count %" PRId32, (uint32_t)address, size, count);
+		  "; size %" PRId32 "; count %" PRId32, (uint32_t) address,
+		  size, count);
 
 	if (target->state != TARGET_HALTED)
 		vexriscv_halt(target);
 
-	if(size == 4 && count > 4){
-		//use 4 address registers over a range of 16K in order to reduce JTAG usage
+	if (size == 4 && count > 4) {
+		/* use 4 address registers over a range of 16K in order to reduce JTAG usage */
 		uint32_t maxAddressReg = 4;
-		uint32_t numAddressReg = MIN(maxAddressReg, (count * size - 1) / 4096 + 1);
-		if(count * size > 4096*numAddressReg){
-			if(vexriscv_write_memory(target,address,size,numAddressReg*4096/size,buffer)) return ERROR_FAIL;
-			if(vexriscv_write_memory(target,address+4096*numAddressReg,size,count-4096/size*numAddressReg,buffer+4096*numAddressReg))  return ERROR_FAIL;
+		uint32_t numAddressReg =
+		    MIN(maxAddressReg, (count * size - 1) / 4096 + 1);
+		int retval;
+		if (count * size > 4096 * numAddressReg) {
+			retval = vexriscv_write_memory(target,
+						       address,
+						       size,
+						       numAddressReg * 4096 /
+						       size, buffer);
+			if (retval != ERROR_OK)
+				return ERROR_FAIL;
+			retval = vexriscv_write_memory(target,
+						       address +
+						       4096 * numAddressReg,
+						       size,
+						       count -
+						       4096 / size *
+						       numAddressReg,
+						       buffer +
+						       4096 * numAddressReg);
+			if (retval != ERROR_OK)
+				return ERROR_FAIL;
 			return ERROR_OK;
 		}
 
 		if (count == 0 || buffer == NULL)
 			return ERROR_COMMAND_SYNTAX_ERROR;
 
-
 		struct vexriscv_mem_access accesses[count];
-		for(uint32_t accessId = 0;accessId < count;accessId++){
-			accesses[accessId].address = address + accessId*size;
-			accesses[accessId].data = buf_get_u32(buffer + 4*accessId, 0 ,32);
+		for (uint32_t accessId = 0; accessId < count; accessId++) {
+			accesses[accessId].address = address + accessId * size;
+			accesses[accessId].data =
+			    buf_get_u32(buffer + 4 * accessId, 0, 32);
 		}
-		//Sort access by data value
-		qsort (accesses, sizeof(accesses)/sizeof(*accesses), sizeof(*accesses), vexriscv_mem_access_comp);
-
+		/* Sort access by data value */
+		qsort(accesses, sizeof(accesses) / sizeof(*accesses),
+		      sizeof(*accesses), vexriscv_mem_access_comp);
 
 		vexriscv->regs->x1.dirty = 1;
 		vexriscv->regs->x2.dirty = 1;
-		for(uint32_t i = 0;i < numAddressReg;i++){
-			vexriscv->core_cache->reg_list[i+3].dirty = 1;
-			vexriscv_write_regfile(target, false, i + 3, address + 2048 + 4096*i);
+		for (uint32_t i = 0; i < numAddressReg; i++) {
+			vexriscv->core_cache->reg_list[i + 3].dirty = 1;
+			vexriscv_write_regfile(target, false, i + 3,
+					       address + 2048 + 4096 * i);
 		}
 
 		uint32_t x1Value = (accesses[0].data + 2048) & 0xFFFFF000;
 		uint32_t x2Value = accesses[0].data;
 		vexriscv_write_regfile(target, false, 1, x1Value);
-		vexriscv_pushInstruction(target, false , 0x13 | (2 << 7) | (1 << 15) | ((x2Value - x1Value) << 20));//ADDI x2, x1, -2048
+		vexriscv_pushInstruction(target, false, 0x13 | (2 << 7) |
+			(1 << 15) | ((x2Value - x1Value) << 20));	/* ADDI x2, x1, -2048 */
 
 		uint32_t saved = 0;
-		for(uint32_t accessId = 0;accessId < count;accessId++){
+		for (uint32_t accessId = 0; accessId < count; accessId++) {
 			struct vexriscv_mem_access access = accesses[accessId];
-			uint32_t addressReg = ((access.address - address) >> 12) + 3;
-			int32_t storeOffset =  ((access.address - address) & 0xFFF) - 2048;
+			uint32_t addressReg =
+			    ((access.address - address) >> 12) + 3;
+			int32_t storeOffset =
+			    ((access.address - address) & 0xFFF) - 2048;
 
-			if(x1Value + 2047 < access.data){
+			if (x1Value + 2047 < access.data) {
 				x1Value = (access.data + 2048) & 0xFFFFF000;
-				vexriscv_write_regfile(target, false, 1, x1Value);
+				vexriscv_write_regfile(target, false, 1,
+						       x1Value);
 			} else
 				saved++;
 
-			if(x2Value != access.data){
-				vexriscv_pushInstruction(target, false , 0x13 | (2 << 7) | (1 << 15) | ((access.data - x1Value) << 20));//ADDI x2, x1, delta
+			if (x2Value != access.data) {
+				vexriscv_pushInstruction(target, false, 0x13 | (2 << 7) | (1 << 15) |
+					((access.data - x1Value) << 20));	/* ADDI x2, x1, delta */
 				x2Value = access.data;
-			}else
+			} else
 				saved++;
 
-			vexriscv_pushInstruction(target, false, ((storeOffset & 0xFE0) << 20) | (2 << 20) | (addressReg << 15) | (0x2 << 12) | ((storeOffset & 0x1F) << 7) | 0x23); //SW x2,storeOffset(xAddressReg)
+			vexriscv_pushInstruction(target, false, ((storeOffset & 0xFE0) << 20) | (2 << 20) |
+				(addressReg << 15) | (0x2 << 12) | ((storeOffset & 0x1F) << 7) | 0x23);
+				/* SW x2,storeOffset(xAddressReg) */
 		}
-		LOG_DEBUG("SAVED : 0x%" PRIx32 "",saved);
+		LOG_DEBUG("SAVED : 0x%" PRIx32 "", saved);
 
 	} else {
-		//Generic but slow way
+		/* Generic but slow way */
 		vexriscv->regs->x1.dirty = 1;
 		vexriscv->regs->x2.dirty = 1;
 		while (count--) {
-			switch(size){
+			switch (size) {
 			case 4:
-				vexriscv_write_regfile(target, false, 1,buf_get_u32(buffer, 0, 32));
-				vexriscv_write_regfile(target, false, 2,address);
-				vexriscv_pushInstruction(target, false, (1 << 20) | (2 << 15) | (0x2 << 12) | 0x23); //SW x1,0(x2)
+				/* SW x1,0(x2) */
+				vexriscv_write_regfile(target, false, 1,
+						       buf_get_u32(buffer, 0,
+								   32));
+				vexriscv_write_regfile(target, false, 2,
+						       address);
+				vexriscv_pushInstruction(target, false,
+							 (1 << 20) | (2 << 15) |
+							 (0x2 << 12) | 0x23);
 				break;
 			case 2:
-				vexriscv_write_regfile(target, false, 1,buf_get_u32(buffer, 0 ,16));
-				vexriscv_write_regfile(target, false, 2,address);
-				vexriscv_pushInstruction(target, false, (1 << 20) | (2 << 15) | (0x1 << 12) | 0x23); //SH x1,0(x2)
+				/* SH x1,0(x2) */
+				vexriscv_write_regfile(target, false, 1,
+						       buf_get_u32(buffer, 0,
+								   16));
+				vexriscv_write_regfile(target, false, 2,
+						       address);
+				vexriscv_pushInstruction(target, false,
+							 (1 << 20) | (2 << 15) |
+							 (0x1 << 12) | 0x23);
 				break;
 			case 1:
-				vexriscv_write_regfile(target, false, 1,*((uint8_t*)buffer));
-				vexriscv_write_regfile(target, false, 2,address);
-				vexriscv_pushInstruction(target, false, (1 << 20) | (2 << 15) | (0x0 << 12) | 0x23); //SB x1,0(x2)
+				/* SB x1,0(x2) */
+				vexriscv_write_regfile(target, false, 1,
+						       *((uint8_t *) buffer));
+				vexriscv_write_regfile(target, false, 2,
+						       address);
+				vexriscv_pushInstruction(target, false,
+							 (1 << 20) | (2 << 15) |
+							 (0x0 << 12) | 0x23);
 				break;
 			}
 
@@ -1276,65 +1448,83 @@ static int vexriscv_write_memory(struct target *target, target_addr_t address,
 			buffer += size;
 		}
 	}
-	if(vexriscv_execute_jtag_queue(target))
+	if (vexriscv_execute_jtag_queue(target))
 		return ERROR_FAIL;
 	return ERROR_OK;
 }
 
-
-static int vexriscv_pushInstruction(struct target *target, bool execute, uint32_t instruction){
+static int vexriscv_pushInstruction(struct target *target, bool execute,
+				    uint32_t instruction)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4,instruction,4, 0);
+	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4, instruction, 4, 0);
 	return execute ? vexriscv_execute_jtag_queue(target) : 0;
 }
 
-static int vexriscv_setHardwareBreakpoint(struct target *target, bool execute, uint32_t id, uint32_t enable,uint32_t pc){
+static int vexriscv_setHardwareBreakpoint(struct target *target, bool execute,
+					  uint32_t id, uint32_t enable,
+					  uint32_t pc)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	vexriscv_memory_cmd(target, vexriscv->dbgBase + 0x40 + id*4, pc | (enable ? 1 : 0),4, 0);
+	vexriscv_memory_cmd(target, vexriscv->dbgBase + 0x40 + id * 4,
+			    pc | (enable ? 1 : 0), 4, 0);
 	return execute ? vexriscv_execute_jtag_queue(target) : 0;
 }
 
-static int vexriscv_writeStatusRegister(struct target *target, bool execute, uint32_t value){
+static int vexriscv_writeStatusRegister(struct target *target, bool execute,
+					uint32_t value)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	vexriscv_memory_cmd(target, vexriscv->dbgBase, value, 4, 0);
 	return execute ? vexriscv_execute_jtag_queue(target) : 0;
 }
 
-static int vexriscv_readStatusRegister(struct target *target, bool execute, uint32_t *value){
+static int vexriscv_readStatusRegister(struct target *target, bool execute,
+				       uint32_t *value)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	vexriscv_memory_cmd(target, vexriscv->dbgBase,0, 4, 1);
-	vexriscv_read_rsp(target,(uint8_t*)value, 4);
+	vexriscv_memory_cmd(target, vexriscv->dbgBase, 0, 4, 1);
+	vexriscv_read_rsp(target, (uint8_t *) value, 4);
 	return execute ? vexriscv_execute_jtag_queue(target) : 0;
 }
 
-static int vexriscv_readInstructionResult32(struct target *target, bool execute, uint8_t *value){
+static int vexriscv_readInstructionResult32(struct target *target, bool execute,
+					    uint8_t *value)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4,0, 4, 1);
+	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4, 0, 4, 1);
 	vexriscv_read_rsp(target, value, 4);
 	return execute ? vexriscv_execute_jtag_queue(target) : 0;
 }
 
-
-static int vexriscv_readInstructionResult16(struct target *target, bool execute, uint8_t *value){
+static int vexriscv_readInstructionResult16(struct target *target, bool execute,
+					    uint8_t *value)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4,0, 4, 1);
+	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4, 0, 4, 1);
 	vexriscv_read_rsp(target, value, 2);
 	return execute ? vexriscv_execute_jtag_queue(target) : 0;
 }
 
-
-static int vexriscv_readInstructionResult8(struct target *target, bool execute, uint8_t *value){
+static int vexriscv_readInstructionResult8(struct target *target, bool execute,
+					   uint8_t *value)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4,0, 4, 1);
-	vexriscv_read_rsp(target,(uint8_t*)value, 1);
+	vexriscv_memory_cmd(target, vexriscv->dbgBase + 4, 0, 4, 1);
+	vexriscv_read_rsp(target, (uint8_t *) value, 1);
 	return execute ? vexriscv_execute_jtag_queue(target) : 0;
 }
 
-static int vexriscv_read16(struct target *target, uint32_t address,uint16_t *data){
-	return vexriscv_read_memory(target,address,2,1,(uint8_t*)data);
+static int vexriscv_read16(struct target *target, uint32_t address,
+			   uint16_t *data)
+{
+	return vexriscv_read_memory(target, address, 2, 1, (uint8_t *) data);
 }
-static int vexriscv_write16(struct target *target, uint32_t address,uint16_t data){
-	return vexriscv_write_memory(target,address,2,1,(uint8_t*)&data);
+
+static int vexriscv_write16(struct target *target, uint32_t address,
+			    uint16_t data)
+{
+	return vexriscv_write_memory(target, address, 2, 1, (uint8_t *) &data);
 }
 
 /**
@@ -1355,7 +1545,7 @@ static int vexriscv_semihosting_setup(struct target *target, int enable)
 static int vexriscv_semihosting_post_result(struct target *target)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-    
+
 	struct semihosting *semihosting = target->semihosting;
 	if (!semihosting) {
 		/* If not enabled, silently ignored. */
@@ -1364,17 +1554,19 @@ static int vexriscv_semihosting_post_result(struct target *target)
 
 	LOG_DEBUG("0x%" PRIx64, semihosting->result);
 
-    vexriscv_set_core_reg(&vexriscv->core_cache->reg_list[10], (uint8_t*) &semihosting->result);
-        
+	vexriscv_set_core_reg(&vexriscv->core_cache->reg_list[10],
+			      (uint8_t *) &semihosting->result);
+
 	return 0;
 }
 
-
-static int vexriscv_get_gdb_reg_list(struct target *target, struct reg **reg_list[],
-			  int *reg_list_size, enum target_register_class reg_class)
+static int vexriscv_get_gdb_reg_list(struct target *target,
+				     struct reg **reg_list[],
+				     int *reg_list_size,
+				     enum target_register_class reg_class)
 {
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	LOG_DEBUG("vexriscv_get_gdb_reg_list %d\n",reg_class);
+	LOG_DEBUG("vexriscv_get_gdb_reg_list %d\n", reg_class);
 	if (reg_class == REG_CLASS_GENERAL) {
 		*reg_list_size = 32;
 		*reg_list = malloc((*reg_list_size) * sizeof(struct reg *));
@@ -1394,131 +1586,149 @@ static int vexriscv_get_gdb_reg_list(struct target *target, struct reg **reg_lis
 
 }
 
-
-
 static int vexriscv_add_breakpoint(struct target *target,
-			       struct breakpoint *breakpoint)
+				   struct breakpoint *breakpoint)
 {
 	uint32_t data;
 
-	LOG_DEBUG("Adding breakpoint: addr 0x%08" PRIx32 ", len %d, type %d, set: %u, id: %" PRId32,
-		  (uint32_t)breakpoint->address, breakpoint->length, breakpoint->type,
-		  breakpoint->number, breakpoint->unique_id);
+	LOG_DEBUG("Adding breakpoint: addr 0x%08" PRIx32
+		  ", len %d, type %d, set: %u, id: %" PRId32,
+		  (uint32_t) breakpoint->address, breakpoint->length,
+		  breakpoint->type, breakpoint->number, breakpoint->unique_id);
 
-	/* Only support SW breakpoints for now. */ //TODO: Oh really???????????????
-	if (breakpoint->type == BKPT_SOFT){
+	/* Only support SW breakpoints for now. */
+	/* TODO: Oh really??????????????? */
+	if (breakpoint->type == BKPT_SOFT) {
 		/* Read and save the instruction */
 		int retval = vexriscv_read16(target,
-						 breakpoint->address,
-						 (uint16_t*)(&data));
+					     breakpoint->address,
+					     (uint16_t *) (&data));
 		if (retval != ERROR_OK) {
-			LOG_ERROR("Error while reading the instruction at 0x%08" PRIx32, (uint32_t)breakpoint->address);
+			LOG_ERROR("Error while reading the instruction at 0x%08"
+				  PRIx32, (uint32_t) breakpoint->address);
 			return retval;
 		}
 		retval = vexriscv_read16(target,
-						 breakpoint->address+2,
-						 ((uint16_t*)(&data))+1);
+					 breakpoint->address + 2,
+					 ((uint16_t *) (&data)) + 1);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("Error while reading the instruction at 0x%08" PRIx32, (uint32_t)breakpoint->address);
+			LOG_ERROR("Error while reading the instruction at 0x%08"
+				  PRIx32, (uint32_t) breakpoint->address);
 			return retval;
 		}
-
+		LOG_DEBUG("Original Instruction is 0x%" PRIx32, data);
 		if (breakpoint->orig_instr != NULL)
 			free(breakpoint->orig_instr);
-
 		breakpoint->orig_instr = malloc(4);
 		memcpy(breakpoint->orig_instr, &data, 4);
-		LOG_DEBUG("Original Instruction is 0x%" PRIx32, data);
-		if((data & 3) == 3){
+		if (breakpoint->length == 4) {
+			LOG_DEBUG("GDB requires ebreak!");
 			retval = vexriscv_write16(target,
-							  breakpoint->address,
-							  (uint16_t)vexriscv_BREAK_INST);
-
+						  breakpoint->address,
+						  (uint16_t)
+						  vexriscv_BREAK_INST);
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while writing vexriscv_TRAP_INSTR at 0x%08" PRIx32,
-						(uint32_t)breakpoint->address);
+				LOG_ERROR
+				    ("Error while writing vexriscv_TRAP_INSTR at 0x%08"
+				     PRIx32, (uint32_t) breakpoint->address);
 				return retval;
 			}
 			retval = vexriscv_write16(target,
-							  breakpoint->address+2,
-							  (uint16_t)(vexriscv_BREAK_INST >> 16));
+						  breakpoint->address + 2,
+						  (uint16_t)
+						  (vexriscv_BREAK_INST >> 16));
 
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while writing vexriscv_TRAP_INSTR at 0x%08" PRIx32,
-						(uint32_t)breakpoint->address+2);
+				LOG_ERROR
+				    ("Error while writing vexriscv_TRAP_INSTR at 0x%08"
+				     PRIx32,
+				     (uint32_t) breakpoint->address + 2);
 				return retval;
 			}
+		} else if (breakpoint->length == 2) {
 
-		}else{
+			LOG_DEBUG("GDB requires ebreak.c!");
 			retval = vexriscv_write16(target,
-							  breakpoint->address,
-							  vexriscv_BREAKC_INST);
-
+						  breakpoint->address,
+						  vexriscv_BREAKC_INST);
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while writing vexriscv_TRAP_INSTR at 0x%08" PRIx32,
-						(uint32_t)breakpoint->address);
+				LOG_ERROR
+				    ("Error while writing vexriscv_TRAP_INSTR at 0x%08"
+				     PRIx32, (uint32_t) breakpoint->address);
 				return retval;
 			}
+		} else {
+			LOG_ERROR("Invalid breakpoint length %d",
+				  breakpoint->length);
+			return ERROR_FAIL;
 		}
 	} else {
 		struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 
-		int32_t freeId = - 1;
-		for(int i = 0;i < vexriscv->hardwareBreakpointsCount;i++){
-			if(!vexriscv->hardwareBreakpointUsed[i]) freeId = i;
+		int32_t freeId = -1;
+		for (int i = 0; i < vexriscv->hardwareBreakpointsCount; i++) {
+			if (!vexriscv->hardwareBreakpointUsed[i])
+				freeId = i;
 		}
-		if(freeId == -1){
-			LOG_INFO("no watchpoint unit available for hardware breakpoint");
+		if (freeId == -1) {
+			LOG_INFO
+			    ("no watchpoint unit available for hardware breakpoint");
 			return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
 		}
 		breakpoint_hw_set(breakpoint, freeId);
 		vexriscv->hardwareBreakpointUsed[freeId] = 1;
-		vexriscv_setHardwareBreakpoint(target, true, freeId, 1,breakpoint->address);
+		vexriscv_setHardwareBreakpoint(target, true, freeId, 1,
+					       breakpoint->address);
 	}
 
 	return ERROR_OK;
 }
 
 static int vexriscv_remove_breakpoint(struct target *target,
-				  struct breakpoint *breakpoint)
+				      struct breakpoint *breakpoint)
 {
-	LOG_DEBUG("Removing breakpoint: addr 0x%08" PRIx32 ", len %d, type %d, set: %u, id: %" PRId32,
-			(uint32_t)breakpoint->address, breakpoint->length, breakpoint->type,
-		  breakpoint->number, breakpoint->unique_id);
+	LOG_DEBUG("Removing breakpoint: addr 0x%08" PRIx32
+		  ", len %d, type %d, set: %u, id: %" PRId32,
+		  (uint32_t) breakpoint->address, breakpoint->length,
+		  breakpoint->type, breakpoint->number, breakpoint->unique_id);
 
 	/* Only support SW breakpoints for now. */
-	if (breakpoint->type == BKPT_SOFT){
+	if (breakpoint->type == BKPT_SOFT) {
 
 		/* Replace the removed instruction */
-		uint32_t data = buf_get_u32(breakpoint->orig_instr,0,32);
+		uint32_t data = buf_get_u32(breakpoint->orig_instr, 0, 32);
 		LOG_DEBUG("Original Instruction is 0x%" PRIx32, data);
-		if((data & 3) == 3){
+		if (breakpoint->length == 4) {	/*(data & 3) == 3 */
 			int retval = vexriscv_write16(target,
-							  breakpoint->address,
-							  (uint16_t)data);
+						      breakpoint->address,
+						      (uint16_t) data);
 
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while writing back the instruction at 0x%08" PRIx32,
-						(uint32_t)breakpoint->address);
+				LOG_ERROR
+				    ("Error while writing back the instruction at 0x%08"
+				     PRIx32, (uint32_t) breakpoint->address);
 				return retval;
 			}
 			retval = vexriscv_write16(target,
-							  breakpoint->address+2,
-							  (uint16_t)(data >> 16));
+						  breakpoint->address + 2,
+						  (uint16_t) (data >> 16));
 
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while writing back the instruction at 0x%08" PRIx32,
-						(uint32_t)breakpoint->address+2);
+				LOG_ERROR
+				    ("Error while writing back the instruction at 0x%08"
+				     PRIx32,
+				     (uint32_t) breakpoint->address + 2);
 				return retval;
 			}
-		}else{
+		} else {
 			int retval = vexriscv_write16(target,
-							  breakpoint->address,
-							  (uint16_t)data);
+						      breakpoint->address,
+						      (uint16_t) data);
 
 			if (retval != ERROR_OK) {
-				LOG_ERROR("Error while writing back the instruction at 0x%08" PRIx32,
-						(uint32_t)breakpoint->address);
+				LOG_ERROR
+				    ("Error while writing back the instruction at 0x%08"
+				     PRIx32, (uint32_t) breakpoint->address);
 				return retval;
 			}
 		}
@@ -1531,24 +1741,25 @@ static int vexriscv_remove_breakpoint(struct target *target,
 		uint32_t freeId = breakpoint->number;
 		breakpoint->is_set = false;
 		vexriscv->hardwareBreakpointUsed[freeId] = 0;
-		vexriscv_setHardwareBreakpoint(target, true, freeId, 0,breakpoint->address);
+		vexriscv_setHardwareBreakpoint(target, true, freeId, 0,
+					       breakpoint->address);
 	}
-
 
 	return ERROR_OK;
 }
 
-//TODO look like instruction step when branch is strange
+/* TODO look like instruction step when branch is strange */
 static int vexriscv_resume_or_step(struct target *target, int current,
-			       uint32_t address, int handle_breakpoints,
-			       int debug_execution, int step)
+				   uint32_t address, int handle_breakpoints,
+				   int debug_execution, int step)
 {
 
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	struct breakpoint *breakpoint = NULL;
 	int retval;
 	LOG_DEBUG("Addr: 0x%" PRIx32 ", stepping: %s, handle breakpoints %s\n",
-		  address, step ? "yes" : "no", handle_breakpoints ? "yes" : "no");
+		  address, step ? "yes" : "no",
+		  handle_breakpoints ? "yes" : "no");
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -1559,43 +1770,50 @@ static int vexriscv_resume_or_step(struct target *target, int current,
 		target_free_all_working_areas(target);
 
 	/* current ? continue on current pc : continue at <address> */
-	if (!current){
-                buf_set_u32(vexriscv->regs->pc.value, 0, 32, address);
+	if (!current) {
+		buf_set_u32(vexriscv->regs->pc.value, 0, 32, address);
 		vexriscv->regs->pc.valid = true;
 		vexriscv->regs->pc.dirty = true;
 	}
 
-
-
 	/* The front-end may request us not to handle breakpoints */
 	if (handle_breakpoints) {
 		/* Single step past breakpoint at current address */
-		breakpoint = breakpoint_find(target, buf_get_u32((uint8_t *)vexriscv->regs->pc.value, 0, 32));
+		breakpoint =
+		    breakpoint_find(target,
+				    buf_get_u32((uint8_t *) vexriscv->regs->pc.
+						value, 0, 32));
 		if (breakpoint) {
-			LOG_DEBUG("Unset breakpoint at 0x%08" PRIx32, (uint32_t) breakpoint->address);
+			LOG_DEBUG("Unset breakpoint at 0x%08" PRIx32,
+				  (uint32_t) breakpoint->address);
 			retval = vexriscv_remove_breakpoint(target, breakpoint);
 			if (retval != ERROR_OK)
 				return retval;
 		}
 	}
 
-
-	if((retval = vexriscv_flush_caches(target))!= ERROR_OK){
+	retval = vexriscv_flush_caches(target);
+	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while flushing cache when resuming");
-		 return retval;
+		return retval;
 	};
 
-	if ((retval = vexriscv_restore_context(target))){
+	retval = vexriscv_restore_context(target);
+	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while calling vexriscv_restore_context");
 		return retval;
 	}
 
 	/* Unstall */
-	if ((retval = vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_CLEAR | (step ? vexriscv_FLAGS_STEP : 0))) != ERROR_OK) {
+	retval =
+	    vexriscv_writeStatusRegister(target, true,
+					 vexriscv_FLAGS_HALT_CLEAR | (step ?
+								      vexriscv_FLAGS_STEP
+								      : 0));
+	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while unstalling the CPU");
 		return retval;
 	}
-
 
 	if (step)
 		target->debug_reason = DBG_REASON_SINGLESTEP;
@@ -1608,32 +1826,36 @@ static int vexriscv_resume_or_step(struct target *target, int current,
 	if (!debug_execution) {
 		target->state = TARGET_RUNNING;
 		target_call_event_callbacks(target, TARGET_EVENT_RESUMED);
-		LOG_DEBUG("Target resumed at 0x%08" PRIx32, buf_get_u32((uint8_t*)vexriscv->regs->pc.value, 0, 32));
+		LOG_DEBUG("Target resumed at 0x%08" PRIx32,
+			  buf_get_u32((uint8_t *) vexriscv->regs->pc.value, 0,
+				      32));
 	} else {
 		target->state = TARGET_DEBUG_RUNNING;
 		target_call_event_callbacks(target, TARGET_EVENT_DEBUG_RESUMED);
-		LOG_DEBUG("Target debug resumed at 0x%08" PRIx32, buf_get_u32((uint8_t *)vexriscv->regs->pc.value, 0, 32));
+		LOG_DEBUG("Target debug resumed at 0x%08" PRIx32,
+			  buf_get_u32((uint8_t *) vexriscv->regs->pc.value, 0,
+				      32));
 	}
 
 	return ERROR_OK;
 }
 
 static int vexriscv_resume(struct target *target, int current,
-		target_addr_t address, int handle_breakpoints, int debug_execution)
+			   target_addr_t address, int handle_breakpoints,
+			   int debug_execution)
 {
+	LOG_DEBUG("-");
 	return vexriscv_resume_or_step(target, current, address,
-				   handle_breakpoints,
-				   debug_execution,
-				   NO_SINGLE_STEP);
+				       handle_breakpoints,
+				       debug_execution, NO_SINGLE_STEP);
 }
 
 static int vexriscv_step(struct target *target, int current,
-		target_addr_t address, int handle_breakpoints)
+			 target_addr_t address, int handle_breakpoints)
 {
+	LOG_DEBUG("-");
 	return vexriscv_resume_or_step(target, current, address,
-				   handle_breakpoints,
-				   0,
-				   SINGLE_STEP);
+				       handle_breakpoints, 0, SINGLE_STEP);
 
 }
 
@@ -1642,14 +1864,12 @@ static int vexriscv_examine(struct target *target)
 	LOG_DEBUG("vexriscv_examine");
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 
-
-
 	if (!target_was_examined(target)) {
 
 		target_set_examined(target);
 
 		uint32_t halted;
-		int retval = vexriscv_is_halted(target,&halted);
+		int retval = vexriscv_is_halted(target, &halted);
 
 		if (retval != ERROR_OK) {
 			LOG_ERROR("Couldn't read the CPU state");
@@ -1661,24 +1881,34 @@ static int vexriscv_examine(struct target *target)
 				uint32_t buffer[4];
 				LOG_DEBUG("Target is halted");
 
-				vexriscv_pushInstruction(target, false, 0x12300013); //addi x0 x0, 0x123
-				vexriscv_readInstructionResult32(target, true, (uint8_t*) &buffer[0]);
-				vexriscv_pushInstruction(target, false, 0x45600013); //addi x0 x0, 0x456
-				vexriscv_readInstructionResult32(target, true, (uint8_t*) &buffer[1]);
-                vexriscv_pushInstruction(target, false, 0xFFFFF037); //lui x0, 0xFFFFF
-                vexriscv_readInstructionResult32(target, true, (uint8_t*) &buffer[2]);
-                vexriscv_pushInstruction(target, false, 0xABCDE037); //lui x0, 0xABCDE
-                vexriscv_readInstructionResult32(target, true, (uint8_t*) &buffer[3]);
+				vexriscv_pushInstruction(target, false, 0x12300013);	/* addi x0 x0, 0x123 */
+				vexriscv_readInstructionResult32(target, true,
+								 (uint8_t *) &
+								 buffer[0]);
+				vexriscv_pushInstruction(target, false, 0x45600013);	/* addi x0 x0, 0x456 */
+				vexriscv_readInstructionResult32(target, true,
+								 (uint8_t *) &
+								 buffer[1]);
+				vexriscv_pushInstruction(target, false, 0xFFFFF037);	/* lui x0, 0xFFFFF */
+				vexriscv_readInstructionResult32(target, true,
+								 (uint8_t *) &
+								 buffer[2]);
+				vexriscv_pushInstruction(target, false, 0xABCDE037);	/* lui x0, 0xABCDE */
+				vexriscv_readInstructionResult32(target, true,
+								 (uint8_t *) &
+								 buffer[3]);
 
-                if(vexriscv_execute_jtag_queue(target))
-                    return ERROR_FAIL;
-                if(buffer[0] != 0x123 || buffer[1] != 0x456 || buffer[2] != 0xFFFFF000 || buffer[3] != 0xABCDE000){
-                    LOG_ERROR("!!!");
-                    LOG_ERROR("Can't communicate with the CPU");
-                    LOG_ERROR("!!!");
-                    return ERROR_FAIL;
-                }
-
+				if (vexriscv_execute_jtag_queue(target))
+					return ERROR_FAIL;
+				if (buffer[0] != 0x123 || buffer[1] != 0x456
+				    || buffer[2] != 0xFFFFF000
+				    || buffer[3] != 0xABCDE000) {
+					LOG_ERROR("!!!");
+					LOG_ERROR
+					    ("Can't communicate with the CPU");
+					LOG_ERROR("!!!");
+					return ERROR_FAIL;
+				}
 
 				/* This is the first time we examine the target,
 				 * it is stalled and we don't know why. Let's
@@ -1689,8 +1919,12 @@ static int vexriscv_examine(struct target *target)
 
 				target->state = TARGET_HALTED;
 
-				for(int i = 0;i < vexriscv->hardwareBreakpointsCount;i++) {
-					vexriscv_setHardwareBreakpoint(target, true,i,0,0);
+				for (int i = 0;
+				     i < vexriscv->hardwareBreakpointsCount;
+				     i++) {
+					vexriscv_setHardwareBreakpoint(target,
+								       true, i,
+								       0, 0);
 				}
 			}
 		}
@@ -1704,17 +1938,22 @@ static int vexriscv_soft_reset_halt(struct target *target)
 	int error;
 	LOG_DEBUG("-");
 
-	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
+	error =
+	    vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_SET);
 	if (error != ERROR_OK) {
 		LOG_ERROR("Error while soft_reset_halt the CPU");
 		return error;
 	}
-	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_SET);
+	error =
+	    vexriscv_writeStatusRegister(target, true,
+					 vexriscv_FLAGS_RESET_SET);
 	if (error != ERROR_OK) {
 		LOG_ERROR("Error while soft_reset_halt the CPU");
 		return error;
 	}
-	error =  vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_RESET_CLEAR);
+	error =
+	    vexriscv_writeStatusRegister(target, true,
+					 vexriscv_FLAGS_RESET_CLEAR);
 	if (error != ERROR_OK) {
 		LOG_ERROR("Error while soft_reset_halt the CPU");
 		return error;
@@ -1726,30 +1965,33 @@ static int vexriscv_soft_reset_halt(struct target *target)
 	return ERROR_OK;
 }
 
-
 static int vexriscv_add_watchpoint(struct target *target,
-			       struct watchpoint *watchpoint)
+				   struct watchpoint *watchpoint)
 {
 	LOG_ERROR("%s: implement me", __func__);
 	return ERROR_OK;
 }
 
 static int vexriscv_remove_watchpoint(struct target *target,
-				  struct watchpoint *watchpoint)
+				      struct watchpoint *watchpoint)
 {
 	LOG_ERROR("%s: implement me", __func__);
 	return ERROR_OK;
 }
 
 /* run to exit point. return error if exit point was not reached. */
-static int vexriscv_run_and_wait(struct target *target, target_addr_t entry_point, int timeout_ms)
+static int vexriscv_run_and_wait(struct target *target,
+				 target_addr_t entry_point, int timeout_ms)
 {
 	int retval;
-	//struct vexriscv_common *vexriscv = target_to_vexriscv(target);
+	/* struct vexriscv_common *vexriscv = target_to_vexriscv(target); */
 	vexriscv_cpu_write_pc(target, false, entry_point);
 
 	/* Unstall */
-	if ((retval = vexriscv_writeStatusRegister(target, true, vexriscv_FLAGS_HALT_CLEAR)) != ERROR_OK) {
+	retval =
+	    vexriscv_writeStatusRegister(target, true,
+					 vexriscv_FLAGS_HALT_CLEAR);
+	if (retval != ERROR_OK) {
 		LOG_ERROR("Error while unstalling the CPU");
 		return retval;
 	}
@@ -1771,12 +2013,12 @@ static int vexriscv_run_and_wait(struct target *target, target_addr_t entry_poin
 	return ERROR_OK;
 }
 
-
-
 int vexriscv_run_algorithm(struct target *target, int num_mem_params,
-			struct mem_param *mem_params, int num_reg_params,
-			struct reg_param *reg_params, target_addr_t entry_point,
-			target_addr_t exit_point, int timeout_ms, void *arch_info){
+			   struct mem_param *mem_params, int num_reg_params,
+			   struct reg_param *reg_params,
+			   target_addr_t entry_point, target_addr_t exit_point,
+			   int timeout_ms, void *arch_info)
+{
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	int retval;
 	LOG_DEBUG("Running algorithm");
@@ -1793,30 +2035,37 @@ int vexriscv_run_algorithm(struct target *target, int num_mem_params,
 
 	for (int i = 0; i < num_mem_params; i++) {
 		if (mem_params[i].direction != PARAM_IN) {
-			retval = target_write_buffer(target, mem_params[i].address, mem_params[i].size, mem_params[i].value);
+			retval =
+			    target_write_buffer(target, mem_params[i].address,
+						mem_params[i].size,
+						mem_params[i].value);
 			if (retval != ERROR_OK)
 				return retval;
 		}
 	}
 
-	vexriscv_flush_caches(target); //Ensure instruction cache is in sync with recently written program
+	vexriscv_flush_caches(target);	/* Ensure instruction cache is in sync with recently written program */
 
 	for (int i = 0; i < num_reg_params; i++) {
-		struct reg *reg = register_get_by_name(vexriscv->core_cache, reg_params[i].reg_name, 0);
+		struct reg *reg =
+		    register_get_by_name(vexriscv->core_cache,
+					 reg_params[i].reg_name, 0);
 
 		if (!reg) {
-			LOG_ERROR("BUG: register '%s' not found", reg_params[i].reg_name);
+			LOG_ERROR("BUG: register '%s' not found",
+				  reg_params[i].reg_name);
 			return ERROR_COMMAND_SYNTAX_ERROR;
 		}
 
 		if (reg->size != reg_params[i].size) {
-			LOG_ERROR("BUG: register '%s' size doesn't match reg_params[i].size",
-					reg_params[i].reg_name);
+			LOG_ERROR
+			    ("BUG: register '%s' size doesn't match reg_params[i].size",
+			     reg_params[i].reg_name);
 			return ERROR_COMMAND_SYNTAX_ERROR;
 		}
 
-
-		vexriscv_write_regfile(target, false, reg->number, buf_get_u32(reg_params[i].value,0,32));
+		vexriscv_write_regfile(target, false, reg->number,
+				       buf_get_u32(reg_params[i].value, 0, 32));
 	}
 
 	retval = vexriscv_run_and_wait(target, entry_point, timeout_ms);
@@ -1826,8 +2075,10 @@ int vexriscv_run_algorithm(struct target *target, int num_mem_params,
 
 	for (int i = 0; i < num_mem_params; i++) {
 		if (mem_params[i].direction != PARAM_OUT) {
-			retval = target_read_buffer(target, mem_params[i].address, mem_params[i].size,
-					mem_params[i].value);
+			retval =
+			    target_read_buffer(target, mem_params[i].address,
+					       mem_params[i].size,
+					       mem_params[i].value);
 			if (retval != ERROR_OK)
 				return retval;
 		}
@@ -1836,12 +2087,11 @@ int vexriscv_run_algorithm(struct target *target, int num_mem_params,
 	return ERROR_OK;
 }
 
-
 COMMAND_HANDLER(vexriscv_handle_readWaitCycles_command)
 {
-	if(CMD_ARGC != 1)
+	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_ARGUMENT_INVALID;
-	struct target* target = get_current_target(CMD_CTX);
+	struct target *target = get_current_target(CMD_CTX);
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], vexriscv->readWaitCycles);
 	return ERROR_OK;
@@ -1849,30 +2099,32 @@ COMMAND_HANDLER(vexriscv_handle_readWaitCycles_command)
 
 COMMAND_HANDLER(vexriscv_handle_jtagMapping_command)
 {
-    if(CMD_ARGC < 6)
-        return ERROR_COMMAND_ARGUMENT_INVALID;
-    struct target* target = get_current_target(CMD_CTX);
-    struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], vexriscv->jtagCmdInstruction);
-    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], vexriscv->jtagRspInstruction);
-    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], vexriscv->jtagCmdHeader);
-    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], vexriscv->jtagRspHeader);
-    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[4], vexriscv->jtagCmdHeaderSize);
-    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[5], vexriscv->jtagRspHeaderSize);
-    if(CMD_ARGC > 6){
-        if(CMD_ARGC < 8)
-            return ERROR_COMMAND_ARGUMENT_INVALID;
-        COMMAND_PARSE_NUMBER(u32, CMD_ARGV[6], vexriscv->jtagCmdIgnoreSize);
-        COMMAND_PARSE_NUMBER(u32, CMD_ARGV[7], vexriscv->jtagRspIgnoreSize);
-    }
-    return ERROR_OK;
+	if (CMD_ARGC < 6)
+		return ERROR_COMMAND_ARGUMENT_INVALID;
+	struct target *target = get_current_target(CMD_CTX);
+	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], vexriscv->jtagCmdInstruction);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], vexriscv->jtagRspInstruction);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], vexriscv->jtagCmdHeader);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], vexriscv->jtagRspHeader);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[4], vexriscv->jtagCmdHeaderSize);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[5], vexriscv->jtagRspHeaderSize);
+	if (CMD_ARGC > 6) {
+		if (CMD_ARGC < 8)
+			return ERROR_COMMAND_ARGUMENT_INVALID;
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[6],
+				     vexriscv->jtagCmdIgnoreSize);
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[7],
+				     vexriscv->jtagRspIgnoreSize);
+	}
+	return ERROR_OK;
 }
 
 COMMAND_HANDLER(vexriscv_handle_cpuConfigFile_command)
 {
-	if(CMD_ARGC != 1)
+	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_ARGUMENT_INVALID;
-	struct target* target = get_current_target(CMD_CTX);
+	struct target *target = get_current_target(CMD_CTX);
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	vexriscv->cpuConfigFile = strdup(CMD_ARGV[0]);
 	return ERROR_OK;
@@ -1880,41 +2132,44 @@ COMMAND_HANDLER(vexriscv_handle_cpuConfigFile_command)
 
 COMMAND_HANDLER(vexriscv_handle_targetAddress_command)
 {
-	if(CMD_ARGC != 1)
+	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_ARGUMENT_INVALID;
-	struct target* target = get_current_target(CMD_CTX);
+	struct target *target = get_current_target(CMD_CTX);
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
 	vexriscv->targetAddress = strdup(CMD_ARGV[0]);
 	return ERROR_OK;
 }
 
 static const struct command_registration vexriscv_exec_command_handlers[] = {
-        {
-            .name = "jtagMapping",
-            .handler = vexriscv_handle_jtagMapping_command,
-            .mode = COMMAND_CONFIG,
-            .help = "Specify the JTAG instructions used for cmd/rsp transactions and their DR_SHIFT header, default 2 3 0 0 0 0 0 0",
-            .usage = "cmdInstruction rspInstruction cmdHeader rspHeader cmdHeaderSize rspHeaderSize [cmdIgnoreSize rspIgnoreSize]",
-        },
-		{
-			.name = "readWaitCycles",
-			.handler = vexriscv_handle_readWaitCycles_command,
-			.mode = COMMAND_CONFIG,
-			.help = "Number of JTAG cycle to wait before getting jtag read responses",
-			.usage = "value",
-		},{
-			.name = "cpuConfigFile",
-			.handler = vexriscv_handle_cpuConfigFile_command,
-			.mode = COMMAND_CONFIG,
-			.help = "Path to the autogenerated configuration file",
-			.usage = "filePath",
-		},{
-			.name = "targetAddress",
-			.handler = vexriscv_handle_targetAddress_command,
-			.mode = COMMAND_CONFIG,
-			.help = "Target address to connect to",
-			.usage = "network-address",
-		},
+	{
+	 .name = "jtagMapping",
+	 .handler = vexriscv_handle_jtagMapping_command,
+	 .mode = COMMAND_CONFIG,
+	 .help =
+	 "Specify the JTAG instructions used for cmd/rsp transactions and their DR_SHIFT header, default 2 3 0 0 0 0 0 0",
+	 .usage =
+	 "cmdInstruction rspInstruction cmdHeader rspHeader cmdHeaderSize rspHeaderSize [cmdIgnoreSize rspIgnoreSize]",
+	 },
+	{
+	 .name = "readWaitCycles",
+	 .handler = vexriscv_handle_readWaitCycles_command,
+	 .mode = COMMAND_CONFIG,
+	 .help =
+	 "Number of JTAG cycle to wait before getting jtag read responses",
+	 .usage = "value",
+	 }, {
+	     .name = "cpuConfigFile",
+	     .handler = vexriscv_handle_cpuConfigFile_command,
+	     .mode = COMMAND_CONFIG,
+	     .help = "Path to the autogenerated configuration file",
+	     .usage = "filePath",
+	     }, {
+		 .name = "targetAddress",
+		 .handler = vexriscv_handle_targetAddress_command,
+		 .mode = COMMAND_CONFIG,
+		 .help = "Target address to connect to",
+		 .usage = "network-address",
+		 },
 	COMMAND_REGISTRATION_DONE
 };
 
@@ -1922,19 +2177,18 @@ extern const struct command_registration semihosting_common_handlers[];
 
 const struct command_registration vexriscv_command_handlers[] = {
 	{
-		.name = "vexriscv",
-		.mode = COMMAND_ANY,
-		.help = "vexriscv command group",
-		.usage = "",
-		.chain = vexriscv_exec_command_handlers,
-	},
+	 .name = "vexriscv",
+	 .mode = COMMAND_ANY,
+	 .help = "vexriscv command group",
+	 .usage = "",
+	 .chain = vexriscv_exec_command_handlers,
+	 },
 	{
-		.name = "arm",
-		.mode = COMMAND_ANY,
-		.help = "ARM Command Group",
-		.usage = "",
-		.chain = semihosting_common_handlers
-	},    
+	 .name = "arm",
+	 .mode = COMMAND_ANY,
+	 .help = "ARM Command Group",
+	 .usage = "",
+	 .chain = semihosting_common_handlers},
 	COMMAND_REGISTRATION_DONE
 };
 
