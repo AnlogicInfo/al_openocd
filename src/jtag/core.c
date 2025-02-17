@@ -1319,7 +1319,8 @@ static int jtag_examine_chain(void)
 		/* ensure the TAP ID matches what was expected */
 		if (!jtag_examine_chain_match_tap(tap))
 			retval = ERROR_JTAG_INIT_SOFT_FAIL;
-
+		if(tap->ignore_bypass) 
+			break;
 		tap = jtag_tap_next_enabled(tap);
 	}
 

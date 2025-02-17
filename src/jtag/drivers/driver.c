@@ -140,7 +140,7 @@ int interface_jtag_add_dr_scan(struct jtag_tap *active, int in_num_fields,
 	scan->num_fields = in_num_fields + bypass_devices;
 	scan->fields = out_fields;
 	scan->end_state = state;
-
+	
 	struct scan_field *field = out_fields;	/* keep track where we insert data */
 
 	/* loop over all enabled TAPs */
