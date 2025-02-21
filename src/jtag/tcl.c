@@ -625,7 +625,7 @@ static int jim_newtap_cmd(struct jim_getopt_info *goi)
 			    tap->ignore_bypass = true;
 			    break;
 			case NTAP_OPT_DISAUTOPROBE:
-				tap->disable-autoprobe = true;
+				tap->disable_autoprobe = true;
 				break;
 		}	/* switch (n->value) */
 	}	/* while (goi->argc) */
