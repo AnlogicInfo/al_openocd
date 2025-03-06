@@ -138,6 +138,9 @@ struct jtag_tap {
 	/** Flag saying whether to ignore the bypass bit in the code */
 	bool ignore_bypass;
 
+	/** Flag saying whether to disable auto probe */
+	bool disable_autoprobe;
+
 	/** current instruction */
 	uint8_t *cur_instr;
 	/** Bypass register selected */

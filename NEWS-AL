@@ -6,9 +6,12 @@ v0.1118
 1. Fix rbb buffer overflow issue
 2. Add cjtag support
 3. Add fespi & nuspi support
-4. Add aarch64 warm reset
-5. Add sparse image support for NAND
-6. Fix device scan for usb hub device
+4. Add sparse image support for NAND
+5. Fix device scan for usb hub device
+6. Updata rbb server code
+7. Add config for onecable setup
+8. Update config for ph1p35
+9. Add script to exit lockdown state
 
 
 v0.1117

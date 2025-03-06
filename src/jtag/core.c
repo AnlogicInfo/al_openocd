@@ -1309,17 +1309,17 @@ static int jtag_examine_chain(void)
 			/* Friendly devices support IDCODE */
 			tap->hasidcode = true;
 			tap->idcode = idcode;
-			if (strstr(tap->dotted_name, "dummy") != NULL)
+			if ((strstr(tap->dotted_name, "dummy") != NULL) || idcode == 0x10205a6d)
 				idcode = 0;
 			jtag_examine_chain_display(LOG_LVL_INFO, "tap/device found", tap->dotted_name, idcode);
-
 			bit_count += 32;
 		}
 
 		/* ensure the TAP ID matches what was expected */
 		if (!jtag_examine_chain_match_tap(tap))
 			retval = ERROR_JTAG_INIT_SOFT_FAIL;
-
+		if(tap->disable_autoprobe) 
+			break;
 		tap = jtag_tap_next_enabled(tap);
 	}
 

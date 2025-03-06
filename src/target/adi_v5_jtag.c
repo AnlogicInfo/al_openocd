@@ -250,7 +250,13 @@ static int adi_jtag_dp_scan_cmd(struct adiv5_dap *dap, struct dap_cmd *cmd, uint
 	struct jtag_tap *tap = dap->tap;
 	int retval;
 
-	retval = arm_jtag_set_instr(tap, cmd->instr, NULL, TAP_IDLE);
+	if (arm_workaround) {
+		retval = arm_jtag_set_instr_inner(tap, cmd->instr, NULL, TAP_IDLE);
+		arm_workaround = 0;
+	} else {
+		retval = arm_jtag_set_instr(tap, cmd->instr, NULL, TAP_IDLE);
+	}
+
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -681,12 +687,7 @@ static int jtag_connect(struct adiv5_dap *dap)
 
 static int jtag_check_reconnect(struct adiv5_dap *dap)
 {
-#if 0
-	if (arm_workaround) {
-		arm_workaround = 0;
-		dap->do_reconnect = true;
-	}
-#endif
+
 	if (dap->do_reconnect)
 		return jtag_connect(dap);
 

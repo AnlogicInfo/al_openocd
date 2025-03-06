@@ -114,6 +114,7 @@ extern struct target_type esirisc_target;
 extern struct target_type arcv2_target;
 extern struct target_type pstap_target;
 extern struct target_type dwcphy_target;
+extern struct target_type at0012_target;
 extern struct target_type vexriscv_target;
 
 static struct target_type *target_types[] = {
@@ -155,6 +156,7 @@ static struct target_type *target_types[] = {
 	&mips_mips64_target,
 	&pstap_target,
 	&dwcphy_target,
+	&at0012_target,
 	&vexriscv_target,
 	NULL,
 };

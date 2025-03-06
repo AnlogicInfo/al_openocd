@@ -35,6 +35,7 @@
 #include "jtag/interface.h"
 #include "smp.h"
 #include <helper/time_support.h>
+#include <server/rbb_server.h>
 
 enum restart_mode {
 	RESTART_LAZY,
@@ -522,6 +523,9 @@ static int aarch64_poll(struct target *target)
 	enum target_state prev_target_state;
 	int retval = ERROR_OK;
 	int halted;
+
+	if (allow_tap_access == 1)
+		return ERROR_OK;
 
 	retval = aarch64_check_state_one(target,
 				PRSR_HALT, PRSR_HALT, &halted, NULL);
@@ -1511,6 +1515,7 @@ static int aarch64_unset_breakpoint(struct target *target, struct breakpoint *br
 	struct aarch64_common *aarch64 = target_to_aarch64(target);
 	struct armv8_common *armv8 = &aarch64->armv8_common;
 	struct aarch64_brp *brp_list = aarch64->brp_list;
+	uint8_t instr[8] = {0};
 
 	if (!breakpoint->is_set) {
 		LOG_WARNING("breakpoint not set");
@@ -1632,6 +1637,20 @@ static int aarch64_unset_breakpoint(struct target *target, struct breakpoint *br
 		armv8_cache_i_inner_inval_virt(armv8,
 				breakpoint->address & 0xFFFFFFFFFFFFFFFE,
 				breakpoint->length);
+
+
+		target_read_memory(target, breakpoint->address & 0xFFFFFFFFFFFFFFFE,
+		breakpoint->length, 1, instr);
+		if(instr != breakpoint->orig_instr) {
+			LOG_DEBUG("rewrite bp");
+			retval = target_write_memory(target,
+					breakpoint->address & 0xFFFFFFFFFFFFFFFE,
+					breakpoint->length, 1, breakpoint->orig_instr);
+
+			if(retval != ERROR_OK)
+				return retval;
+		}
+
 	}
 	breakpoint->is_set = false;
 
