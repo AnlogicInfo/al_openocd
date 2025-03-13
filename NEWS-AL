@@ -2,6 +2,13 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1119
+1. Add config for ChipDebugger
+2. Add config option to disable auto probe
+3. Remote id check for ph1p35
+4. Fix apu ir reset issue when cwc is on
+5. Fix apu breakpoint unset issue
+
 v0.1118
 1. Fix rbb buffer overflow issue
 2. Add cjtag support
