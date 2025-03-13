@@ -1234,6 +1234,7 @@ static int jtag_examine_chain(void)
 {
 	int retval;
 	unsigned max_taps = jtag_tap_count();
+	unsigned mfg_code;
 
 	/* Autoprobe up to this many. */
 	if (max_taps < JTAG_MAX_AUTO_TAPS)
@@ -1309,10 +1310,11 @@ static int jtag_examine_chain(void)
 			/* Friendly devices support IDCODE */
 			tap->hasidcode = true;
 			tap->idcode = idcode;
-			if ((strstr(tap->dotted_name, "dummy") != NULL) || idcode == 0x10205a6d)
+			mfg_code = EXTRACT_MFG(idcode);
+			if ((strstr(tap->dotted_name, "dummy") != NULL) || mfg_code == 0x536)
 				idcode = 0;
 			jtag_examine_chain_display(LOG_LVL_INFO, "tap/device found", tap->dotted_name, idcode);
-			bit_count += 32;
+			bit_count += 32; 
 		}
 
 		/* ensure the TAP ID matches what was expected */
