@@ -104,3 +104,8 @@ GTAGS
 
 # vscode files
 .vscode
+
+#debug build directorys
+binary-*/
+build-win64/
+build-linux64/
