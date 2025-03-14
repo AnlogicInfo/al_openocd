@@ -1,5 +1,28 @@
 OpenOCD branch with Anlogic support
-
+  Known Issues for Vexriscv support:
+  GDB command "next" / "step;continue" will stuck on same line at code with such pattern is present:
+  ```
+    786000ef          	jal	ra,800008fa <uart_applyConfig>
+    9a898513          	addi	a0,s3,-1624 # 800009a8 <_stack_start+0xffff89a8>
+    2e8d                jal	800004ee <anl_printf>
+    80001537          	lui	a0,0x80001
+    9ec50513          	addi	a0,a0,-1556 # 800009ec <_stack_start+0xffff89ec>
+    26a5                jal	800004ee <anl_printf>
+    80001537          	lui	a0,0x80001
+    a3050513          	addi	a0,a0,-1488 # 80000a30 <_stack_start+0xffff8a30>
+    2eb9                jal	800004ee <anl_printf>
+    80001537          	lui	a0,0x80001
+    a7450513          	addi	a0,a0,-1420 # 80000a74 <_stack_start+0xffff8a74>
+    2e91                jal	800004ee <anl_printf>
+    80001537          	lui	a0,0x80001
+    ab850513          	addi	a0,a0,-1352 # 80000ab8 <_stack_start+0xffff8ab8>
+    26a9                jal	800004ee <anl_printf>
+    80001537          	lui	a0,0x80001
+    afc50513          	addi	a0,a0,-1284 # 80000afc <_stack_start+0xffff8afc>
+    2681                jal	800004ee <anl_printf>
+    ```
+  suspect problem come from function "vexriscv_resume_or_step"
+  workaround: avoid using RVC or use "run to line" in FD
 Welcome to OpenOCD!
 ===================
 
