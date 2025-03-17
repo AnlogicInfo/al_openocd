@@ -5,3 +5,4 @@ source archive release.
 v1.0
 1. init release of openocd soc version
 2. enable qspi & emmc flash
+3. exit lockstate when boot failed
