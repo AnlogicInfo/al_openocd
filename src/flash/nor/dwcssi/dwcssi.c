@@ -858,8 +858,10 @@ static int dwcssi_probe(struct flash_bank *bank)
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
 
-	if (qspi_mio_init(bank) != ERROR_OK) {
-		return ERROR_FAIL;
+	if(0) {
+		if (qspi_mio_init(bank) != ERROR_OK) {
+			return ERROR_FAIL;
+		}			
 	}
 	dwcssi_config_init(bank, 20);
 
