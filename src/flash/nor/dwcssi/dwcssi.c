@@ -79,7 +79,7 @@ static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
 	return ERROR_OK;
 }
 
-static int qspi_mio_init(struct flash_bank *bank)
+static int qspi_mio_init_1v8(struct flash_bank *bank)
 {
 	struct target *target = bank->target;
 	uint8_t mio_num;
@@ -100,6 +100,33 @@ static int qspi_mio_init(struct flash_bank *bank)
 
 	return ERROR_OK;
 }
+
+static int qspi_mio_init_3v3(struct flash_bank *bank)
+{
+	struct target *target = bank->target;
+	uint8_t mio_num;
+	uint32_t value = 0;
+	uint32_t mio_parm = 0x88000007;
+	uint32_t mio_parm1 = 0x001e0603;
+
+	for (mio_num = 0; mio_num < 28; mio_num = mio_num + 4) {
+		if (target_read_u32(target, MIO_BASE + mio_num, &value) != ERROR_OK)
+			return ERROR_FAIL;
+		if (value != 1)	{
+			if (target_write_u32(target,  MIO_BASE + mio_num, 1) != ERROR_OK)
+				return ERROR_FAIL;
+		}
+
+		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK)
+			return ERROR_FAIL;
+		
+		if(target_write_u32(target, MIO_PARA1_BASE + (mio_num << 1), mio_parm1)!= ERROR_OK)
+			return ERROR_FAIL;
+	}
+
+	return ERROR_OK;
+}
+
 
 static int dwcssi_read_reg(struct flash_bank *bank, uint32_t *value, target_addr_t address)
 {
@@ -855,14 +882,24 @@ static int dwcssi_probe(struct flash_bank *bank)
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = NULL;
 	int retval = ERROR_FAIL;
+	uint32_t io_bank_ref;
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
 
-	if(0) {
-		if (qspi_mio_init(bank) != ERROR_OK) {
+	target_read_u32(bank->target, MIO_BANK201_REF, &io_bank_ref);
+	if(io_bank_ref & 0x1) {
+		if (qspi_mio_init_1v8(bank) != ERROR_OK) {
 			return ERROR_FAIL;
-		}			
+		}
+	} else if((io_bank_ref & 0x7) == 0x4) {
+		if (qspi_mio_init_3v3(bank) != ERROR_OK) {
+			return ERROR_FAIL;
+		}
+	} else {
+		LOG_ERROR("QSPI MIO not configured");
+		return ERROR_FAIL;
 	}
+
 	dwcssi_config_init(bank, 20);
 
 	if (!bank->customize) {
