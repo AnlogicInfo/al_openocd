@@ -36,6 +36,8 @@ typedef enum mio_pull_t
 // qspi flash mio defines
 #define     MIO_BASE                                  0xF8803000
 #define     MIO_PARA_BASE                             0xF8803800
+#define     MIO_PARA1_BASE                            0xF8803804
+#define     MIO_BANK201_REF                           0xF8803C04
 #define     GPIO_CONFIG                               0xF8411004
 #define     GPIO_OUT                                  0xF8411000
 

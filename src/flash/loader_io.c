@@ -318,7 +318,7 @@ int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_
 	retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,
 		loader->copy_area->address,
-		0, 500000,
+		0, (loader->data_size) * 2,
 		loader->arch_info);
 
 	if (retval == ERROR_OK)
