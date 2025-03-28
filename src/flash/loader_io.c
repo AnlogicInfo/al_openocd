@@ -302,7 +302,7 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 	0, NULL, loader->param_cnt, loader->reg_params,
 	loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
-	loader_exit(loader, NO_RESTORE);
+	loader_exit(loader, RESTORE);
 	return retval;
 };
 
@@ -325,6 +325,6 @@ int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_
 		*target_crc = buf_get_u32(loader->reg_params[0].value, 0, 32);
 
 
-	loader_exit(loader, NO_RESTORE);
+	loader_exit(loader, RESTORE);
 	return retval;
 }

@@ -302,8 +302,18 @@ static void dwcssi_config_clk(struct flash_bank *bank, uint8_t sckdv)
 	dwcssi_enable(bank);
 }
 
-static void dwcssi_config_init(struct flash_bank *bank, uint8_t sckdv)
+static void dwcssi_config_init(struct flash_bank *bank)
 {
+	uint32_t sckdv, input_clk, io_freq;
+	uint32_t io1000_cnt_div, div_qspi;
+
+	target_read_u32(bank->target, IO1000_CNT_DIV, &io1000_cnt_div);
+	div_qspi = (io1000_cnt_div & 0x3F);
+	input_clk = 1000/(div_qspi+1);
+	io_freq = 5;
+	sckdv = input_clk/(io_freq * 2);
+
+	LOG_INFO("div_qspi %d input_clk %d io_freq %d sckdv %d", div_qspi, input_clk, io_freq, sckdv);
 
 	dwcssi_disable(bank);
 	dwcssi_config_BAUDR(bank, sckdv);
@@ -881,8 +891,9 @@ static int dwcssi_probe(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = NULL;
-	int retval = ERROR_FAIL;
 	uint32_t io_bank_ref;
+	int retval = ERROR_FAIL;
+
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
 
@@ -900,7 +911,7 @@ static int dwcssi_probe(struct flash_bank *bank)
 		return ERROR_FAIL;
 	}
 
-	dwcssi_config_init(bank, 20);
+	dwcssi_config_init(bank);
 
 	if (!bank->customize) {
 		if(dwcssi_read_id(bank) != ERROR_OK) {
