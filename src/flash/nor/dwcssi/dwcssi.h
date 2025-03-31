@@ -32,11 +32,24 @@ typedef enum mio_pull_t
     MIO_PULL_10K_EN = 0x5
 } mio_pull_t;
 
+// pll defines
+#define     CLK_SEL                                   0xF8801040
+#define     CPU4X_DIV1_PARA                           0xF8801010
+#define     CPU4X_DIV2_PARA                           0xF8801014
+#define     CPU4X_DIV4_PARA                           0xF8801018
+#define     CPUPLL_CTRL1                              0xF8801104
+#define     CPUPLL_CTRL8                              0xF8801120
+#define     CPUPLL_CTRL9                              0xF8801124
+#define     CPUPLL_CTRL18                             0xF8801148
+#define     CPUPLL_CTRL19                             0xF880114C
+#define     CPUPLL_STATE0                             0xF8801180
+
 
 // qspi flash mio defines
 #define     MIO_BASE                                  0xF8803000
 #define     MIO_PARA_BASE                             0xF8803800
 #define     MIO_PARA1_BASE                            0xF8803804
+#define     IO1000_CNT_DIV                            0xF8801030
 #define     MIO_BANK201_REF                           0xF8803C04
 #define     GPIO_CONFIG                               0xF8411004
 #define     GPIO_OUT                                  0xF8411000
