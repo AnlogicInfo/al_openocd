@@ -40,7 +40,7 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 	if (CMD_ARGC >= 7) {
 		COMMAND_PARSE_ADDRESS(CMD_ARGV[6], base);
 		LOG_DEBUG("ASSUMING DWCSSI device at ctrl_base = " TARGET_ADDR_FMT,
-				base);
+				base); 
 	}
 
 	bank->driver_priv = driver_priv;
@@ -125,6 +125,59 @@ static int qspi_mio_init_3v3(struct flash_bank *bank)
 	}
 
 	return ERROR_OK;
+}
+
+static int cpu_pll_waitlock(struct flash_bank *bank)
+{
+	uint32_t pll_state0;
+	int64_t start = timeval_ms();
+	while (1) {
+		if (target_read_u32(bank->target, CPUPLL_STATE0, &pll_state0) != ERROR_OK)
+			return ERROR_FAIL;
+		if (pll_state0 & 0x1)
+			break;
+		int64_t now = timeval_ms();
+		if (now - start > 1000) {
+			LOG_ERROR("cpu pll lock timeout");
+			return ERROR_TARGET_TIMEOUT;
+		}
+	}
+	return ERROR_OK;
+}
+
+static int cpu_mask_write(struct flash_bank *bank, uint32_t addr, uint32_t mask, uint32_t value)
+{
+	uint32_t reg_val;
+	if (target_read_u32(bank->target, addr, &reg_val) != ERROR_OK)
+		return ERROR_FAIL;
+	reg_val = (reg_val & ~mask) | (value & mask);
+	LOG_DEBUG("cpu mask write addr %x mask %x value %x", addr, mask, reg_val);
+	if (target_write_u32(bank->target, addr, reg_val) != ERROR_OK)
+		return ERROR_FAIL;
+	return ERROR_OK;
+}
+
+static int cpu_clk_reset(struct flash_bank *bank)
+{
+	int ret = ERROR_OK;
+	cpu_mask_write(bank, CLK_SEL, 0x10, 0x10);
+	cpu_mask_write(bank, CPU4X_DIV1_PARA, 0x00ffffff, 0x00ffffff);
+	cpu_mask_write(bank, CPU4X_DIV2_PARA, 0x00ffffff, 0x00555555);
+	cpu_mask_write(bank, CPU4X_DIV4_PARA, 0x00ffffff, 0x00111111);
+	cpu_mask_write(bank, CLK_SEL, 0x00000001, 0);
+	cpu_mask_write(bank, CLK_SEL, 0x20, 0);
+	cpu_mask_write(bank, CPUPLL_CTRL1, 0x00000200, 0x00000200);
+
+	target_write_u32(bank->target, CPUPLL_CTRL9, 0x07311e4f);
+	target_write_u32(bank->target, CPUPLL_CTRL8, 0x350f0f01);
+	target_write_u32(bank->target, CPUPLL_CTRL19, 0x02000002);
+	target_write_u32(bank->target, CPUPLL_CTRL18, 0x01000001);
+
+	cpu_mask_write(bank, CPUPLL_CTRL1, 0x00000200, 0x00000000);
+	
+	ret = cpu_pll_waitlock(bank);
+	cpu_mask_write(bank, CLK_SEL, 0x10, 0);
+	return ret;
 }
 
 
@@ -896,6 +949,7 @@ static int dwcssi_probe(struct flash_bank *bank)
 
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
+	cpu_clk_reset(bank);
 
 	target_read_u32(bank->target, MIO_BANK201_REF, &io_bank_ref);
 	if(io_bank_ref & 0x1) {
