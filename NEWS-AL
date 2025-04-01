@@ -8,6 +8,8 @@ v0.1119
 3. Remote id check for ph1p35
 4. Fix apu ir reset issue when cwc is on
 5. Fix apu breakpoint unset issue
+6. Fix qspi flash issue after plat_init
+7. Merge Vexriscv updates
 
 v0.1118
 1. Fix rbb buffer overflow issue
