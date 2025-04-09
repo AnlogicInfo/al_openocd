@@ -179,6 +179,25 @@ COMMAND_HANDLER(hanlde_flash_reset_command)
 	return retval;
 }
 
+COMMAND_HANDLER(handle_flash_xip_init_command)
+{
+	struct flash_bank *p;
+	int retval;
+
+	if (CMD_ARGC != 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank_maybe_probe, 0, &p, false);
+	if (retval != ERROR_OK)
+		return retval;
+	if (p) {
+		retval = p->driver->xip_init(p);
+	}
+
+	return retval;
+}
+
+
 COMMAND_HANDLER(handle_flash_tx_cmd_command)
 {
 	struct flash_bank *p;
@@ -1211,6 +1230,13 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id",
 		.help = "Reset a flash bank",
+	},
+	{
+		.name = "xip_init",
+		.handler = handle_flash_xip_init_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id",
+		.help = "Initialize a flash bank for XIP mode",
 	},
 	{
 		.name = "tx_cmd",

@@ -119,6 +119,7 @@ extern const struct flash_device flash_devices[];
 #define SPIFLASH_READ			0x03 /* Normal Read */
 #define SPIFLASH_MASS_ERASE		0xC7 /* Mass Erase */
 #define SPIFLASH_READ_SFDP		0x5A /* Read Serial Flash Discoverable Parameters */
+#define SPIFLASH_FAST_READ_QUAD 0xEB /* Fast Read Quad Output */
 
 /* WINBOND Commands */
 #define WINBOND_EN4B            0xB7

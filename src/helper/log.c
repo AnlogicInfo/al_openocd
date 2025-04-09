@@ -209,14 +209,15 @@ void log_printf_proc(int progress, int total)
 	float percentage = (float)progress / total;
 	int progressBarWidth = (int)(percentage * BAR_WIDTH);
 
-	printf("[");
+	LOG_OUTPUT("[");
 	for (int i = 0; i < BAR_WIDTH; i++) {
 		if (i < progressBarWidth)
-			printf("#");
+			LOG_OUTPUT("#");
 		else
-			printf(" ");
+			LOG_OUTPUT(" ");
 	}
-	printf("] %.1f%%\r", percentage * 100);
+
+	LOG_OUTPUT("] %.1f%%\r", percentage * 100);
 	fflush(stdout);
 }
 

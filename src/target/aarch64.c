@@ -296,7 +296,7 @@ static int aarch64_check_state_one(struct target *target,
 	uint32_t prsr=0;
 	int retval;
 
-	// LOG_DEBUG("check state one addr %" PRIx64 "", (armv8->debug_base + CPUV8_DBG_PRSR));
+	// LOG_INFO("check state one addr %" PRIx64 "", (armv8->debug_base + CPUV8_DBG_PRSR));
 
 	retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 			armv8->debug_base + CPUV8_DBG_PRSR, &prsr);
@@ -317,9 +317,9 @@ static int aarch64_wait_halt_one(struct target *target)
 	int retval = ERROR_OK;
 
 	int64_t then = timeval_ms();
+	uint32_t prsr=0;
 	for (;;) {
 		int halted;
-		uint32_t prsr=0;
 		retval = aarch64_check_state_one(target, PRSR_HALT, PRSR_HALT, &halted, &prsr);
 		if (retval != ERROR_OK || halted)
 		{
@@ -332,6 +332,7 @@ static int aarch64_wait_halt_one(struct target *target)
 			break;
 		}
 	}
+	LOG_INFO("target %s prsr=0x%08"PRIx32, target_name(target), prsr);
 	return retval;
 }
 

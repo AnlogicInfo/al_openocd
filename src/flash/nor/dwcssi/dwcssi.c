@@ -1026,6 +1026,106 @@ static int dwcssi_auto_probe(struct flash_bank *bank)
 	return dwcssi_probe(bank);
 }
 
+static int dwcssi_config_XIP_MODE_BITS(struct flash_bank *bank, uint8_t mode_bits)
+{
+	dwcssi_xip_mode_bits_t xip_mode_bits;
+	xip_mode_bits.reg_val = 0;
+	xip_mode_bits.reg_fields.XIP_MD_BITS = mode_bits;
+	dwcssi_set_bits(bank, DWCSSI_REG_XIP_MODE_BITS, xip_mode_bits.reg_val, 0xFFFFFFFF);
+	return ERROR_OK;
+}
+
+static void dwcssi_config_SPI_CTRLR0_XIP(struct flash_bank *bank, uint8_t wait_cycle)
+{
+	dwcssi_spi_ctrlr0_t spi_ctrlr0;
+	uint32_t rd_value;
+
+	dwcssi_read_reg(bank, &rd_value, DWCSSI_REG_SPI_CTRLR0);
+	spi_ctrlr0.reg_val = rd_value;
+	
+	dwcssi_spi_ctrlr0_clk_stretch_en(&spi_ctrlr0, ENABLE);
+	dwcssi_spi_ctrlr0_wait_cycles(&spi_ctrlr0, wait_cycle);
+	dwcssi_spi_ctrlr0_addr_len(&spi_ctrlr0, ADDR_L24);
+	dwcssi_spi_ctrlr0_xip_md_bit_en(&spi_ctrlr0, ENABLE);
+	dwcssi_spi_ctrlr0_inst_len(&spi_ctrlr0, INST_L8);
+	dwcssi_spi_ctrlr0_trans_type(&spi_ctrlr0, TRANS_TYPE_TT1);
+	dwcssi_spi_ctrlr0_xip_mbl(&spi_ctrlr0, QSPI_MBL_8);
+	dwcssi_spi_ctrlr0_xip_dfs_hc(&spi_ctrlr0, QSPI_XipDfsChange);
+	dwcssi_spi_ctrlr0_ssic_xip_cont_xfer_en(&spi_ctrlr0, DISABLE);
+	dwcssi_spi_ctrlr0_xip_prefetch_en(&spi_ctrlr0, DISABLE);
+	dwcssi_spi_ctrlr0_xip_inst_en(&spi_ctrlr0, ENABLE);
+
+	dwcssi_write_reg(bank, DWCSSI_REG_SPI_CTRLR0, spi_ctrlr0.reg_val);
+}
+
+static void dwcssi_xip_incr_inst(struct flash_bank *bank, uint16_t incr_inst)
+{
+	dwcssi_xip_incr_inst_t reg_incr_inst;
+	reg_incr_inst.reg_val = 0;
+	reg_incr_inst.reg_fields.INCR_INST = incr_inst;
+
+	dwcssi_set_bits(bank, DWCSSI_REG_INCR_INST, reg_incr_inst.reg_val, 0xFFFFFFFF);
+}
+
+static void dwcssi_xip_wrap_inst(struct flash_bank *bank, uint16_t wrap_inst)
+{
+	dwcssi_xip_wrap_inst_t reg_wrap_inst;
+	reg_wrap_inst.reg_val = 0;
+	reg_wrap_inst.reg_fields.WRAP_INST = wrap_inst;
+	dwcssi_set_bits(bank, DWCSSI_REG_WRAP_INST, reg_wrap_inst.reg_val, 0xFFFFFFFF);
+}
+
+static void dwcssi_xip_cnt_time_out(struct flash_bank *bank, uint8_t cnt_timeout)
+{
+	dwcssi_xip_cnt_time_out_t xip_cnt_time_out;
+	xip_cnt_time_out.reg_val = 0;
+	xip_cnt_time_out.reg_fields.CNT_TIMEOUT = cnt_timeout;
+	dwcssi_set_bits(bank, DWCSSI_REG_XIP_CNT_TIME_OUT, xip_cnt_time_out.reg_val, 0xFFFFFFFF);
+}
+
+static void dwcssi_xip_port1_nor_flash_size(struct flash_bank *bank, uint32_t size)
+{
+	struct target *target = bank->target;
+	
+	target_write_u32(target, CFG_CTRL_QSPI, size);
+}
+
+static int dwcssi_xip_init(struct flash_bank *bank)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	uint8_t wait_cycle, mode_bits;
+	switch(driver_priv->dev->device_id)
+	{
+		case(0x001940ef):
+			wait_cycle = 4;
+			mode_bits = 0;
+			break;
+		case(0x001967c8):
+			wait_cycle = 4;
+			mode_bits = 0xff;
+			break;
+		case(0x0018bb20):
+			wait_cycle = 8;
+			mode_bits = 0xff;
+			break;
+		default:
+			wait_cycle = 8;
+			mode_bits = 0xff;
+			break;
+	}
+
+	dwcssi_disable(bank);
+	dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X4_MODE, RX_ONLY);
+	dwcssi_config_SPI_CTRLR0_XIP(bank, wait_cycle);
+	dwcssi_config_XIP_MODE_BITS(bank, mode_bits);
+	dwcssi_xip_incr_inst(bank, SPIFLASH_FAST_READ_QUAD);
+	dwcssi_xip_wrap_inst(bank, SPIFLASH_FAST_READ_QUAD);
+	dwcssi_xip_cnt_time_out(bank, 0xFF);
+	dwcssi_xip_port1_nor_flash_size(bank, QSPI_XipPort1NorFlash_16MB);
+	dwcssi_enable(bank);
+	return ERROR_OK;
+}
+
 static int dwcssi_erase_sector(struct flash_bank *bank, unsigned int sector)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
@@ -1714,6 +1814,7 @@ const struct flash_driver dwcssi_flash = {
 	.write = dwcssi_write,
 	.read = dwcssi_read,
 	.verify = dwcssi_verify,
+	.xip_init = dwcssi_xip_init,
 	.reset = dwcssi_flash_reset,
 	.tx_cmd = dwcssi_tx_cmd,
 	.config_flash = dwcssi_config_flash,
