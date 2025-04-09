@@ -54,6 +54,9 @@ typedef enum mio_pull_t
 #define     GPIO_CONFIG                               0xF8411004
 #define     GPIO_OUT                                  0xF8411000
 
+// qspi ctrl defines
+#define     CFG_CTRL_QSPI                             0xF880016C
+
 /*Register offsets*/
 #define     DWCSSI_REG_CTRLR0                         0x0
 #define     DWCSSI_REG_CTRLR1                         0x4
@@ -86,6 +89,9 @@ typedef enum mio_pull_t
 #define     DWCSSI_REG_DDR_DRIVE_EDGE                 0xf8
 #define     DWCSSI_REG_XIP_MODE_BITS                  0xfc
 
+#define     DWCSSI_REG_INCR_INST                      0x100
+#define     DWCSSI_REG_WRAP_INST                      0x104
+#define     DWCSSI_REG_XIP_CNT_TIME_OUT               0x114
 /*Fields*/
 #define     DWCSSI_CTRLR0_DFS(x)                      (((x) & 0xF) << 0)
 #define     DWCSSI_CTRLR0_TMOD(x)                     (((x) & 0x3) << 10)
@@ -110,7 +116,6 @@ typedef enum mio_pull_t
 
 #define     DWCSSI_SAMPLE_DELAY_SE(x)                 (((x) & 0x1) << 16)
 #define     DWCSSI_SAMPLE_DELAY_RSD(x)                (((x) & 0xFF) << 0)
-
 
 typedef union dwcssi_spi_ctrlr0_t
 {
@@ -140,6 +145,126 @@ typedef union dwcssi_spi_ctrlr0_t
         uint32_t RSVD_31            :1;   /*[31]-RSVD*/
     } reg_fields;
 } dwcssi_spi_ctrlr0_t;
+
+static inline void dwcssi_spi_ctrlr0_trans_type(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t trans_type)
+{
+    spi_ctrl0->reg_fields.TRANS_TYPE = trans_type;
+}
+
+static inline void dwcssi_spi_ctrlr0_addr_len(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t addr_l)
+{
+    spi_ctrl0->reg_fields.ADDR_L = addr_l;
+}
+
+static inline void dwcssi_spi_ctrlr0_xip_md_bit_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t xip_md_bit_en)
+{
+    spi_ctrl0->reg_fields.XIP_MD_BIT_EN = xip_md_bit_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_inst_len(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t inst_l)
+{
+    spi_ctrl0->reg_fields.INST_L = inst_l;
+}
+
+static inline void dwcssi_spi_ctrlr0_wait_cycles(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t wait_cycles)
+{
+    spi_ctrl0->reg_fields.WAIT_CYCLES = wait_cycles;
+}
+
+static inline void dwcssi_spi_ctrlr0_spi_ddr_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t spi_ddr_en)
+{
+    spi_ctrl0->reg_fields.SPI_DDR_EN = spi_ddr_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_inst_ddr_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t inst_ddr_en)
+{
+    spi_ctrl0->reg_fields.INST_DDR_EN = inst_ddr_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_spi_rxds_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t spi_rxds_en)
+{
+    spi_ctrl0->reg_fields.SPI_RXDS_EN = spi_rxds_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_xip_dfs_hc(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t xip_dfs_hc)
+{
+    spi_ctrl0->reg_fields.XIP_DFS_HC = xip_dfs_hc;
+}
+
+static inline void dwcssi_spi_ctrlr0_xip_inst_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t xip_inst_en)
+{
+    spi_ctrl0->reg_fields.XIP_INST_EN = xip_inst_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_ssic_xip_cont_xfer_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t ssic_xip_cont_xfer_en)
+{
+    spi_ctrl0->reg_fields.SSIC_XIP_CONT_XFER_EN = ssic_xip_cont_xfer_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_spi_dm_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t spi_dm_en)
+{
+    spi_ctrl0->reg_fields.SPI_DM_EN = spi_dm_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_spi_rxds_sig_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t spi_rxds_sig_en)
+{
+    spi_ctrl0->reg_fields.SPI_RXDS_SIG_EN = spi_rxds_sig_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_xip_mbl(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t xip_mbl)
+{
+    spi_ctrl0->reg_fields.XIP_MBL = xip_mbl;
+}
+
+static inline void dwcssi_spi_ctrlr0_xip_prefetch_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t xip_prefetch_en)
+{
+    spi_ctrl0->reg_fields.XIP_PREFETCH_EN = xip_prefetch_en;
+}
+
+static inline void dwcssi_spi_ctrlr0_clk_stretch_en(dwcssi_spi_ctrlr0_t* spi_ctrl0, uint8_t clk_stretch_en)
+{
+    spi_ctrl0->reg_fields.CLK_STRETCH_EN = clk_stretch_en;
+}
+
+typedef union dwcssi_xip_mode_bits_t
+{
+    uint32_t reg_val;
+    struct
+    {
+        uint32_t XIP_MD_BITS         :16;
+        uint32_t RSVD_XIP_MD_BITS    :16;
+    } reg_fields;
+} dwcssi_xip_mode_bits_t;
+
+typedef union dwcssi_xip_incr_inst_t
+{
+    uint32_t reg_val;
+    struct
+    {
+        uint32_t INCR_INST           :16;
+        uint32_t RSVD_INCR_INST      :16;
+    } reg_fields;
+} dwcssi_xip_incr_inst_t;
+
+typedef union dwcssi_xip_wrap_inst_t
+{
+    uint32_t reg_val;
+    struct
+    {
+        uint32_t WRAP_INST           :16;
+        uint32_t RSVC_INST           :16;
+    } reg_fields;
+} dwcssi_xip_wrap_inst_t;
+
+typedef union dwcssi_xip_cnt_time_out_t
+{
+    uint32_t reg_val;
+    struct
+    {
+        uint32_t CNT_TIMEOUT         :8;
+        uint32_t RSVD_CNT_TIMEOUT    :24;
+    } reg_fields;
+} dwcssi_xip_cnt_time_out_t;
 
 /*Masks*/
 #define     DWCSSI_CTRLR0_DFS_MASK                     DWCSSI_CTRLR0_DFS(0xFFFFFFFF)     
@@ -199,6 +324,43 @@ typedef union dwcssi_spi_ctrlr0_t
 #define     DUAL_SPI_MODE                             1
 #define     QUAD_SPI_MODE                             2
 #define     QPI_MODE                                  3
+
+
+/**
+ * @brief Qspi xip dfs config enum
+ */
+typedef enum
+{
+    QSPI_XipDfsChange = 0,
+    QSPI_XipDfsFix    = 1
+} AL_QSPI_XipDfsFixEnum;
+
+/**
+ * @brief Qspi xip mode bits length enum
+ */
+typedef enum
+{
+    QSPI_MBL_2 = 0,
+    QSPI_MBL_4 = 1,
+    QSPI_MBL_8 = 2,
+    QSPI_MBL_16 = 3,
+} AL_QSPI_XipModeBitsLengthEnum;
+
+/**
+ * @brief Qspi xip port1 norflash size enum
+ */
+typedef enum
+{
+    QSPI_XipPort1NorFlash_1MB = 7,
+    QSPI_XipPort1NorFlash_2MB = 6,
+    QSPI_XipPort1NorFlash_4MB = 5,
+    QSPI_XipPort1NorFlash_8MB = 4,
+    QSPI_XipPort1NorFlash_16MB = 3,
+    QSPI_XipPort1NorFlash_32MB = 2,
+    QSPI_XipPort1NorFlash_64MB = 1,
+    QSPI_XipPort1NorFlash_128MB = 0
+} AL_QSPI_XipPort1NorFlashSize;
+
 
 #define     X1_PAGE_SIZE                              64
 

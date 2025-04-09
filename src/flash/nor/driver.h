@@ -169,6 +169,17 @@ struct flash_driver {
 	int (*verify)(struct flash_bank *bank,
 			const uint8_t *buffer, uint32_t offset, uint32_t count);
 
+
+	/** 
+	 * This function sets up the QSPI device for 24-bit addressing suitable for DMA operations.
+	 * It configures the device with specific settings for wait cycles, clock stretch, transfer mode,
+	 * address length, instruction length, transfer type, frame format, XIP mode bit, XIP DFS fix,
+	 * continuous transfer, prefetch, instruction phase, and incremental instruction. The function
+	 * disables the QSPI device at the beginning and enables it after all configurations are applied.
+	 *
+	 */
+	int (*xip_init)(struct flash_bank *bank);
+
 	/**
 	 * Probe to determine what kind of flash is present.
 	 * This is invoked by the "probe" script command.
