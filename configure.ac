@@ -387,6 +387,21 @@ AS_CASE([$host_os],
     ])
 ])
 
+AC_MSG_CHECKING([whether to enable libwdi driver])
+AS_CASE([$host_os],
+  [cygwin*|mingw*], [
+    AC_ARG_ENABLE([libwdi],
+      AS_HELP_STRING([--disable-libwdi], [Enable building support for libwdi support on Windows.]),
+        [build_libwdi=$enableval], [build_libwdi=yes])
+
+    LDFLAGS="$LDFLAGS -l:libwdi.lib"
+  ],
+  [
+    AS_IF([test "x$build_libwdi" = "xyes"], [
+      AC_MSG_ERROR([libwdi is only available on Windows])
+    ])
+])
+
 AS_CASE(["${host_cpu}"],
   [i?86|x86*], [],
   [
@@ -612,6 +627,13 @@ AS_IF([test "x$build_ftd2xx" = "xyes"], [
   AC_DEFINE([BUILD_FTD2XX], [0], [0 if you don't want FTD2xx driver support.])
 ])
 
+AS_IF([test "x$build_libwdi" = "xyes"], [
+  AC_DEFINE([BUILD_LIBWDI], [1], [1 if you want the LIBWDI driver support.])
+], [
+  AC_DEFINE([BUILD_LIBWDI], [0], [0 if you don't want LIBWDI driver support.])
+])
+
+
 PKG_CHECK_MODULES([LIBUSB1], [libusb-1.0], [
 	use_libusb1=yes
 	AC_DEFINE([HAVE_LIBUSB1], [1], [Define if you have libusb-1.x])
@@ -757,6 +779,7 @@ AM_CONDITIONAL([USE_LIBJAYLINK], [test "x$use_libjaylink" = "xyes"])
 AM_CONDITIONAL([RSHIM], [test "x$build_rshim" = "xyes"])
 AM_CONDITIONAL([HAVE_CAPSTONE], [test "x$enable_capstone" != "xno"])
 AM_CONDITIONAL([USE_FTD2XX], [test "x$build_ftd2xx" = "xyes"])
+AM_CONDITIONAL([USE_LIBWDI], [test "x$build_libwdi" = "xyes"])
 
 AM_CONDITIONAL([INTERNAL_JIMTCL], [test "x$use_internal_jimtcl" = "xyes"])
 AM_CONDITIONAL([INTERNAL_LIBJAYLINK], [test "x$use_internal_libjaylink" = "xyes"])
@@ -848,4 +871,8 @@ echo
 
 AS_IF([test "x$build_ftd2xx" = "xyes"], [
   echo "FTD2xx driver support enabled."
+])
+
+AS_IF([test "x$build_libwdi" = "xyes"], [
+  echo "LIBWDI driver support enabled."
 ])
