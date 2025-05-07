@@ -111,11 +111,6 @@ extern int debug_level;
 /* Avoid fn call and building parameter list if we're not outputting the information.
  * Matters on feeble CPUs for DEBUG/INFO statements that are involved frequently */
 
-#define LOG_PROC(expr ...) \
-	do { \
-		log_printf_proc(expr); \
-	} while (0)
-
 #define LOG_LEVEL_IS(FOO)  ((debug_level) >= (FOO))
 
 #define LOG_DEBUG_IO(expr ...) \
@@ -151,6 +146,11 @@ extern int debug_level;
 
 #define LOG_OUTPUT(expr ...) \
 	log_printf(LOG_LVL_OUTPUT, __FILE__, __LINE__, __func__, expr)
+
+#define LOG_PROC(expr ...) \
+	do { \
+		log_printf_proc(expr); \
+	} while (0)
 
 /* Output a log entry that is related to a given target */
 

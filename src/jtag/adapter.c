@@ -18,6 +18,10 @@
 #include "interfaces.h"
 #include <transport/transport.h>
 
+#ifdef _WIN32
+#include "libwdi.h"
+#endif
+
 /**
  * @file
  * Holds support for configuring debug adapters from TCl scripts.
@@ -246,6 +250,8 @@ static void adapter_usb_set_location(const char *location)
 	adapter_config.usb_location = strndup(location, USB_MAX_LOCATION_LENGTH);
 }
 #endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
+
+
 
 const char *adapter_usb_get_location(void)
 {
@@ -769,6 +775,61 @@ COMMAND_HANDLER(handle_adapter_reset_de_assert)
 						  (srst == VALUE_DEASSERT) ? SRST_DEASSERT : SRST_ASSERT);
 }
 
+
+
+#ifdef _WIN32
+COMMAND_HANDLER(handle_usb_driver_scan_command)
+{
+
+	uint16_t vid, pid;
+	ssize_t i;
+    struct wdi_device_info *list = NULL;
+    struct wdi_options_create_list create_opt = {0};
+	if (CMD_ARGC < 2 || (CMD_ARGC & 1)) {
+		LOG_WARNING("incomplete ftdi vid_pid configuration directive");
+		if (CMD_ARGC < 2)
+			return ERROR_COMMAND_SYNTAX_ERROR;
+		/* remove the incomplete trailing id */
+		CMD_ARGC -= 1;
+	}
+
+	for (i = 0; i < CMD_ARGC; i += 2) {
+		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i], vid);
+		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i + 1], pid);
+	}
+
+    create_opt.list_all = 1;
+    if (wdi_create_list(&list, &create_opt) != WDI_SUCCESS) {
+        LOG_ERROR("Failed to retrieve device list");
+        return ERROR_FAIL;
+    }
+
+    if (!list) {
+        LOG_ERROR("No available devices found");
+        return ERROR_FAIL;
+    }
+    struct wdi_device_info *current = list;
+
+    while (current) {
+
+        if(current->vid == vid && current->pid == pid && current->mi == 0) {
+            LOG_INFO("Device found: VID=%04x PID=%04x %d", current->vid, current->pid, current->mi);
+			// 获取当前驱动信息
+            LOG_INFO("  Description: %s", current->desc);
+            if (current->driver)
+                LOG_INFO("  Driver: %s", current->driver);
+            else 
+                LOG_INFO("  Driver: Not installed or unknown\n");
+        }
+        current = current->next;
+    }	
+
+	wdi_destroy_list(list);
+	return ERROR_OK;
+
+}
+#endif
+
 #ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
 COMMAND_HANDLER(handle_usb_location_command)
 {
@@ -791,6 +852,15 @@ static const struct command_registration adapter_usb_command_handlers[] = {
 		.usage = "[<bus>-port[.port]...]",
 	},
 #endif /* HAVE_LIBUSB_GET_PORT_NUMBERS */
+#ifdef _WIN32
+	{
+		.name = "driver_scan",
+		.handler = &handle_usb_driver_scan_command,
+		.mode = COMMAND_CONFIG,
+		.help = "scan for USB devices with the specified VID and PID",
+		.usage = "<vid> <pid> [<vid> <pid>]...",
+	},
+#endif
 	COMMAND_REGISTRATION_DONE
 };
 

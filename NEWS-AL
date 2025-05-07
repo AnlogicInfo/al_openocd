@@ -2,6 +2,12 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1120
+1. add xip support for qspi
+2. add usb driver scan
+3. update proc print
+
+
 v0.1119
 1. Add config for ChipDebugger
 2. Add config option to disable auto probe

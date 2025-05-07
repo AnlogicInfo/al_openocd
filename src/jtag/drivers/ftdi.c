@@ -77,7 +77,6 @@
 #include <helper/log.h>
 #include <libusb.h>
 
-
 #if IS_CYGWIN == 1
 #include <windows.h>
 #endif
@@ -86,6 +85,8 @@
 
 /* FTDI access library includes */
 #include "mpsse.h"
+
+
 
 #if BUILD_FTDI_CJTAG == 1
 #define DO_CLOCK_DATA clock_data
@@ -1505,6 +1506,7 @@ COMMAND_HANDLER(ftdi_handle_jscan3_mode_command)
 	return ERROR_OK;
 }
 #endif
+
 
 static const struct command_registration ftdi_subcommand_handlers[] = {
 	{

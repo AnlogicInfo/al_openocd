@@ -2,6 +2,7 @@ export OCDLIB_DIR=/home/ocdlib
 export VER_LIBUSB="1.0.25"
 export VER_FTD2XX="v2.12.36.4"
 export VER_LIBFTDI1="1.5_devkit_x86_x64_19July2020"
+export VER_LIBWDI="1.5.1"
 export LIBUSB1_CFLAGS="-I$OCDLIB_DIR/libusb-$VER_LIBUSB/include/libusb-1.0"
 export LIBUSB1_LIBS=" -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll \
     -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/static \
@@ -9,6 +10,7 @@ export LIBUSB1_LIBS=" -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW64/dll \
     -L$OCDLIB_DIR/libusb-$VER_LIBUSB/MinGW32/static -lusb-1.0"
 export libusb_CFLAGS="$LIBUSB1_CFLAGS"
 export libusb_LIBS="$LIBUSB1_LIBS"
+export libwdi_CFLAGS="-I$OCDLIB_DIR/libwdi_1.5.1"
 make distclean || true
 rm -rf binary-win64
 rm -rf build-win64
@@ -19,7 +21,8 @@ export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include \
     -I$OCDLIB_DIR/libftdi1-$VER_LIBFTDI1/include"
 export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  \
     -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 \
-    -L$OCDLIB_DIR/libftdi1-$VER_LIBFTDI1/lib64"
+    -L$OCDLIB_DIR/libftdi1-$VER_LIBFTDI1/lib64 \
+    -L$OCDLIB_DIR/libwdi_$VER_LIBWDI/.libs"
 
 mkdir build-win64
 cd build-win64
