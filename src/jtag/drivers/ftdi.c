@@ -80,9 +80,6 @@
 #if IS_CYGWIN == 1
 #include <windows.h>
 #endif
-#ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
-#include "wdi/libwdi.h"
-#endif
 
 #include <assert.h>
 
@@ -1284,57 +1281,6 @@ COMMAND_HANDLER(ftid_handle_list_command)
 	return ERROR_OK;
 
 }
-#ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
-COMMAND_HANDLER(ftdi_handle_driver_scan_command)
-{
-
-	uint16_t vid, pid;
-	ssize_t i;
-    struct wdi_device_info *list = NULL;
-    struct wdi_options_create_list create_opt = {0};
-	if (CMD_ARGC < 2 || (CMD_ARGC & 1)) {
-		LOG_WARNING("incomplete ftdi vid_pid configuration directive");
-		if (CMD_ARGC < 2)
-			return ERROR_COMMAND_SYNTAX_ERROR;
-		/* remove the incomplete trailing id */
-		CMD_ARGC -= 1;
-	}
-
-	for (i = 0; i < CMD_ARGC; i += 2) {
-		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i], vid);
-		COMMAND_PARSE_NUMBER(u16, CMD_ARGV[i + 1], pid);
-	}
-
-    create_opt.list_all = 1;
-    if (wdi_create_list(&list, &create_opt) != WDI_SUCCESS) {
-        LOG_ERROR("Failed to retrieve device list");
-        return ERROR_FAIL;
-    }
-
-    if (!list) {
-        LOG_ERROR("No available devices found");
-        return ERROR_FAIL;
-    }
-    struct wdi_device_info *current = list;
-
-    while (current) {
-
-        if(current->vid == vid && current->pid == pid && current->mi == 0) {
-            LOG_INFO("Device found: VID=%04x PID=%04x %d", current->vid, current->pid, current->mi);
-			// 获取当前驱动信息
-            LOG_INFO("  Description: %s", current->desc);
-            if (current->driver)
-                LOG_INFO("  Driver: %s", current->driver);
-            else 
-                LOG_INFO("  Driver: Not installed or unknown\n");
-        }
-        current = current->next;
-    }	
-
-	wdi_destroy_list(list);
-	return ERROR_OK;
-}
-#endif
 
 COMMAND_HANDLER(ftdi_handle_channel_command)
 {
@@ -1577,15 +1523,6 @@ static const struct command_registration ftdi_subcommand_handlers[] = {
 		.help = "list all FTDI devices",
 		.usage = "(vid pid)*",
 	},
-#ifdef HAVE_LIBUSB_GET_PORT_NUMBERS
-	{
-		.name = "driver_scan",
-		.handler = &ftdi_handle_driver_scan_command,
-		.mode = COMMAND_ANY,
-		.help = "scan for FTDI devices and load the driver",
-		.usage = "(vid pid)*",
-	},
-#endif
 	{
 		.name = "channel",
 		.handler = &ftdi_handle_channel_command,
