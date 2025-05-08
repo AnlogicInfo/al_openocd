@@ -115,6 +115,7 @@ extern struct target_type arcv2_target;
 extern struct target_type pstap_target;
 extern struct target_type dwcphy_target;
 extern struct target_type at0012_target;
+extern struct target_type jtag2apb_target;
 extern struct target_type vexriscv_target;
 
 static struct target_type *target_types[] = {
@@ -157,6 +158,7 @@ static struct target_type *target_types[] = {
 	&pstap_target,
 	&dwcphy_target,
 	&at0012_target,
+	&jtag2apb_target,
 	&vexriscv_target,
 	NULL,
 };
@@ -1561,6 +1563,7 @@ int target_read_phys_memory(struct target *target,
 		LOG_ERROR("Target %s doesn't support read_phys_memory", target_name(target));
 		return ERROR_FAIL;
 	}
+
 	return target->type->read_phys_memory(target, address, size, count, buffer);
 }
 

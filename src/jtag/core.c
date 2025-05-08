@@ -1268,6 +1268,7 @@ static int jtag_examine_chain(void)
 		assert(bit_count < max_taps * 32);
 		uint32_t idcode = buf_get_u32(idcode_buffer, bit_count, 32);
 
+		LOG_INFO("TAP %d",i);
 		/* No predefined TAP? Auto-probe. */
 		if (!tap) {
 			/* Is there another TAP? */
@@ -1528,7 +1529,7 @@ int jtag_init_inner(struct command_context *cmd_ctx)
 	int retval;
 	bool issue_setup = true;
 
-	LOG_DEBUG("Init JTAG chain");
+	LOG_INFO("Init JTAG chain");
 
 	tap = jtag_tap_next_enabled(NULL);
 	if (!tap) {

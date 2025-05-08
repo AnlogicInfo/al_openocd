@@ -709,7 +709,7 @@ static int jim_jtag_arp_init_reset(Jim_Interp *interp, int argc, Jim_Obj *const 
 {
 	int e = ERROR_OK;
 	struct jim_getopt_info goi;
-	jim_getopt_setup(&goi, interp, argc-1, argv + 1);
+	jim_getopt_setup(&goi, interp, argc-1 , argv + 1);
 	if (goi.argc != 0) {
 		Jim_WrongNumArgs(goi.interp, 1, goi.argv-1, "(no params)");
 		return JIM_ERR;
