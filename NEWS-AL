@@ -6,6 +6,8 @@ v0.1120
 1. add xip support for qspi
 2. add usb driver scan
 3. update proc print
+4. add rbb port config 
+5. add jtag2apb driver
 
 
 v0.1119
