@@ -166,6 +166,45 @@ COMMAND_HANDLER(handle_pld_load_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(handle_pld_load_sector_command)
+{
+	int retval;
+	struct timeval start, end, duration;
+	struct pld_device *p;
+
+	gettimeofday(&start, NULL);
+
+	if (CMD_ARGC < 2)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	unsigned dev_id;
+	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], dev_id);
+	p = get_pld_device_by_num(dev_id);
+	if (!p) {
+		command_print(CMD, "pld device '#%s' is out of bounds", CMD_ARGV[0]);
+		return ERROR_OK;
+	}
+
+	retval = p->driver->load_sector(p, CMD_ARGV[1]);
+	if (retval != ERROR_OK) {
+		command_print(CMD, "failed loading file %s to pld device %u",
+			CMD_ARGV[1], dev_id);
+		switch (retval) {
+		}
+		return retval;
+	} else {
+		gettimeofday(&end, NULL);
+		timeval_subtract(&duration, &end, &start);
+
+		command_print(CMD, "loaded file %s to pld device %u in %jis %jius",
+			CMD_ARGV[1], dev_id,
+			(intmax_t)duration.tv_sec, (intmax_t)duration.tv_usec);
+	}
+
+	return ERROR_OK;
+}
+
+
 static const struct command_registration pld_exec_command_handlers[] = {
 	{
 		.name = "devices",
@@ -179,6 +218,13 @@ static const struct command_registration pld_exec_command_handlers[] = {
 		.handler = handle_pld_load_command,
 		.mode = COMMAND_EXEC,
 		.help = "load configuration file into PLD",
+		.usage = "pld_num filename",
+	},
+	{
+		.name = "load_sector",
+		.handler = handle_pld_load_sector_command,
+		.mode = COMMAND_EXEC,
+		.help = "load configuration file into PLD sector",
 		.usage = "pld_num filename",
 	},
 	COMMAND_REGISTRATION_DONE

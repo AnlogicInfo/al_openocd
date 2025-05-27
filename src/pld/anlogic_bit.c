@@ -64,9 +64,6 @@ static int anlogic_split_bit_file(FILE *input_file, uint8_t **header, uint8_t **
     fread(*data, 1, *data_len, input_file);
     (*data)[*data_len] = '\0';
 
-    LOG_INFO("Successfully split bit file at position: %ld", split_pos);
-    LOG_INFO("Header size: %ld, Data size: %ld", split_pos, *data_len);
-
     return 0;
 }
 
@@ -156,7 +153,5 @@ int anlogic_read_bit_file(struct anlogic_bit_file *bit_file, const char *filenam
     free(header);
 
     // 添加调试信息
-    LOG_INFO("Successfully parsed bit file: %s", filename);
-    LOG_INFO("Data length: %ld", bit_file->data_len);
     return 0;
 }

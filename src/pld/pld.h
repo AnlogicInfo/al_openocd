@@ -31,6 +31,7 @@ struct pld_driver {
 	__PLD_DEVICE_COMMAND((*pld_device_command));
 	const struct command_registration *commands;
 	int (*load)(struct pld_device *pld_device, const char *filename);
+	int (*load_sector)(struct pld_device *pld_device, const char *filename);
 };
 
 #define PLD_DEVICE_COMMAND_HANDLER(name) \
