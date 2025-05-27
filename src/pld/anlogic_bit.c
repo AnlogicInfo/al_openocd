@@ -64,45 +64,49 @@ static int anlogic_split_bit_file(FILE *input_file, uint8_t **header, uint8_t **
     fread(*data, 1, *data_len, input_file);
     (*data)[*data_len] = '\0';
 
-    LOG_INFO("Successfully split bit file at position: %ld", split_pos);
-    LOG_INFO("Header size: %ld, Data size: %ld", split_pos, *data_len);
-
     return 0;
 }
 
 static int read_section(uint8_t *header, uint8_t **sections)
 {
     uint8_t *current = header;
+    int section_idx = 0;
+    int max_sections = SECTION_COUNT * 2; // 防御性上限，防止死循环
 
-    for (int i = 0; i < SECTION_COUNT; i++) {
-        if (strncmp((char *)current, "# ", 2) != 0) {
-            LOG_ERROR("Invalid header format at section: %d", i);
-            return -1;
-        }
+    while (section_idx < max_sections) {
+        if (strncmp((char *)current, "# ", 2) != 0)
+            break;
+
         current += 2; // 跳过 "# "
-
-        char *end;
-        if (i == SECTION_COUNT - 1) {
-            // 最后一个段 user_code 从当前位置到 header 的末尾
+        char *end = strstr((char *)current, "\n");
+        if (!end) {
+            // 最后一个段（如 user_code）可能没有换行，直接到末尾
             end = (char *)header + strlen((char *)header);
-        } else {
-            end = strstr((char *)current, "\n");
-            if (!end) {
-                LOG_ERROR("Failed to find end of section: %d", i);
-                return -1;
-            }
         }
 
         size_t len = end - (char *)current;
-        sections[i] = (uint8_t *)malloc(len + 1);
-        if (!sections[i]) {
-            LOG_ERROR("Memory allocation failed for section: %d", i);
+        sections[section_idx] = (uint8_t *)malloc(len + 1);
+        if (!sections[section_idx]) {
+            LOG_ERROR("Memory allocation failed for section: %d", section_idx);
             return -1;
         }
-        memcpy(sections[i], current, len);
-        sections[i][len] = '\0';
+        memcpy(sections[section_idx], current, len);
+        sections[section_idx][len] = '\0';
 
-        current = (uint8_t *)end + 1; // 跳到下一段
+        section_idx++;
+        if (*end == '\0')
+            break;
+        current = (uint8_t *)end + 1;
+    }
+
+    if (section_idx >= max_sections) {
+        LOG_ERROR("read_section: section parse loop exceeded max_sections, possible malformed header");
+        return -1;
+    }
+
+    // 剩余的 section 置为 NULL
+    for (int i = section_idx; i < SECTION_COUNT; i++) {
+        sections[i] = NULL;
     }
 
     return 0;
@@ -156,7 +160,5 @@ int anlogic_read_bit_file(struct anlogic_bit_file *bit_file, const char *filenam
     free(header);
 
     // 添加调试信息
-    LOG_INFO("Successfully parsed bit file: %s", filename);
-    LOG_INFO("Data length: %ld", bit_file->data_len);
     return 0;
 }

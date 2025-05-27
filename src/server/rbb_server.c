@@ -29,9 +29,7 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
-// #define LOG_FOLDER_PATH "E:\\work\\2024\\sw\\debug\\5ph1p35_cwc_fail\\log"
-#define LOG_FOLDER_PATH "D:\\work\\2024\\sw\\16ph1p35_cwc_fail\\log"
-// #define LOG_FOLDER_PATH "D:\\Anlogic\\FD_2024.7\\toolchain\\openocd\\fpsoc\\log"
+#define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bitwriter"
 
 #define LOG_TD_IN_FILE "\\td_in.log"
 #define LOG_REGION_BUF_FILE "\\openocd_region.log"
@@ -757,7 +755,7 @@ static int rbb_input(struct connection *connection)
 		rbb_send_buffer_gen(service, send_buffer, total_read_bits);
 		connection_write(connection, send_buffer, total_read_bits);
 	}
-	if(0)
+	if(1)
 		rbb_debug_prt(service, send_buffer, total_read_bits);
 
 	free(send_buffer);
