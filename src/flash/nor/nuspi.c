@@ -941,7 +941,7 @@ static int nuspi_probe(struct flash_bank *bank)
 	target_register_event_callback(gdb_flash_write_end_callback, bank);
 
 	for (int i = 0; i < 4; i++) {
-		if (nuspi_write_reg(bank, NUSPI_REG_SCKDIV, i) != ERROR_OK)
+		if (nuspi_write_reg(bank, NUSPI_REG_SCKDIV, i + 2) != ERROR_OK)
 			continue;
 		retval = nuspi_read_flash_id(bank, &id);
 		if (retval != ERROR_OK)
