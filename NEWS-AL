@@ -9,6 +9,7 @@ v0.1120
 4. add rbb port config 
 5. add jtag2apb driver
 6. fix clk div bug in nuspi probe
+7. enable bit writer for dr1 device
 
 
 v0.1119
