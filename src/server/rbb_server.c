@@ -755,7 +755,7 @@ static int rbb_input(struct connection *connection)
 		rbb_send_buffer_gen(service, send_buffer, total_read_bits);
 		connection_write(connection, send_buffer, total_read_bits);
 	}
-	if(0)
+	if(1)
 		rbb_debug_prt(service, send_buffer, total_read_bits);
 
 	free(send_buffer);
