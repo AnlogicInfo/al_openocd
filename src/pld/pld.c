@@ -145,13 +145,13 @@ COMMAND_HANDLER(handle_pld_load_command)
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], dev_id);
 	p = get_pld_device_by_num(dev_id);
 	if (!p) {
-		command_print(CMD, "pld device '#%s' is out of bounds", CMD_ARGV[0]);
+		command_print(CMD, "fpga device '#%s' is out of bounds", CMD_ARGV[0]);
 		return ERROR_OK;
 	}
 
 	retval = p->driver->load(p, CMD_ARGV[1]);
 	if (retval != ERROR_OK) {
-		command_print(CMD, "failed loading file %s to pld device %u",
+		command_print(CMD, "failed loading file %s to fpga device %u",
 			CMD_ARGV[1], dev_id);
 		switch (retval) {
 		}
@@ -160,7 +160,7 @@ COMMAND_HANDLER(handle_pld_load_command)
 		gettimeofday(&end, NULL);
 		timeval_subtract(&duration, &end, &start);
 
-		command_print(CMD, "loaded file %s to pld device %u in %jis %jius",
+		command_print(CMD, "loaded file %s to fpga device %u in %jis %jius",
 			CMD_ARGV[1], dev_id,
 			(intmax_t)duration.tv_sec, (intmax_t)duration.tv_usec);
 	}

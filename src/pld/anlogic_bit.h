@@ -20,5 +20,5 @@ struct anlogic_bit_file {
 };
 
 int anlogic_read_bit_file(struct anlogic_bit_file *bit_file, const char *filename);
-
+int anlogic_check_architecture(struct anlogic_bit_file* bit_file, const char *drv_name);
 #endif /* OPENOCD_PLD_ANLOGIC_BIT_H */

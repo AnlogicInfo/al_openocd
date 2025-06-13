@@ -55,6 +55,17 @@ static int dr1_send_addr(struct pld_device *pld_device,
     return ERROR_OK;
 }
 
+static int dr1_read_stat(struct pld_device *pld_device, uint32_t *status)
+{
+    uint32_t outvalue = 0;
+    struct dr1_fpga_device *dr1_info = pld_device->driver_priv;
+    dr1_set_ir(dr1_info->tap, 0x46);
+    dr1_send_32(pld_device, 1, &outvalue, status);
+    jtag_execute_queue();
+    LOG_INFO("DR1 status register: 0x%08x", *status);
+    return ERROR_OK;
+}
+
 static inline void dr1_flip32(jtag_callback_data_t arg)
 {
     uint32_t *words = (uint32_t *)arg;
@@ -71,7 +82,7 @@ static int dr1_read_id(struct pld_device *pld_device, uint32_t *idcode)
     dr1_set_ir(dr1_info->tap, 0x06);
     jtag_add_runtest(15, TAP_IDLE);
     dr1_send_32(pld_device, 1, &outvalue, idcode);
-
+    
     return ERROR_OK;
 
 }
@@ -89,6 +100,10 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
         LOG_ERROR("Failed to read bit file: %s", filename);
         return retval;
     }
+
+    retval = anlogic_check_architecture(&bit_file, pld_device->driver->name);
+    if (retval != ERROR_OK)
+        return retval;
 
     dr1_read_id(pld_device, &idcode);
     dr1_set_ir(dr1_info->tap, 0x1);
@@ -132,6 +147,8 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
     dr1_set_ir(dr1_info->tap, 0xFF);
     jtag_add_clocks(1000);
     jtag_execute_queue();
+
+    dr1_read_stat(pld_device, &idcode);
 
     return ERROR_OK;
 }
@@ -302,7 +319,7 @@ static const struct command_registration dr1_command_handler[] = {
 
 
 struct pld_driver dr1_fpga = {
-    .name = "dr1",
+    .name = "dr1_90",
     .commands = dr1_command_handler,
     .pld_device_command = &dr1_fpga_device_command,
     .load = &dr1_load,

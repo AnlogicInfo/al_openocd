@@ -67,13 +67,28 @@ static int anlogic_split_bit_file(FILE *input_file, uint8_t **header, uint8_t **
     return 0;
 }
 
-static int read_section(uint8_t *header, uint8_t **sections)
+static int read_section(uint8_t *header, struct anlogic_bit_file* bit_file)
 {
     uint8_t *current = header;
     int section_idx = 0;
     int max_sections = SECTION_COUNT * 2; // 防御性上限，防止死循环
 
-    while (section_idx < max_sections) {
+    // 按照bit_file字段顺序填充
+    uint8_t **fields[SECTION_COUNT] = {
+        &bit_file->start,
+        &bit_file->version,
+        &bit_file->design_name,
+        &bit_file->architecture,
+        &bit_file->package,
+        &bit_file->date,
+        &bit_file->golbal_crc,
+        &bit_file->transfer_crc,
+        &bit_file->file_format,
+        &bit_file->spi_feature,
+        &bit_file->user_code
+    };
+
+    while (section_idx < max_sections && section_idx < SECTION_COUNT) {
         if (strncmp((char *)current, "# ", 2) != 0)
             break;
 
@@ -85,13 +100,13 @@ static int read_section(uint8_t *header, uint8_t **sections)
         }
 
         size_t len = end - (char *)current;
-        sections[section_idx] = (uint8_t *)malloc(len + 1);
-        if (!sections[section_idx]) {
+        *fields[section_idx] = (uint8_t *)malloc(len + 1);
+        if (!*fields[section_idx]) {
             LOG_ERROR("Memory allocation failed for section: %d", section_idx);
             return -1;
         }
-        memcpy(sections[section_idx], current, len);
-        sections[section_idx][len] = '\0';
+        memcpy(*fields[section_idx], current, len);
+        (*fields[section_idx])[len] = '\0';
 
         section_idx++;
         if (*end == '\0')
@@ -106,7 +121,7 @@ static int read_section(uint8_t *header, uint8_t **sections)
 
     // 剩余的 section 置为 NULL
     for (int i = section_idx; i < SECTION_COUNT; i++) {
-        sections[i] = NULL;
+        *fields[i] = NULL;
     }
 
     return 0;
@@ -118,6 +133,9 @@ int anlogic_read_bit_file(struct anlogic_bit_file *bit_file, const char *filenam
     uint8_t *header = NULL;
     uint8_t *data = NULL;
     long data_len = 0;
+
+    // 确保bit_file结构体内容初始化为0，防止野指针
+    memset(bit_file, 0, sizeof(*bit_file));
 
     input_file = fopen(filename, "rb");
     if (!input_file) {
@@ -132,33 +150,42 @@ int anlogic_read_bit_file(struct anlogic_bit_file *bit_file, const char *filenam
     }
     fclose(input_file);
 
-    // 解析 header
-    uint8_t **sections[] = {
-        &bit_file->start,
-        &bit_file->version,
-        &bit_file->design_name,
-        &bit_file->architecture,
-        &bit_file->package,
-        &bit_file->date,
-        &bit_file->golbal_crc,
-        &bit_file->transfer_crc,
-        &bit_file->file_format,
-        &bit_file->spi_feature,
-        &bit_file->user_code
-    };
-
-    if (read_section(header, (uint8_t **)sections) != 0) {
+    if (read_section(header, bit_file) != 0) {
         free(header);
         free(data);
         return -1;
     }
 
-    // 保存 data 段和 data_len
+    LOG_INFO("bitfile start: %s", bit_file->start);
+    LOG_INFO("bitfile version: %s", bit_file->version);
+    LOG_INFO("bitfile design_name: %s", bit_file->design_name);    
+    LOG_INFO("bitfile architecture: %s", bit_file->architecture);
+
+        // 保存 data 段和 data_len
     bit_file->data = data;
     bit_file->data_len = data_len;
+
+    #undef SAFE_LOG_STR
 
     free(header);
 
     // 添加调试信息
     return 0;
+}
+
+int anlogic_check_architecture(struct anlogic_bit_file* bit_file, const char *drv_name)
+{
+    const char *arch = (const char*)bit_file->architecture;
+    // 跳过前缀"Architecture:"和空白
+    if (arch && strncmp(arch, "Architecture:", 13) == 0) {
+        arch += 13;
+        while (*arch == ' ' || *arch == '\t') arch++;
+    }
+    if (!arch || !drv_name || strcmp(arch, drv_name) != 0) {
+        LOG_ERROR("Bitfile architecture '%s' does not match driver name '%s'",
+            arch ? arch : "(null)",
+            drv_name ? drv_name : "(null)");
+        return ERROR_FAIL;
+    }
+    return ERROR_OK;
 }

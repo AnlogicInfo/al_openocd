@@ -89,6 +89,11 @@ static int ph1p_load(struct pld_device *pld_device, const char *filename)
         LOG_ERROR("Failed to read bit file: %s", filename);
         return retval;
     }
+
+    retval = anlogic_check_architecture(&bit_file, pld_device->driver->name);
+    if (retval != ERROR_OK)
+        return retval;
+
     ph1p_disable_dual_boot(ph1p_info->tap);
     ph1p_read_id(pld_device, &idcode);
     ph1p_set_ir(ph1p_info->tap, 0x1);
@@ -177,7 +182,7 @@ static const struct command_registration ph1p_command_handler[] = {
 
 
 struct pld_driver ph1p_fpga = {
-    .name = "ph1p",
+    .name = "ph1_35p",
     .commands = ph1p_command_handler,
     .pld_device_command = &ph1p_fpga_device_command,
     .load = &ph1p_load,
