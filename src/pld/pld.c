@@ -30,10 +30,12 @@
  */
 extern struct pld_driver virtex2_pld;
 extern struct pld_driver dr1_fpga;
+extern struct pld_driver ph1p_fpga;
 
 static struct pld_driver *pld_drivers[] = {
 	&virtex2_pld,
 	&dr1_fpga,
+	&ph1p_fpga,
 	NULL,
 };
 
