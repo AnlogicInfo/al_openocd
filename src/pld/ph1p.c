@@ -36,6 +36,23 @@ static int ph1p_set_dr(struct jtag_tap *tap, uint32_t num_bits, uint8_t *out_val
     return ERROR_OK;
 }
 
+static int ph1p_send_32(struct pld_device *pld_device,
+    int num_words, uint32_t *words, uint32_t *in_value)
+{
+    struct ph1p_fpga_device *ph1p_info = pld_device->driver_priv;
+    struct scan_field scan_field;
+
+    scan_field.in_value = (uint8_t *)in_value;
+
+    scan_field.num_bits = num_words * 32;
+    scan_field.out_value = (uint8_t *)words;
+
+    jtag_add_dr_scan(ph1p_info->tap, 1, &scan_field, TAP_IDLE);
+
+
+    return ERROR_OK;
+}
+
 // 实现 Disable Dual boot loop
 static int ph1p_disable_dual_boot(struct jtag_tap *tap)
 {
@@ -51,6 +68,22 @@ static int ph1p_disable_dual_boot(struct jtag_tap *tap)
     jtag_add_runtest(200, TAP_IDLE);
 
     return ERROR_OK;
+}
+
+static int ph1p_read_status(struct pld_device *pld_device, uint32_t *status)
+{
+    uint32_t outvalue = 0;
+    struct ph1p_fpga_device *ph1p_info = pld_device->driver_priv;
+
+    ph1p_set_ir(ph1p_info->tap, 0x46);
+    ph1p_send_32(pld_device, 1, &outvalue, status);
+    jtag_execute_queue();
+
+    // 将 in_val 字节数组转换为 uint32_t
+    LOG_DEBUG("read status: 0x%08x", *status);
+
+    return ERROR_OK;
+
 }
 
 static int ph1p_read_id(struct pld_device *pld_device, uint32_t *idcode)
@@ -78,11 +111,14 @@ static int ph1p_load(struct pld_device *pld_device, const char *filename)
 {
     struct ph1p_fpga_device *ph1p_info = pld_device->driver_priv;
     struct anlogic_bit_file bit_file;
-    uint32_t idcode=0;
+    uint32_t idcode = 0;
+    status0_t status0;
     uint8_t dr_val[8] = {0xa5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // LSB first
     uint8_t in_val[8] = {0};
     int retval;
     long i;
+    // 初始化状态寄存器
+    status0.reg_val = 0;
 
     retval = anlogic_read_bit_file(&bit_file, filename);
     if (retval != ERROR_OK) {
@@ -142,6 +178,17 @@ static int ph1p_load(struct pld_device *pld_device, const char *filename)
     ph1p_set_dr(ph1p_info->tap, 64, dr_val, in_val);
     jtag_add_runtest(200, TAP_IDLE);
     jtag_execute_queue();
+
+    ph1p_read_status(pld_device, &status0.reg_val);
+    if (status0.reg_fields.jtag_prgm_done | status0.reg_fields.njtag_prgm_done)
+    {
+        LOG_INFO("Programming successful, JTAG programming done.");
+    }
+    else
+    {
+        LOG_ERROR("Programming failed, JTAG programming not done.");
+        return ERROR_FAIL;
+    }
 
     return ERROR_OK;
 }

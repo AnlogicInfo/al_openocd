@@ -55,7 +55,7 @@ static int dr1_send_addr(struct pld_device *pld_device,
     return ERROR_OK;
 }
 
-static int dr1_read_stat(struct pld_device *pld_device, uint32_t *status)
+static int dr1_read_status(struct pld_device *pld_device, uint32_t *status)
 {
     uint32_t outvalue = 0;
     struct dr1_fpga_device *dr1_info = pld_device->driver_priv;
@@ -92,8 +92,12 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
     struct dr1_fpga_device *dr1_info = pld_device->driver_priv;
     struct anlogic_bit_file bit_file;
     uint32_t idcode=0;
+    status0_t status0;
     int retval;
     long i;
+
+    // 初始化状态寄存器
+    status0.reg_val = 0;
 
     retval = anlogic_read_bit_file(&bit_file, filename);
     if (retval != ERROR_OK) {
@@ -148,8 +152,17 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
     jtag_add_clocks(1000);
     jtag_execute_queue();
 
-    dr1_read_stat(pld_device, &idcode);
+    dr1_read_status(pld_device, &status0.reg_val);
 
+    if (status0.reg_fields.jtag_prgm_done | status0.reg_fields.njtag_prgm_done)
+    {
+        LOG_INFO("Programming successful, JTAG programming done.");
+    }
+    else
+    {
+        LOG_ERROR("Programming failed, JTAG programming not done.");
+        return ERROR_FAIL;
+    }
     return ERROR_OK;
 }
 
