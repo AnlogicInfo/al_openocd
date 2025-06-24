@@ -1209,6 +1209,54 @@ COMMAND_HANDLER(handle_flash_padded_value_command)
 	return retval;
 }
 
+COMMAND_HANDLER(handle_flash_remote_write_command)
+{
+    // 参数: bank_id port
+    if (CMD_ARGC != 2)
+        return ERROR_COMMAND_SYNTAX_ERROR;
+
+    struct flash_bank *p;
+    int retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
+    if (retval != ERROR_OK)
+        return retval;
+
+    int port = atoi(CMD_ARGV[1]);
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+
+    // 设置server_fd为监听端口port，accept连接
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(port);
+    bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    listen(server_fd, 5);
+
+    // 等待客户端连接
+    int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+    if (client_fd < 0) {
+        close(server_fd);
+        return ERROR_FAIL;
+    }
+
+    // 接收文件长度和内容
+    uint32_t file_len;
+    recv(client_fd, (char *)&file_len, sizeof(file_len), 0);
+    uint8_t *buffer = malloc(file_len);
+    recv(client_fd, (char *)buffer, file_len, 0);
+
+    // 烧写到flash
+    retval = flash_driver_write(p, buffer, 0, file_len);
+
+    free(buffer);
+    close(client_fd);
+    close(server_fd);
+
+    return retval;
+}
+
+// 注册命令
 static const struct command_registration flash_exec_command_handlers[] = {
 	{
 		.name = "probe",
@@ -1392,6 +1440,13 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id value",
 		.help = "Set default flash padded value",
+	},
+	{
+		.name = "remote_write",
+		.handler = handle_flash_remote_write_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id port",
+		.help = "Listen on TCP port and write received data to flash bank",
 	},
 	COMMAND_REGISTRATION_DONE
 };
