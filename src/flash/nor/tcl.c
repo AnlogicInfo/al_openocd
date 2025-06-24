@@ -1242,9 +1242,9 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
 
     // 接收文件长度和内容
     uint32_t file_len;
-    recv(client_fd, &file_len, sizeof(file_len), 0);
+    recv(client_fd, (char *)&file_len, sizeof(file_len), 0);
     uint8_t *buffer = malloc(file_len);
-    recv(client_fd, buffer, file_len, 0);
+    recv(client_fd, (char *)buffer, file_len, 0);
 
     // 烧写到flash
     retval = flash_driver_write(p, buffer, 0, file_len);
