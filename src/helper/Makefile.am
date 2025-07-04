@@ -12,6 +12,7 @@ noinst_LTLIBRARIES += %D%/libhelper.la
 	%D%/fileio.c \
 	%D%/util.c \
 	%D%/jep106.c \
+	%D%/al_fpga_devices.c \
 	%D%/jim-nvp.c \
 	%D%/align.h \
 	%D%/binarybuffer.h \
@@ -28,6 +29,7 @@ noinst_LTLIBRARIES += %D%/libhelper.la
 	%D%/system.h \
 	%D%/jep106.h \
 	%D%/jep106.inc \
+	%D%/al_fpga_devices.h \
 	%D%/jim-nvp.h \
 	%D%/base64.c \
 	%D%/base64.h
