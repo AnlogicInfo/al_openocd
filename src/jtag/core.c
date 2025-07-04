@@ -36,6 +36,7 @@
 #include "interface.h"
 #include <transport/transport.h>
 #include <helper/jep106.h>
+#include <helper/al_fpga_devices.h>
 #include "helper/system.h"
 
 #include <server/rbb_server.h>
@@ -1349,6 +1350,7 @@ static int al_jtag_ir_capture(int chain_pos,  uint8_t * irbuf, struct jtag_tap *
 
 	if (ircode8 == 0xC5) {
 		LOG_DEBUG("AL FPGA detected at chain position %d (last): IRLEN=8, IRCODE=0xC5", chain_pos);
+		/* Call device info function if we have a valid idcode */
 		chain_pos += 8;
 		tap->ir_length = 8;
 		return ERROR_OK;
@@ -1372,6 +1374,7 @@ static int al_jtag_ir_capture(int chain_pos,  uint8_t * irbuf, struct jtag_tap *
 
 	return ERROR_OK;
 }
+
 
 /*
  * Validate the date loaded by entry to the Capture-IR state, to help
@@ -1449,6 +1452,8 @@ static int jtag_validate_ircapture(void)
 					"-expected-id 0x%08" PRIx32 "\"",
 					tap->dotted_name, tap->chip, tap->tapname, tap->ir_length, tap->idcode);
 		}
+
+		al_fpga_print_device_info(tap->idcode);
 
 		/* Validate the two LSBs, which must be 01 per JTAG spec.
 		 *
