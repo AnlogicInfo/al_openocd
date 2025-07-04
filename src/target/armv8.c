@@ -645,6 +645,18 @@ void armv8_select_reg_access(struct armv8_common *armv8, bool is_aarch64)
 	}
 }
 
+struct reg_cache* armv8_select_core_cache(struct arm* arm)
+{
+	enum arm_state core_state = arm->core_state;
+	struct reg_cache* cache;
+
+	if(core_state == ARM_STATE_AARCH64) 
+		cache = arm->core_cache;
+	else
+		cache = arm->core_cache->next;
+	return cache;
+}
+
 /*  retrieve core id cluster id  */
 int armv8_read_mpidr(struct armv8_common *armv8)
 {
