@@ -46,5 +46,4 @@ do { \
 uint32_t  emmc_wait_fifo(uint32_t *work_area_start);
 void emmc_write_block(volatile uint32_t *ctrl_base, uint32_t offset, const uint32_t *buffer);
 void emmc_read_block(volatile uint32_t *ctrl_base, uint32_t *buffer, uint32_t offset, uint32_t count);
-
 #endif

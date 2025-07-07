@@ -407,6 +407,25 @@ int dwcssi_wr_flash_reg(struct flash_bank *bank, uint8_t *cmd, uint8_t len, uint
 int dwcssi_set_reg(struct flash_bank *bank, uint8_t cmd, uint8_t index);
 
 
+uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t pull_dw);
+int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_priv);
+
+void dwcssi_config_init(struct flash_bank *bank, uint8_t sckdv);
+int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last);
+int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, unsigned last);
+int dwcssi_protect_check(struct flash_bank *bank);
+int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count);
+int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count);
+int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count);
+int dwcssi_xip_init(struct flash_bank *bank);
+int dwcssi_flash_reset(struct flash_bank *bank);
+int dwcssi_probe(struct flash_bank *bank);
+int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
+			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes);
+int get_driver_priv(struct flash_bank *bank, struct command_invocation *cmd);
+
+
+
 //general spi ops
 int general_reset_f0(struct flash_bank *bank, uint8_t cmd_mode);
 int general_reset_66_99(struct flash_bank *bank, uint8_t cmd_mode);

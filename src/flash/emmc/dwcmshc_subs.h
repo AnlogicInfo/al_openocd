@@ -84,15 +84,24 @@ struct dwcmshc_emmc_controller {
 
 #define MMC_DELAY_SCALE						(2)
 
-//AL9000 config
-#define MIO_BASE                             0xF8803000ULL
-#define EMIO_SEL11                           0xF880342CULL
-#define EMIO_SEL12                           0xF8803430ULL
 #define CFG_CTRL_SDIO1                       0xF8800150ULL
 #define CFG_CTRL_SDIO2                       0xF8800154ULL
 
-#define IO_BANK1_REF                         0xF8803C04ULL
-#define FAST_MODE_BASE                       0xF8803940ULL
+
+// AL9000 config
+#define DR90_BASE_ADDR                       0xF8803000ULL
+#define DR90_EMIO_SEL11                      0xF880342CULL
+#define DR90_EMIO_SEL12                      0xF8803430ULL
+#define DR90_FAST_MODE_BASE                  0xF8803940ULL
+
+// AL9100 config
+#define DR91_BASE_ADDR                       0xF8803000ULL
+#define DR91_201_BASE_ADDR                   0xF8808000ULL
+#define DR91_EMIO_SEL11                      0xF880342CULL
+#define DR91_EMIO_SEL12                      0xF8808430ULL
+
+#define DR91_MIO_PARM_BASE                   0xF8808800ULL
+#define DR91_FAST_MODE_BASE                  0xF8803800ULL
 
 #define MMC_IO_BANK1_SUPPORT_1V8(reg)	     (reg & 0x1)
 #define MMC_IO_BANK1_SUPPORT_2V5(reg)	     ((reg & 0x2) >> 1)
@@ -120,4 +129,13 @@ int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ui
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
 
 int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc);
+
+int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field);
+int dwcmshc_emmc_reset(struct emmc_device *emmc);
+int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
+int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size);
+int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
+int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count);
+int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout);
+
 #endif
