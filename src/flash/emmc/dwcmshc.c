@@ -40,14 +40,7 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 	return ERROR_OK;
 }
 
-
-static int dwcmshc_emmc_command(struct emmc_device *emmc, uint8_t command, uint32_t argument)
-{
-
-	return ERROR_OK;
-}
-
-static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
+int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 {
 	int status = ERROR_OK;
 	struct target *target = emmc->target;
@@ -57,7 +50,7 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
-	status = dwcmshc_mio_init(emmc);
+
 	dwcmshc_emmc_ctl_init(emmc);
 	dwcmshc_emmc_interrupt_init(emmc);
 
@@ -71,17 +64,16 @@ static int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 
 	dwcmshc_emmc_set_bus_width(emmc);
 
-	dwcmshc_fast_mode(emmc);
 	return status;
 }
 
 
-static int dwcmshc_emmc_reset(struct emmc_device *emmc)
+int dwcmshc_emmc_reset(struct emmc_device *emmc)
 {
 	return dwcmshc_emmc_cmd_reset(emmc, EMMC_CMD0_PARA_GO_IDLE_STATE);
 }
 
-static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
+int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
 	int retval;
 
@@ -90,7 +82,7 @@ static int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, 
 }
 
 
-static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
+int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
 {
 	int retval = ERROR_OK;
 
@@ -104,7 +96,7 @@ static int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, u
 	return retval;
 }
 
-static int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
+int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
 	slow_dwcmshc_emmc_read_block(emmc, buffer, addr);
 	return ERROR_OK;
@@ -130,7 +122,7 @@ static int find_difference(struct emmc_device *emmc, const uint8_t *buffer, uint
 		return find_difference(emmc, buffer + half, size - half, offset + half);
 }
 
-static int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count)
+int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count)
 {
 	int retval = ERROR_OK;
 	uint32_t target_crc = 0, image_crc;
@@ -157,7 +149,7 @@ static int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, 
 	return retval;
 }
 
-static int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout)
+int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout)
 {
 	return ERROR_OK;
 }
@@ -166,7 +158,6 @@ static int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout)
 const struct emmc_flash_controller dwcmshc_emmc_controller = {
 	.name = "dwcmshc",
 	.emmc_device_command = dwcmshc_emmc_device_command,
-	.command = dwcmshc_emmc_command,
 	.reset = dwcmshc_emmc_reset,
 	.write_image = dwcmshc_emmc_write_image,
 	.write_block_data = dwcmshc_emmc_write_block,

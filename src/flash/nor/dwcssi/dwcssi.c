@@ -21,7 +21,9 @@ static int (*reset_methods[3])(struct flash_bank*, uint8_t cmd_mode) = {
 	general_reset_66_99,
 	general_reset_f0
 };
+
 static struct flash_device custom_device;
+
 FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 {
 	struct dwcssi_flash_bank *driver_priv;
@@ -55,7 +57,8 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 	return ERROR_OK;
 }
 
-static uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t pull_dw)
+
+uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t pull_dw)
 {
     uint32_t val = speed | (0x8U << 24) | (pull_dw << 28) | (pull_up << 29);
     return val;
@@ -77,107 +80,6 @@ static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
 	}
 
 	return ERROR_OK;
-}
-
-static int qspi_mio_init_1v8(struct flash_bank *bank)
-{
-	struct target *target = bank->target;
-	uint8_t mio_num;
-	uint32_t value = 0;
-	uint32_t mio_parm = mio_pad_ctrl0(MIO_SPEED_FAST, MIO_PULL_10K_EN, MIO_PULL_DIS);
-
-	for (mio_num = 0; mio_num < 28; mio_num = mio_num + 4) {
-		if (target_read_u32(target, MIO_BASE + mio_num, &value) != ERROR_OK)
-			return ERROR_FAIL;
-		if (value != 1)	{
-			if (target_write_u32(target,  MIO_BASE + mio_num, 1) != ERROR_OK)
-				return ERROR_FAIL;
-		}
-
-		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK)
-			return ERROR_FAIL;
-	}
-
-	return ERROR_OK;
-}
-
-static int qspi_mio_init_3v3(struct flash_bank *bank)
-{
-	struct target *target = bank->target;
-	uint8_t mio_num;
-	uint32_t value = 0;
-	uint32_t mio_parm = 0x88000007;
-	uint32_t mio_parm1 = 0x001e0603;
-
-	for (mio_num = 0; mio_num < 28; mio_num = mio_num + 4) {
-		if (target_read_u32(target, MIO_BASE + mio_num, &value) != ERROR_OK)
-			return ERROR_FAIL;
-		if (value != 1)	{
-			if (target_write_u32(target,  MIO_BASE + mio_num, 1) != ERROR_OK)
-				return ERROR_FAIL;
-		}
-
-		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK)
-			return ERROR_FAIL;
-		
-		if(target_write_u32(target, MIO_PARA1_BASE + (mio_num << 1), mio_parm1)!= ERROR_OK)
-			return ERROR_FAIL;
-	}
-
-	return ERROR_OK;
-}
-
-static int cpu_pll_waitlock(struct flash_bank *bank)
-{
-	uint32_t pll_state0;
-	int64_t start = timeval_ms();
-	while (1) {
-		if (target_read_u32(bank->target, CPUPLL_STATE0, &pll_state0) != ERROR_OK)
-			return ERROR_FAIL;
-		if (pll_state0 & 0x1)
-			break;
-		int64_t now = timeval_ms();
-		if (now - start > 1000) {
-			LOG_ERROR("cpu pll lock timeout");
-			return ERROR_TARGET_TIMEOUT;
-		}
-	}
-	return ERROR_OK;
-}
-
-static int cpu_mask_write(struct flash_bank *bank, uint32_t addr, uint32_t mask, uint32_t value)
-{
-	uint32_t reg_val;
-	if (target_read_u32(bank->target, addr, &reg_val) != ERROR_OK)
-		return ERROR_FAIL;
-	reg_val = (reg_val & ~mask) | (value & mask);
-	LOG_DEBUG("cpu mask write addr %x mask %x value %x", addr, mask, reg_val);
-	if (target_write_u32(bank->target, addr, reg_val) != ERROR_OK)
-		return ERROR_FAIL;
-	return ERROR_OK;
-}
-
-static int cpu_clk_reset(struct flash_bank *bank)
-{
-	int ret = ERROR_OK;
-	cpu_mask_write(bank, CLK_SEL, 0x10, 0x10);
-	cpu_mask_write(bank, CPU4X_DIV1_PARA, 0x00ffffff, 0x00ffffff);
-	cpu_mask_write(bank, CPU4X_DIV2_PARA, 0x00ffffff, 0x00555555);
-	cpu_mask_write(bank, CPU4X_DIV4_PARA, 0x00ffffff, 0x00111111);
-	cpu_mask_write(bank, CLK_SEL, 0x00000001, 0);
-	cpu_mask_write(bank, CLK_SEL, 0x20, 0);
-	cpu_mask_write(bank, CPUPLL_CTRL1, 0x00000200, 0x00000200);
-
-	target_write_u32(bank->target, CPUPLL_CTRL9, 0x07311e4f);
-	target_write_u32(bank->target, CPUPLL_CTRL8, 0x350f0f01);
-	target_write_u32(bank->target, CPUPLL_CTRL19, 0x02000002);
-	target_write_u32(bank->target, CPUPLL_CTRL18, 0x01000001);
-
-	cpu_mask_write(bank, CPUPLL_CTRL1, 0x00000200, 0x00000000);
-	
-	ret = cpu_pll_waitlock(bank);
-	cpu_mask_write(bank, CLK_SEL, 0x10, 0);
-	return ret;
 }
 
 
@@ -355,19 +257,8 @@ static void dwcssi_config_clk(struct flash_bank *bank, uint8_t sckdv)
 	dwcssi_enable(bank);
 }
 
-static void dwcssi_config_init(struct flash_bank *bank)
+void dwcssi_config_init(struct flash_bank *bank, uint8_t sckdv)
 {
-	uint32_t sckdv, input_clk, io_freq;
-	uint32_t io1000_cnt_div, div_qspi;
-
-	target_read_u32(bank->target, IO1000_CNT_DIV, &io1000_cnt_div);
-	div_qspi = (io1000_cnt_div & 0x3F);
-	input_clk = 1000/(div_qspi+1);
-	io_freq = 5;
-	sckdv = input_clk/(io_freq * 2);
-
-	LOG_INFO("div_qspi %d input_clk %d io_freq %d sckdv %d", div_qspi, input_clk, io_freq, sckdv);
-
 	dwcssi_disable(bank);
 	dwcssi_config_BAUDR(bank, sckdv);
 	dwcssi_config_SER(bank, ENABLE);
@@ -836,7 +727,7 @@ int dwcssi_wr_qe(struct flash_bank *bank, uint8_t enable)
 	return ERROR_OK;
 }
 
-static int dwcssi_flash_reset(struct flash_bank *bank)
+int dwcssi_flash_reset(struct flash_bank *bank)
 {
 	general_reset_f0(bank, STANDARD_SPI_MODE);
 	general_reset_66_99(bank, STANDARD_SPI_MODE);
@@ -940,32 +831,11 @@ int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_p
 	return ERROR_OK;
 }
 
-static int dwcssi_probe(struct flash_bank *bank)
+int dwcssi_probe(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = NULL;
-	uint32_t io_bank_ref;
 	int retval = ERROR_FAIL;
-
-	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
-	driver_priv_init(bank, driver_priv);
-	cpu_clk_reset(bank);
-
-	target_read_u32(bank->target, MIO_BANK201_REF, &io_bank_ref);
-	if(io_bank_ref & 0x1) {
-		if (qspi_mio_init_1v8(bank) != ERROR_OK) {
-			return ERROR_FAIL;
-		}
-	} else if((io_bank_ref & 0x7) == 0x4) {
-		if (qspi_mio_init_3v3(bank) != ERROR_OK) {
-			return ERROR_FAIL;
-		}
-	} else {
-		LOG_ERROR("QSPI MIO not configured");
-		return ERROR_FAIL;
-	}
-
-	dwcssi_config_init(bank);
 
 	if (!bank->customize) {
 		if(dwcssi_read_id(bank) != ERROR_OK) {
@@ -999,7 +869,7 @@ static int dwcssi_probe(struct flash_bank *bank)
 	return retval;
 }
 
-static int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
+int dwcssi_customize(struct flash_bank *bank, uint8_t read_cmd, uint8_t pprog_cmd, uint8_t erase_cmd,
 			uint32_t pagesize, uint32_t sectorsize, uint32_t size_in_bytes)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
@@ -1090,7 +960,7 @@ static void dwcssi_xip_port1_nor_flash_size(struct flash_bank *bank, uint32_t si
 	target_write_u32(target, CFG_CTRL_QSPI, size);
 }
 
-static int dwcssi_xip_init(struct flash_bank *bank)
+int dwcssi_xip_init(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	uint8_t wait_cycle, mode_bits;
@@ -1195,7 +1065,7 @@ static int dwcssi_erase_bulk(struct flash_bank *bank)
 	return retval;
 }
 
-static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
+int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 {
 
 	struct target *target = bank->target;
@@ -1256,7 +1126,7 @@ static int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned in
 	return retval;
 }
 
-static int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, unsigned last)
+int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, unsigned last)
 {
 	for (unsigned int sector = first; sector <= last; sector++)
 		bank->sectors[sector].is_protected = set;
@@ -1358,7 +1228,7 @@ static void dwcssi_read_x4(struct flash_bank *bank, uint8_t *buffer, uint32_t of
 	dwcssi_wr_qe(bank, DISABLE);
 }
 
-static int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
+int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
@@ -1493,7 +1363,7 @@ static int find_difference(struct flash_bank *bank, const uint8_t *buffer, uint3
     }
 }
 
-static int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	int retval = ERROR_FAIL;
 	uint32_t target_crc, image_crc;
@@ -1735,7 +1605,7 @@ static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uin
 	 return retval;
 } */
 
-static int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	int retval = ERROR_FAIL;
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
@@ -1782,14 +1652,14 @@ x1_write:
 }
 
 
-static int dwcssi_protect_check(struct flash_bank *bank)
+int dwcssi_protect_check(struct flash_bank *bank)
 {
 	/* Nothing to do. Protection is only handled in SW. */
 
 	return ERROR_OK;
 }
 
-static int get_driver_priv(struct flash_bank *bank, struct command_invocation *cmd)
+int get_driver_priv(struct flash_bank *bank, struct command_invocation *cmd)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 
@@ -1804,7 +1674,6 @@ static int get_driver_priv(struct flash_bank *bank, struct command_invocation *c
 
 	return ERROR_OK;
 }
-
 
 const struct flash_driver dwcssi_flash = {
 	.name = "dwcssi",

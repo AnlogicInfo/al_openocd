@@ -3,11 +3,13 @@
 #endif
 #include "core.h"
 #include "driver.h"
-extern struct emmc_flash_controller dwcmshc_emmc_controller;
+extern struct emmc_flash_controller dr90_dwcmshc_emmc_controller;
+extern struct emmc_flash_controller dr91_dwcmshc_emmc_controller;
 
 
 static struct emmc_flash_controller *emmc_flash_controllers[] = {
-	&dwcmshc_emmc_controller,
+	&dr90_dwcmshc_emmc_controller,
+	&dr91_dwcmshc_emmc_controller,
 /*	&boundary_scan_nand_controller, */
 	NULL
 };

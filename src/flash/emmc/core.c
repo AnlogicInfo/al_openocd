@@ -33,8 +33,8 @@ void emmc_device_add(struct emmc_device *c)
 static struct emmc_info emmc_flash_ids[] = 
 {
 	// mfr             prd_cid         block_size   chip_size     name
-  {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200,       16,           "Samsung KLMAG1JETD-B041 16GB EMMC "},
-  {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200,       64,           "Samsung KLMCG8GEAC-B031 64GB EMMC "},
+    {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200,       16,           "Samsung KLMAG1JETD-B041 16GB EMMC "},
+    {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200,       64,           "Samsung KLMCG8GEAC-B031 64GB EMMC "},
 	{EMMC_MFR_MICRON,  0x53304a353658, 0x200,       16,           "Micron MTFC16GAPALBH-IT 16GB EMMC "},
 	{EMMC_MFR_MICRON,  0x52314a35364c, 0x200,       16,           "Micron MTFC16GAKAEJP-4MIT 16GB EMMC "},
 	{EMMC_MFR_MICRON,  0x51324a35354c, 0x200,       8,            "Micron MTFC8GAKAJCN-4MIT 8GB EMMC "},

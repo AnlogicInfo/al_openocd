@@ -750,7 +750,7 @@ int armv8_dpm_read_current_registers(struct arm_dpm *dpm)
 	if (retval != ERROR_OK)
 		return retval;
 
-	cache = arm->core_cache;
+	cache = armv8_select_core_cache(arm);
 
 	/* read R0 first (it's used for scratch), then CPSR */
 	r = cache->reg_list + ARMV8_R0;
@@ -950,9 +950,12 @@ int armv8_dpm_write_dirty_registers(struct arm_dpm *dpm, bool bpwp)
 		retval = dpmv8_write_reg(dpm, &cache->reg_list[ARMV8_xPSR], ARMV8_xPSR);
 	if (retval == ERROR_OK)
 		retval = dpmv8_write_reg(dpm, &cache->reg_list[ARMV8_PC], ARMV8_PC);
-	/* flush R0 -- it's *very* dirty by now */
-	if (retval == ERROR_OK)
+	/* flush R0/R1 -- it's *very* dirty by now */
+	if (retval == ERROR_OK) {
 		retval = dpmv8_write_reg(dpm, &cache->reg_list[0], 0);
+		retval = dpmv8_write_reg(dpm, &cache->reg_list[1], 1);
+
+	}
 	if (retval == ERROR_OK)
 		dpm->instr_cpsr_sync(dpm);
 done:

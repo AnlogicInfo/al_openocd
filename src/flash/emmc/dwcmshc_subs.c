@@ -6,59 +6,6 @@
  * Last Modified: 2022-11-08
  */
 #include "dwcmshc_subs.h"
-int dwcmshc_mio_init(struct emmc_device *emmc)
-{
-	struct target *target = emmc->target;
-	struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
-	target_addr_t mio_addr, emio_addr;
-	uint32_t mio_val, value = 0, status = ERROR_OK;
-	uint8_t mio_num, mio_start, mio_end;
-
-	if (dwcmshc_emmc->io_location == 0) {
-		mio_start = 40;
-		mio_end = 50;
-		mio_val = 0xb;
-		emio_addr = EMIO_SEL11;
-	} else {
-		mio_start = 10;
-		mio_end = 16;
-		mio_val = 0xa;
-		emio_addr = EMIO_SEL12;
-	}
-
-	for (mio_num = mio_start; mio_num < mio_end; mio_num = mio_num + 1) {
-		mio_addr = MIO_BASE + (mio_num << 2);
-		status = target_read_u32(target, mio_addr, &value);
-		if (status != ERROR_OK)
-			return status;
-		if (value != mio_val) {
-			status = target_write_u32(target,  mio_addr, mio_val);
-			if (status != ERROR_OK)
-				return status;
-		}
-		LOG_DEBUG("mio init addr %"TARGET_PRIxADDR " val %x", mio_addr, mio_val);
-	}
-
-	status = target_write_u32(target, emio_addr, 0x1);
-
-	return status;
-}
-
-int dwcmshc_fast_mode(struct emmc_device *emmc)
-{
-	struct target *target = emmc->target;
-	target_addr_t addr;
-	uint32_t status = ERROR_OK;
-	uint8_t num;
-	for (num = 0; num < 10; num = num + 1) {
-		addr = FAST_MODE_BASE + (num << 3);
-		status = target_write_u32(target,  addr, 0x88000007);
-		if (status != ERROR_OK)
-			return status;
-	}
-
-	return status;
-}
 
 static int dwcmshc_wait_clk(struct emmc_device *emmc)
 {
