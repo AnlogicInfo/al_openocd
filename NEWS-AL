@@ -2,6 +2,12 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1121
+1. add support for dr1m35
+2. print fpga device info during scan
+3. set usb-port as option parm for scan_device cmd
+4. replace remote_bitbang with jtag_vpi in hardware server mode
+
 v0.1120
 1. add xip support for qspi
 2. add usb driver scan

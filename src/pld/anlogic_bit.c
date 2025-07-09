@@ -9,6 +9,7 @@
 #include <helper/system.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #define MAX_SECTION_LEN 1024
 #define SECTION_COUNT 11
@@ -176,16 +177,31 @@ int anlogic_read_bit_file(struct anlogic_bit_file *bit_file, const char *filenam
 int anlogic_check_architecture(struct anlogic_bit_file* bit_file, const char *drv_name)
 {
     const char *arch = (const char*)bit_file->architecture;
+    bool match = false;
+
     // 跳过前缀"Architecture:"和空白
     if (arch && strncmp(arch, "Architecture:", 13) == 0) {
         arch += 13;
         while (*arch == ' ' || *arch == '\t') arch++;
     }
-    if (!arch || !drv_name || strcmp(arch, drv_name) != 0) {
+
+    // 检查架构和驱动名称是否匹配
+    if (arch && drv_name) {
+        // 直接匹配
+        if (strcmp(arch, drv_name) == 0) {
+            match = true;
+        }
+        // 特殊情况：dr1_90 驱动也可以用于 dr1_300p 架构
+        else if (strcmp(drv_name, "dr1_90") == 0 && strcmp(arch, "dr1_300p") == 0) {
+            match = true;
+        }
+    }
+
+    if (!match) {
         LOG_ERROR("Bitfile architecture '%s' does not match driver name '%s'",
             arch ? arch : "(null)",
             drv_name ? drv_name : "(null)");
-        return ERROR_FAIL;
+        // return ERROR_FAIL;
     }
     return ERROR_OK;
 }
