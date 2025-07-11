@@ -25,6 +25,8 @@
 #include <helper/time_support.h>
 #include <target/image.h>
 #include <signal.h>
+#include <string.h>
+#include <errno.h>
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -34,6 +36,9 @@
 #else
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <unistd.h>
 #endif
 
 
@@ -1226,13 +1231,22 @@ static int recv_all(int sockfd, void *buf, size_t len, int timeout_sec) {
     size_t remaining = len;
     
     // 设置接收超时
+#ifdef _WIN32
+    DWORD timeout = timeout_sec * 1000; // Convert to milliseconds
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+#else
     struct timeval tv;
     tv.tv_sec = timeout_sec;
     tv.tv_usec = 0;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
     
     while (remaining > 0) {
+#ifdef _WIN32
+        int received = recv(sockfd, ptr, remaining, 0);
+#else
         ssize_t received = recv(sockfd, ptr, remaining, 0);
+#endif
         if (received <= 0) {
             if (received == 0) {
                 LOG_ERROR("Connection closed by client");
@@ -1269,18 +1283,39 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
         return ERROR_COMMAND_SYNTAX_ERROR;
     }
 
+#ifdef _WIN32
+    // Initialize Winsock
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        command_print(CMD, "WSAStartup failed");
+        return ERROR_FAIL;
+    }
+#endif
+
     // 创建服务器socket
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
         command_print(CMD, "Failed to create socket: %s", strerror(errno));
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return ERROR_FAIL;
     }
 
     // 设置socket选项
     int opt = 1;
+#ifdef _WIN32
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt)) < 0) {
+#else
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+#endif
         command_print(CMD, "setsockopt failed: %s", strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
         close(server_fd);
+#endif
         return ERROR_FAIL;
     }
 
@@ -1293,24 +1328,39 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
 
     if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         command_print(CMD, "Bind failed on port %d: %s", port, strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
         close(server_fd);
+#endif
         return ERROR_FAIL;
     }
 
     // 开始监听
     if (listen(server_fd, 1) < 0) {
         command_print(CMD, "Listen failed: %s", strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
         close(server_fd);
+#endif
         return ERROR_FAIL;
     }
 
     command_print(CMD, "flash remote_write: listening on port %d for one connection", port);
 
     // 设置服务器socket超时 (30秒)
+#ifdef _WIN32
+    DWORD timeout = 30000; // 30 seconds in milliseconds
+    setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+#else
     struct timeval tv;
     tv.tv_sec = 30;
     tv.tv_usec = 0;
     setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
 
     // 等待客户端连接
     struct sockaddr_in client_addr;
@@ -1319,13 +1369,17 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
     
     if (client_fd < 0) {
         command_print(CMD, "Accept failed: %s", strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
         close(server_fd);
+#endif
         return ERROR_FAIL;
     }
 
     // 打印客户端信息
-    char client_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+    char *client_ip = inet_ntoa(client_addr.sin_addr);
     command_print(CMD, "flash remote_write: client connected from %s:%d", 
                   client_ip, ntohs(client_addr.sin_port));
 
@@ -1382,8 +1436,14 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
     // 清理资源
     if (buffer)
         free(buffer);
+#ifdef _WIN32
+    closesocket(client_fd);
+    closesocket(server_fd);
+    WSACleanup();
+#else
     close(client_fd);
     close(server_fd);
+#endif
 
     return retval;
 }
