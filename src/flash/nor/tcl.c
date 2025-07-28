@@ -24,6 +24,22 @@
 #include "imp.h"
 #include <helper/time_support.h>
 #include <target/image.h>
+#include <signal.h>
+#include <string.h>
+#include <errno.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#ifndef SHUT_RDWR
+#define SHUT_RDWR SD_BOTH
+#endif
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#endif
 
 
 /**
@@ -1209,49 +1225,225 @@ COMMAND_HANDLER(handle_flash_padded_value_command)
 	return retval;
 }
 
+
+static int recv_all(int sockfd, void *buf, size_t len, int timeout_sec) {
+    char *ptr = (char *)buf;
+    size_t remaining = len;
+    
+    // 设置接收超时
+#ifdef _WIN32
+    DWORD timeout = timeout_sec * 1000; // Convert to milliseconds
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+#else
+    struct timeval tv;
+    tv.tv_sec = timeout_sec;
+    tv.tv_usec = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
+    
+    while (remaining > 0) {
+#ifdef _WIN32
+        int received = recv(sockfd, ptr, remaining, 0);
+#else
+        ssize_t received = recv(sockfd, ptr, remaining, 0);
+#endif
+        if (received <= 0) {
+            if (received == 0) {
+                LOG_ERROR("Connection closed by client");
+                return ERROR_FAIL;
+            }
+            LOG_ERROR("recv failed: %s", strerror(errno));
+            return ERROR_FAIL;
+        }
+        
+        ptr += received;
+        remaining -= received;
+    }
+    
+    return ERROR_OK;
+}
+
 COMMAND_HANDLER(handle_flash_remote_write_command)
 {
-    // 参数: bank_id port
-    if (CMD_ARGC != 2)
+    // 参数验证
+    if (CMD_ARGC != 2) {
+        command_print(CMD, "usage: flash remote_write <bank_id> <port>");
         return ERROR_COMMAND_SYNTAX_ERROR;
+    }
 
+    // 获取flash bank
     struct flash_bank *p;
     int retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
     if (retval != ERROR_OK)
         return retval;
 
     int port = atoi(CMD_ARGV[1]);
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_len = sizeof(client_addr);
+    if (port <= 0 || port > 65535) {
+        command_print(CMD, "Invalid port number: %d", port);
+        return ERROR_COMMAND_SYNTAX_ERROR;
+    }
 
-    // 设置server_fd为监听端口port，accept连接
+#ifdef _WIN32
+    // Initialize Winsock
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        command_print(CMD, "WSAStartup failed");
+        return ERROR_FAIL;
+    }
+#endif
+
+    // 创建服务器socket
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        command_print(CMD, "Failed to create socket: %s", strerror(errno));
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return ERROR_FAIL;
+    }
+
+    // 设置socket选项
+    int opt = 1;
+#ifdef _WIN32
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt)) < 0) {
+#else
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+#endif
+        command_print(CMD, "setsockopt failed: %s", strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
+        close(server_fd);
+#endif
+        return ERROR_FAIL;
+    }
+
+    // 绑定端口
+    struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
-    bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
-    listen(server_fd, 5);
 
-    // 等待客户端连接
-    int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
-    if (client_fd < 0) {
+    if (bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        command_print(CMD, "Bind failed on port %d: %s", port, strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
         close(server_fd);
+#endif
         return ERROR_FAIL;
     }
 
-    // 接收文件长度和内容
-    uint32_t file_len;
-    recv(client_fd, (char *)&file_len, sizeof(file_len), 0);
-    uint8_t *buffer = malloc(file_len);
-    recv(client_fd, (char *)buffer, file_len, 0);
+    // 开始监听
+    if (listen(server_fd, 1) < 0) {
+        command_print(CMD, "Listen failed: %s", strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
+        close(server_fd);
+#endif
+        return ERROR_FAIL;
+    }
 
-    // 烧写到flash
-    retval = flash_driver_write(p, buffer, 0, file_len);
+    command_print(CMD, "flash remote_write: listening on port %d for one connection", port);
 
-    free(buffer);
+    // 设置服务器socket超时 (30秒)
+#ifdef _WIN32
+    DWORD timeout = 30000; // 30 seconds in milliseconds
+    setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
+#else
+    struct timeval tv;
+    tv.tv_sec = 30;
+    tv.tv_usec = 0;
+    setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
+
+    // 等待客户端连接
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+    
+    if (client_fd < 0) {
+        command_print(CMD, "Accept failed: %s", strerror(errno));
+#ifdef _WIN32
+        closesocket(server_fd);
+        WSACleanup();
+#else
+        close(server_fd);
+#endif
+        return ERROR_FAIL;
+    }
+
+    // 打印客户端信息
+    char *client_ip = inet_ntoa(client_addr.sin_addr);
+    command_print(CMD, "flash remote_write: client connected from %s:%d", 
+                  client_ip, ntohs(client_addr.sin_port));
+
+    uint8_t *buffer = NULL;
+    retval = ERROR_FAIL;
+
+    do {
+        // 接收文件长度
+        uint32_t file_len;
+        if (recv_all(client_fd, &file_len, sizeof(file_len), 10) != ERROR_OK) {
+            command_print(CMD, "flash remote_write: failed to receive file length");
+            break;
+        }
+
+        // 验证文件长度
+        if (file_len == 0) {
+            command_print(CMD, "flash remote_write: invalid file length: 0");
+            break;
+        }
+
+        if (file_len > p->size) {
+            command_print(CMD, "flash remote_write: file too large: %u bytes (flash size: %u bytes)", 
+                         file_len, p->size);
+            break;
+        }
+
+        command_print(CMD, "flash remote_write: receiving %u bytes", file_len);
+
+        // 分配缓冲区
+        buffer = malloc(file_len);
+        if (!buffer) {
+            command_print(CMD, "flash remote_write: memory allocation failed for %u bytes", file_len);
+            break;
+        }
+
+        // 接收文件内容
+        if (recv_all(client_fd, buffer, file_len, 30) != ERROR_OK) {
+            command_print(CMD, "flash remote_write: failed to receive file data");
+            break;
+        }
+
+        command_print(CMD, "flash remote_write: data received, writing to flash...");
+
+        // 执行flash写入
+        retval = flash_driver_write(p, buffer, 0, file_len);
+        if (retval != ERROR_OK) {
+            command_print(CMD, "flash remote_write: flash write failed");
+        } else {
+            command_print(CMD, "flash remote_write: %u bytes written successfully", file_len);
+        }
+
+    } while (0);
+
+    // 清理资源
+    if (buffer)
+        free(buffer);
+#ifdef _WIN32
+    closesocket(client_fd);
+    closesocket(server_fd);
+    WSACleanup();
+#else
     close(client_fd);
     close(server_fd);
+#endif
 
     return retval;
 }
