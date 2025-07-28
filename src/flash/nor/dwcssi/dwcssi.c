@@ -960,6 +960,37 @@ static void dwcssi_xip_port1_nor_flash_size(struct flash_bank *bank, uint32_t si
 	target_write_u32(target, CFG_CTRL_QSPI, size);
 }
 
+// static int dwcssi_flash_setwrap_mode1(struct flash_bank *bank)
+// {
+
+// }
+
+static int dwcssi_flash_setwrap_mode0(struct flash_bank *bank)
+{
+	uint8_t wr_wrap_config_seq[2] = {0x81, 0xf2};
+
+	LOG_INFO("set flash wrap mode 0");
+
+	dwcssi_wr_flash_reg(bank, wr_wrap_config_seq, 2, STANDARD_SPI_MODE);
+	return ERROR_OK;
+}
+
+
+static int dwcssi_flash_setwrap_gd25q256d(struct flash_bank *bank)
+{
+	uint8_t wr_xip_config_seq[5] = {0x81, 0x06, 0x06, 0x06, 0xFE};
+	// uint8_t rd_xip_config_seq[4] = {0x85, 0x06, 0x06, 0x06};
+	uint8_t wr_wrap_config_seq[5] = {0x81, 0x07, 0x07, 0x07, 0xFE};
+	// uint8_t rd_wrap_config_seq[4] = {0x85, 0x06, 0x06, 0x06};
+
+	LOG_INFO("set flash wrap");
+	dwcssi_wr_flash_reg(bank, wr_xip_config_seq, 5, STANDARD_SPI_MODE);
+	dwcssi_wr_flash_reg(bank, wr_wrap_config_seq, 5, STANDARD_SPI_MODE);
+
+	return ERROR_OK;
+}
+
+
 int dwcssi_xip_init(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
@@ -971,6 +1002,7 @@ int dwcssi_xip_init(struct flash_bank *bank)
 			mode_bits = 0;
 			break;
 		case(0x001967c8):
+			dwcssi_flash_setwrap_gd25q256d(bank);		
 			wait_cycle = 4;
 			mode_bits = 0xff;
 			break;
@@ -979,6 +1011,7 @@ int dwcssi_xip_init(struct flash_bank *bank)
 			mode_bits = 0xff;
 			break;
 		default:
+			dwcssi_flash_setwrap_mode0(bank);
 			wait_cycle = 8;
 			mode_bits = 0xff;
 			break;
