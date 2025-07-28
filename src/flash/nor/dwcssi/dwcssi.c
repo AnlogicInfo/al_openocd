@@ -960,20 +960,16 @@ static void dwcssi_xip_port1_nor_flash_size(struct flash_bank *bank, uint32_t si
 	target_write_u32(target, CFG_CTRL_QSPI, size);
 }
 
-// static int dwcssi_flash_setwrap_mode1(struct flash_bank *bank)
+
+// static int dwcssi_flash_setwrap_mode0(struct flash_bank *bank)
 // {
+// 	uint8_t wr_wrap_config_seq[2] = {0x81, 0xf2};
 
+// 	LOG_INFO("set flash wrap mode 0");
+
+// 	dwcssi_wr_flash_reg(bank, wr_wrap_config_seq, 2, STANDARD_SPI_MODE);
+// 	return ERROR_OK;
 // }
-
-static int dwcssi_flash_setwrap_mode0(struct flash_bank *bank)
-{
-	uint8_t wr_wrap_config_seq[2] = {0x81, 0xf2};
-
-	LOG_INFO("set flash wrap mode 0");
-
-	dwcssi_wr_flash_reg(bank, wr_wrap_config_seq, 2, STANDARD_SPI_MODE);
-	return ERROR_OK;
-}
 
 
 static int dwcssi_flash_setwrap_gd25q256d(struct flash_bank *bank)
@@ -995,26 +991,17 @@ int dwcssi_xip_init(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	uint8_t wait_cycle, mode_bits;
+
 	switch(driver_priv->dev->device_id)
 	{
-		case(0x001940ef):
-			wait_cycle = 4;
-			mode_bits = 0;
-			break;
 		case(0x001967c8):
 			dwcssi_flash_setwrap_gd25q256d(bank);		
 			wait_cycle = 4;
 			mode_bits = 0xff;
 			break;
-		case(0x0018bb20):
-			wait_cycle = 8;
-			mode_bits = 0xff;
-			break;
 		default:
-			dwcssi_flash_setwrap_mode0(bank);
-			wait_cycle = 8;
-			mode_bits = 0xff;
-			break;
+			LOG_INFO("do not support xip mode for device id %x", driver_priv->dev->device_id);
+			return ERROR_FAIL;
 	}
 
 	dwcssi_disable(bank);
