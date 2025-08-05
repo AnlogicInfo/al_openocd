@@ -7,6 +7,7 @@ v0.1121
 2. print fpga device info during scan
 3. set usb-port as option parm for scan_device cmd
 4. replace remote_bitbang with jtag_vpi in hardware server mode
+5. add flash wrap for xip mode
 
 v0.1120
 1. add xip support for qspi
