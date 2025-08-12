@@ -4,8 +4,11 @@
 #include "dr1.h"
 #include "anlogic_bit.h"
 #include "pld.h"
+#include "jtag/interface.h"
+#include "jtag/adapter.h"
 #include <helper/log.h> // 确保包含 LOG_DEBUG 宏的头文件
 
+extern struct adapter_driver *adapter_driver;
 static int dr1_set_ir(struct jtag_tap *tap, uint32_t new_instr)
 {
     if (!tap)
@@ -91,11 +94,15 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
 {
     struct dr1_fpga_device *dr1_info = pld_device->driver_priv;
     struct anlogic_bit_file bit_file;
+    int download_khz = 5000;
+    int actual_khz;
     uint32_t idcode=0;
     status0_t status0;
     int retval;
     long i;
-
+    actual_khz = adapter_get_speed_khz();
+    LOG_INFO("Adapter actual speed: %d kHz", actual_khz);
+    adapter_driver->speed(download_khz);
     // 初始化状态寄存器
     status0.reg_val = 0;
 
@@ -163,6 +170,8 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
         LOG_ERROR("Programming failed, JTAG programming not done.");
         return ERROR_FAIL;
     }
+
+    adapter_driver->speed(actual_khz);
     return ERROR_OK;
 }
 
