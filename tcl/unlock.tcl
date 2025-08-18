@@ -9,9 +9,10 @@ proc unlock {} {
     if {$boot_mode != 0x0} {
         mww 0xf8800200 0x0
         mww 0xf8806330 $rst_val
-
+        mww 0xf8806180 0x0
         mdw 0xf8800200
         mdw 0xf8806330
+        mdw 0xf8806180
     }
 }
 

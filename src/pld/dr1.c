@@ -101,7 +101,6 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
     int retval;
     long i;
     actual_khz = adapter_get_speed_khz();
-    LOG_INFO("Adapter actual speed: %d kHz", actual_khz);
     adapter_driver->speed(download_khz);
     // 初始化状态寄存器
     status0.reg_val = 0;
