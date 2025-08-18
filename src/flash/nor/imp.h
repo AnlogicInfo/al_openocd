@@ -41,6 +41,7 @@ int flash_driver_erase(struct flash_bank *bank, unsigned int first,
 		unsigned int last);
 int flash_driver_protect(struct flash_bank *bank, int set, unsigned int first,
 		unsigned int last);
+int flash_driver_hw_protect(struct flash_bank *bank, int set, unsigned int last);
 int flash_driver_write(struct flash_bank *bank,
 		const uint8_t *buffer, uint32_t offset, uint32_t count);
 int flash_driver_read(struct flash_bank *bank,

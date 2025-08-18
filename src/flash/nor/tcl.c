@@ -528,6 +528,57 @@ COMMAND_HANDLER(handle_flash_protect_command)
 	return retval;
 }
 
+
+COMMAND_HANDLER(handle_flash_hw_protect_command)
+{
+	if (CMD_ARGC != 3)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	uint32_t first;
+	uint32_t last;
+
+	struct flash_bank *p;
+	int retval;
+	int num_blocks;
+
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &p);
+	if (retval != ERROR_OK)
+		return retval;
+
+	if (p->num_prot_blocks)
+		num_blocks = p->num_prot_blocks;
+	else
+		num_blocks = p->num_sectors;
+
+	if (strcmp(CMD_ARGV[1], "last") == 0)
+		last = num_blocks - 1;
+	else
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], last);
+
+	bool set;
+	COMMAND_PARSE_ON_OFF(CMD_ARGV[2], set);
+
+	if (!(last <= (uint32_t)(num_blocks - 1))) {
+		command_print(CMD, "ERROR: "
+			"last %s must be <= %d",
+			(p->num_prot_blocks) ? "block" : "sector",
+			num_blocks - 1);
+		return ERROR_FAIL;
+	}
+
+	retval = flash_driver_hw_protect(p, set, last);
+	if (retval == ERROR_OK) {
+		command_print(CMD, "%s protection for %s %" PRIu32
+			" through %" PRIu32 " on flash bank %d",
+			(set) ? "set" : "cleared",
+			(p->num_prot_blocks) ? "blocks" : "sectors",
+			first, last, p->bank_number);
+	}
+
+	return retval;
+	
+}
+
 COMMAND_HANDLER(handle_flash_write_image_command)
 {
 	struct target *target = get_current_target(CMD_CTX);
@@ -1625,6 +1676,15 @@ static const struct command_registration flash_exec_command_handlers[] = {
 		.help = "Turn protection on or off for a range of protection "
 			"blocks or sectors in a given flash bank. "
 			"See 'flash info' output for a list of blocks.",
+	},
+	{
+		.name = 'hw_protect',
+		.handler = handle_flash_hw_protect_command,
+		.mode = COMMAND_EXEC,
+		.usage = "bank_id last_block "
+			"('on'|'off')",
+		.help = "Trun hw protection on of off for a range of protection "
+			"blocks or sectors in a given flash bank."
 	},
 	{
 		.name = "padded_value",
