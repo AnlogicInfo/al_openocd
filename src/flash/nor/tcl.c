@@ -533,7 +533,7 @@ COMMAND_HANDLER(handle_flash_hw_protect_command)
 {
 	if (CMD_ARGC != 3)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	uint32_t last;
+	uint32_t last, protected_area;
 
 	struct flash_bank *p;
 	int retval;
@@ -564,13 +564,14 @@ COMMAND_HANDLER(handle_flash_hw_protect_command)
 		return ERROR_FAIL;
 	}
 
-	retval = flash_driver_hw_protect(p, set, last);
+	retval = flash_driver_hw_protect(p, set, last, &protected_area);
+
 	if (retval == ERROR_OK) {
 		command_print(CMD, "%s protection for %s" 
 			"through %" PRIu32 " on flash bank %d",
 			(set) ? "set" : "cleared",
 			(p->num_prot_blocks) ? "blocks" : "sectors",
-			 last, p->bank_number);
+			 protected_area, p->bank_number);
 	}
 
 	return retval;

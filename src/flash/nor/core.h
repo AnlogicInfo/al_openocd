@@ -122,6 +122,7 @@ struct flash_bank {
 	bool customize;
 	bool x4_mode;
 	bool x4_en;
+	bool hw_protected;
 	/**
 	 * The number of sectors on this chip.  This value will
 	 * be set initially to 0, and the flash driver must set this to

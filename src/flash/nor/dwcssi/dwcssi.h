@@ -413,7 +413,7 @@ int driver_priv_init(struct flash_bank *bank, struct dwcssi_flash_bank *driver_p
 void dwcssi_config_init(struct flash_bank *bank, uint8_t sckdv);
 int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last);
 int dwcssi_protect(struct flash_bank *bank, int set, unsigned int first, unsigned last);
-int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last);
+int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last, uint32_t* protected_area);
 int dwcssi_protect_check(struct flash_bank *bank);
 int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count);
 int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count);

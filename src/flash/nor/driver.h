@@ -127,7 +127,7 @@ struct flash_driver {
 	int (*protect)(struct flash_bank *bank, int set, unsigned int first,
 		unsigned int last);
 
-	int (*hw_protect)(struct flash_bank *bank, int set, unsigned int last);
+	int (*hw_protect)(struct flash_bank *bank, int set, unsigned int last, uint32_t *protected_area);
 
 	/**
 	 * Program data into the flash.  Note CPU address will be
