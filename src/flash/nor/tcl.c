@@ -533,8 +533,6 @@ COMMAND_HANDLER(handle_flash_hw_protect_command)
 {
 	if (CMD_ARGC != 3)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	uint32_t first;
 	uint32_t last;
 
 	struct flash_bank *p;
@@ -568,15 +566,14 @@ COMMAND_HANDLER(handle_flash_hw_protect_command)
 
 	retval = flash_driver_hw_protect(p, set, last);
 	if (retval == ERROR_OK) {
-		command_print(CMD, "%s protection for %s %" PRIu32
-			" through %" PRIu32 " on flash bank %d",
+		command_print(CMD, "%s protection for %s" 
+			"through %" PRIu32 " on flash bank %d",
 			(set) ? "set" : "cleared",
 			(p->num_prot_blocks) ? "blocks" : "sectors",
-			first, last, p->bank_number);
+			 last, p->bank_number);
 	}
 
 	return retval;
-	
 }
 
 COMMAND_HANDLER(handle_flash_write_image_command)
@@ -1678,7 +1675,7 @@ static const struct command_registration flash_exec_command_handlers[] = {
 			"See 'flash info' output for a list of blocks.",
 	},
 	{
-		.name = 'hw_protect',
+		.name = "hw_protect",
 		.handler = handle_flash_hw_protect_command,
 		.mode = COMMAND_EXEC,
 		.usage = "bank_id last_block "

@@ -205,6 +205,7 @@ const struct flash_driver dr90_flash = {
 	.flash_bank_command = dr90_flash_bank_command,
 	.erase = dwcssi_erase,
 	.protect = dwcssi_protect,
+	.hw_protect = dwcssi_set_hw_protect,
 	.write = dwcssi_write,
 	.read = dwcssi_read,
 	.verify = dwcssi_verify,

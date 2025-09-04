@@ -644,17 +644,14 @@ static int flash_sector_to_bp_bits(uint32_t last)
 	return -1;
 }
 
-static int dwcssi_set_hw_protect(struct flash_bank *bank, uint32_t last)
+int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last)
 {
 	uint8_t bp, status_reg;
 	int retval;
 	
 	// 获取BP[3:0]位值
 	bp = flash_sector_to_bp_bits(last);
-	if (bp < 0) {
-		return bp; // 返回错误码
-	}
-	
+
 	/*
 	 * 根据状态寄存器表格设置status_reg：
 	 * Bit 7: Status register write enable/disable (0=Enabled)
