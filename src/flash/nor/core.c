@@ -93,6 +93,20 @@ int flash_driver_protect(struct flash_bank *bank, int set, unsigned int first,
 	return retval;
 }
 
+
+int flash_driver_hw_protect(struct flash_bank *bank, int set, unsigned int last, uint32_t* protected_area)
+{
+	int retval;
+	if(!bank->driver->hw_protect) {
+		LOG_ERROR("Hardware protection is not supported.");
+		return ERROR_FLASH_OPER_UNSUPPORTED;
+	}
+	retval = bank->driver->hw_protect(bank, set, last, protected_area);
+	if (retval != ERROR_OK)
+		LOG_ERROR("failed setting hardware protection for blocks to %u", last);
+	return retval;
+}
+
 int flash_driver_write(struct flash_bank *bank,
 	const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
@@ -817,10 +831,12 @@ int flash_write_unlock_verify(struct target *target, struct image *image,
 			assert(sections[section_last + 1]->base_address >= c->base);
 			if (sections[section_last + 1]->base_address >= (c->base + c->size)) {
 				/* Done with this bank */
+			LOG_INFO("skip section %d: address " TARGET_ADDR_FMT ", size " TARGET_ADDR_FMT,
+				section_last, sections[section_last + 1]->base_address, (c->base + c->size));
 				break;
 			}
-		LOG_INFO("section %d: address " TARGET_ADDR_FMT ", size %x",
-			section, run_address, run_size);
+			LOG_INFO("section %d: address " TARGET_ADDR_FMT ", size %x",
+				section, run_address, run_size);
 
 			/* if we have multiple sections within our image,
 			 * flash programming could fail due to alignment issues

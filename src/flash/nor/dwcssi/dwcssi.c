@@ -64,6 +64,25 @@ uint32_t mio_pad_ctrl0(mio_speed_t speed, mio_pull_t pull_up, mio_pull_t pull_dw
     return val;
 }
 
+static int qspi_mio_pull(struct flash_bank *bank, uint8_t mio_num, bool lev)
+{
+	struct target *target = bank->target;
+	uint8_t mio_func;
+	if (lev == HIGH)
+		mio_func = 0x4;
+	else
+		mio_func = 0x1;
+	if (target_write_u32(target, MIO_BASE + (mio_num << 2), mio_func) != ERROR_OK)
+		return ERROR_FAIL;
+	if (lev == HIGH)	{
+		target_write_u32(target, GPIO_CONFIG, 1<<mio_num);
+		target_write_u32(target, GPIO_OUT, 1<<mio_num);
+	}
+
+	return ERROR_OK;
+}
+
+
 static int qspi_mio5_pull(struct flash_bank *bank, bool lev)
 {
 	struct target *target = bank->target;
@@ -587,6 +606,52 @@ static int dwcssi_flash_wr_en(struct flash_bank *bank, uint8_t frf)
 	return retval;
 }
 
+static int flash_sector_to_bp_bits(uint32_t last, uint32_t* protected_area)
+{
+	/*
+	 * 根据写保护区域最后一个block计算BP[3:0]位值
+	 * 只支持从顶部开始保护模式 (Top/Bottom=1)
+	 * 
+	 * 数学规律：
+	 *   BP[3:0]=0: 无保护 (last=0xFFFFFFFF)
+	 *   BP[3:0]=1~10: 保护范围为 0 到 (2^(BP-1) - 1)
+	 *   BP[3:0]=11~15: 全部保护 (last>=1023)
+	 * 
+	 * 具体映射：
+	 *   BP=0: None, BP=1: 0:0, BP=2: 1:0, BP=3: 3:0, BP=4: 7:0
+	 *   BP=5: 15:0, BP=6: 31:0, BP=7: 63:0, BP=8: 127:0
+	 *   BP=9: 255:0, BP=10: 511:0, BP=11: 1023:0 (全部)
+	 */
+	
+	// Flash总共有1024个64KB扇区 (0-1023)
+	// last参数是写保护区域的最后一个block号
+	
+	// 无保护情况
+	if (last == 0xFFFFFFFF) {
+		return 0x00; // BP[3:0] = 0000, 无保护
+	}
+	
+	// 全部保护情况
+	if (last >= 1023) {
+		return 0x0B; // BP[3:0] = 1011, 全部保护
+	}
+	
+	// 使用数学公式计算BP值
+	// 对于BP=1到10，保护范围是 0 到 (2^(BP-1) - 1)
+	// 即 last = 2^(BP-1) - 1，所以 BP = log2(last + 1) + 1
+	int bp = 0;
+	uint32_t protected_sectors = last + 1; // 保护的扇区数量
+	
+	// 计算log2(protected_sectors)，找到最小的BP值使得2^(BP-1) >= protected_sectors
+	while ((1U << bp) < protected_sectors && bp < 10) {
+		bp++;
+	}
+	
+	// BP值范围是1-10，对应保护2^0到2^9个扇区
+	bp = bp + 1;
+	return bp;
+}
+
 static int dwcssi_unset_protect(struct flash_bank *bank)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
@@ -605,6 +670,80 @@ static int dwcssi_unset_protect(struct flash_bank *bank)
 	}
 	return retval;
 }
+
+
+
+int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last, uint32_t* protected_area)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	uint8_t bp, status_reg, sr;
+	int retval;
+	
+	switch(driver_priv->dev->device_id)
+	{
+		case(0x0020ba20):
+		case(0x0018bb20):
+			LOG_INFO("set hw protect for device %x", driver_priv->dev->device_id);
+			break;
+		default:
+			LOG_INFO("do not support protect mode for device id %x", driver_priv->dev->device_id);
+			return ERROR_FAIL;
+	
+	}
+
+	// 获取BP[3:0]位值, 
+	if(set) 
+	{
+		bp = flash_sector_to_bp_bits(last, protected_area);
+		/*
+		 * 根据状态寄存器表格设置status_reg：
+		 * Bit 7: Status register write enable/disable (0=Enabled)
+		 * Bit 6: BP[3] - Block protect bit 3
+		 * Bit 5: Top/bottom (0=Top, 1=Bottom) - 我们使用Top模式
+		 * Bit 4-2: BP[2:0] - Block protect bits 2-0
+		 * Bit 1: Write enable latch (0=Clear)
+		 * Bit 0: Write in progress (0=Ready)
+		 */
+		status_reg = 0x00; // 初始化为0
+		
+		// 设置BP[3]位到第6位
+		status_reg |= ((bp & 0x08) >> 3) << 6;
+		
+		// 设置BP[2:0]位到位4-2
+		status_reg |= (bp & 0x07) << 2;
+		
+		// 设置Top/bottom位为1 (Bottom模式)
+		status_reg |= (1 << 5); // 已经是0，不需要设置
+		
+		// 其他位保持默认值0
+		
+		qspi_mio5_pull(bank, HIGH);
+		qspi_mio_pull(bank, 4, HIGH);
+
+		// 写入状态寄存器
+		dwcssi_rd_flash_reg(bank, &sr, 0x05, 1);
+		uint8_t write_status[2] = {0x01, status_reg}; // 0x01是写状态寄存器命令
+
+		retval = dwcssi_wr_flash_reg(bank, write_status, 2, STANDARD_SPI_MODE);
+		dwcssi_rd_flash_reg(bank, &sr, 0x05, 1);
+		LOG_DEBUG("wr %x to sr result %x", status_reg, sr);		
+		bank->hw_protected = true;		
+		qspi_mio_pull(bank, 4, LOW);
+		qspi_mio5_pull(bank, LOW);
+
+	}
+	else {
+		qspi_mio5_pull(bank, HIGH);
+		qspi_mio_pull(bank, 4, HIGH);
+		retval = dwcssi_unset_protect(bank);
+		qspi_mio_pull(bank, 4, LOW);
+		qspi_mio5_pull(bank, LOW);		
+	}
+
+
+	return retval;
+}
+
 
 
 int dwcssi_rd_flash_reg(struct flash_bank *bank, uint8_t* rd_val, uint8_t cmd, uint32_t len)
@@ -1128,7 +1267,8 @@ int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 		return ERROR_FLASH_OPER_UNSUPPORTED;
 	if (flash_ops != NULL)
 		dwcssi_wr_qe(bank, DISABLE);
-	dwcssi_unset_protect(bank);
+	if(!bank->hw_protected)
+		dwcssi_unset_protect(bank);
 	qspi_mio5_pull(bank, HIGH);
 	if ((first == 0) && (last == (bank->num_sectors - 1)))
 		dwcssi_erase_bulk(bank);
@@ -1640,7 +1780,8 @@ int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset
 	if (flash_addr_mode_check(offset, count, addr_size) != ERROR_OK)
 		return ERROR_FAIL;
 	page_offset = offset % page_size;
-	dwcssi_unset_protect(bank);
+	if(!bank->hw_protected)
+		dwcssi_unset_protect(bank);
 	if ((bank->x4_mode) && (bank->x4_en)) {
 		if (flash_ops == NULL) {
 			LOG_ERROR("x4 write not supported for %s", driver_priv->dev->name);
@@ -1700,6 +1841,7 @@ const struct flash_driver dwcssi_flash = {
 	.flash_bank_command = dwcssi_flash_bank_command,
 	.erase = dwcssi_erase,
 	.protect = dwcssi_protect,
+	.hw_protect = dwcssi_set_hw_protect,
 	.write = dwcssi_write,
 	.read = dwcssi_read,
 	.verify = dwcssi_verify,

@@ -2525,13 +2525,13 @@ static void log_memory_access(target_addr_t address, uint64_t value,
 			break;
 		case 4:
 			value &= 0xffffffffUL;
-			break;
+		break;
 		case 8:
 			break;
 		default:
 			assert(false);
 	}
-	LOG_DEBUG(fmt, value);
+	// LOG_DEBUG(fmt, value);
 }
 
 /* Read the relevant sbdata regs depending on size, and put the results into
