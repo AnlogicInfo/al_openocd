@@ -17,6 +17,7 @@ struct target *loader_init_trans_target(const char* name)
 {
 	struct target *trans_target;
 	int retval = ERROR_OK;
+	LOG_INFO("trans target name %s", name);
 	trans_target = get_target(name);
 	if (trans_target == NULL) {
 		LOG_ERROR("get transtarget fail");
@@ -39,11 +40,13 @@ static int loader_init_arch(struct flash_loader *loader)
 	struct target *target = loader->exec_target;
 	int retval = ERROR_OK;
 	if (strcmp(target_type_name(target), "riscv") == 0) {
+		target = get_first_target("pstap");
 		loader->trans_target = loader_init_trans_target(target_name(target));
 		loader->xlen = riscv_xlen(target);
 		loader->arch_info = (struct riscv_algorithm *)malloc(sizeof(struct riscv_algorithm));
 	} else {
-		target = get_first_target("aarch64");
+		// target = get_first_target("aarch64");
+		target = get_first_target("pstap");
 		if (target == NULL)
 			return ERROR_FAIL;
 
@@ -82,7 +85,7 @@ static int loader_init_reg_params(struct flash_loader *loader, char **params_nam
 
 static void loader_init_rv_code(struct flash_loader *loader, struct code_src *srcs)
 {
-	struct target *target = loader->trans_target;
+	struct target *target = loader->exec_target;
 	int code_index;
 	loader->xlen = riscv_xlen(target);
 	if (loader->xlen == 32)
@@ -101,9 +104,9 @@ static void loader_init_aarch64_code(struct flash_loader *loader, struct code_sr
 
 static int loader_init_code(struct flash_loader *loader, struct code_src *srcs)
 {
-	struct target *trans_target = loader->trans_target;
+	struct target *exec_target = loader->exec_target;
 
-	if (strcmp(target_type_name(trans_target), "riscv") == 0) {
+	if (strcmp(target_type_name(exec_target), "riscv") == 0) {
 		loader_init_rv_code(loader, srcs);
 		loader_init_reg_params(loader, rv_reg_params);
 	} else {
