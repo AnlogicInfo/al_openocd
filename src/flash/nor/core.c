@@ -93,6 +93,20 @@ int flash_driver_protect(struct flash_bank *bank, int set, unsigned int first,
 	return retval;
 }
 
+
+int flash_driver_hw_protect(struct flash_bank *bank, int set, unsigned int last, uint32_t* protected_area)
+{
+	int retval;
+	if(!bank->driver->hw_protect) {
+		LOG_ERROR("Hardware protection is not supported.");
+		return ERROR_FLASH_OPER_UNSUPPORTED;
+	}
+	retval = bank->driver->hw_protect(bank, set, last, protected_area);
+	if (retval != ERROR_OK)
+		LOG_ERROR("failed setting hardware protection for blocks to %u", last);
+	return retval;
+}
+
 int flash_driver_write(struct flash_bank *bank,
 	const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
