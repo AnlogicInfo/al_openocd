@@ -992,19 +992,19 @@ done:
 	return retval;
 }
 
-static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, struct async_fifo *fifo)
+static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, uint32_t block_size, struct async_fifo *fifo)
 {
 	int retval;
 	uint32_t wp_result = 0, rp_result = 0;
 	fifo->wp_addr = buffer_start;
 	fifo->rp_addr = buffer_start + 4;
-	fifo->fifo_start_addr = buffer_start + 8;
+	fifo->fifo_start_addr = buffer_start + block_size;
 	fifo->fifo_end_addr = buffer_start + buffer_size;
 	fifo->wp = fifo->fifo_start_addr;
 	fifo->rp = fifo->fifo_start_addr;
 
-	LOG_DEBUG("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
-	LOG_DEBUG("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
+	LOG_INFO("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
+	LOG_INFO("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
 
 	retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 	if(retval != ERROR_OK)
@@ -1017,10 +1017,43 @@ static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32
 		return retval;
 	target_read_u32(trans_target, fifo->rp_addr, &rp_result);
 
-	// LOG_ERROR("wp init get %x expect %x", wp_result, fifo->wp);
-	// LOG_ERROR("rp init get %x expect %x", rp_result, fifo->rp);
+	LOG_INFO("wp init get %x expect %x", wp_result, fifo->wp);
+	LOG_INFO("rp init get %x expect %x", rp_result, fifo->rp);
 
 	return retval;
+}
+
+static int target_async_algorithm_init_ping_pong_fifo(
+    struct target *trans_target, uint32_t buffer_start, uint32_t buffer_size,
+	uint32_t block_size, struct ping_pong_fifo *pp)
+{
+    int retval;
+
+    pp->buf_size = buffer_size - block_size;
+    pp->half_size = pp->buf_size / 2;
+
+    pp->buf0_flag_addr = buffer_start;
+    pp->buf1_flag_addr = buffer_start + 4;
+	pp->buf0_start_addr = buffer_start + 8;
+	pp->buf1_start_addr = buffer_start + 0xC;
+
+    pp->buf0_start = buffer_start + block_size;
+    pp->buf0_end   = pp->buf0_start + pp->half_size;
+    pp->buf1_start = pp->buf0_end;
+    pp->buf1_end   = pp->buf1_start + pp->half_size;
+
+    pp->prod_idx = 0;
+
+	LOG_INFO("init pp fifo buf size %x half size %x buf0 start %x buf1 start %x", 
+			  pp->buf_size, pp->half_size,
+			  pp->buf0_start, pp->buf1_start);
+    // 清零两个标志，表示两个缓冲都空闲
+    retval = target_write_u32(trans_target, pp->buf0_flag_addr, 0);
+	target_write_u32(trans_target, pp->buf0_start_addr, pp->buf0_start);
+    if (retval != ERROR_OK) return retval;
+    retval = target_write_u32(trans_target, pp->buf1_flag_addr, 0);
+	target_write_u32(trans_target, pp->buf1_start_addr, pp->buf1_start);
+    return retval;
 }
 
 
@@ -1052,16 +1085,24 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 			break;
 		}
 
-		/* Count the number of bytes available in the fifo without
-		 * crossing the wrap around. Make sure to not fill it completely,
-		 * because that would make wp == rp and that's the empty condition. */
-		uint32_t thisrun_bytes, thisrun_block_cnt;
-		if (fifo->rp > fifo->wp)
-			thisrun_bytes = fifo->rp - fifo->wp - block_size;
-		else if (fifo->rp > fifo->fifo_start_addr)
+        /* Count the number of bytes available in the fifo without
+         * crossing the wrap around. Handle FIFO-empty explicitly to avoid 0.
+         * Keep a one-block safety margin when rp > wp to prevent full condition. */
+        uint32_t thisrun_bytes, thisrun_block_cnt;
+
+		if (fifo->wp >= fifo->rp) {
 			thisrun_bytes = fifo->fifo_end_addr - fifo->wp;
-		else
-			thisrun_bytes = fifo->fifo_end_addr - fifo->wp - block_size;
+			if(fifo-> rp == fifo->fifo_start_addr)
+				thisrun_bytes -= block_size;
+		} else {
+			thisrun_bytes = fifo->rp - fifo->wp - block_size;
+		}
+
+
+        /* Align to block_size and avoid negatives */
+        if ((int32_t)thisrun_bytes < 0)
+            thisrun_bytes = 0;
+        thisrun_bytes = (thisrun_bytes / block_size) * block_size;
 
 		if (thisrun_bytes == 0) {
 			/* Throttle polling a bit if transfer is (much) faster than flash
@@ -1090,8 +1131,6 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		thisrun_block_cnt = thisrun_bytes/block_size;
 		thisrun_bytes = thisrun_block_cnt * block_size;
 
-		LOG_DEBUG("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
-			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
 
 		/* Write data to fifo */
 		// start = timeval_ms();
@@ -1110,8 +1149,12 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		if (fifo->wp >= fifo->fifo_end_addr)
 			fifo->wp = fifo->fifo_start_addr;
 
+		LOG_INFO("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
+			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
+			
 		/* Store updated write pointer to target */
 		retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
+		LOG_INFO("update wp addr %x value %x", fifo->wp_addr, fifo->wp);
 		if (retval != ERROR_OK)
 			break;
 		// LOG_INFO("transdata wp %x block cnt %x bytes %x remain block %x", fifo->wp, thisrun_block_cnt, thisrun_bytes, count);
@@ -1131,12 +1174,103 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 
 }
 
-// static int target_async_algorithm_wait(struct target* exec_target)
-// {
-// 	return ERROR_OK;
-// }
 
 
+static int target_ping_pong_trans_data(struct target *trans_target,
+    const uint8_t *buffer, int count, uint32_t block_size, struct ping_pong_fifo *pp)
+{
+    int retval = ERROR_OK;
+    int timeout = 0;
+	int total_cnt = count;
+	int cur_cnt = 0;
+    int32_t buf_blocks = pp->half_size / block_size;
+
+    while (count > 0) {
+        // 选择当前写缓冲
+        uint32_t flag_addr = (pp->prod_idx == 0) ? pp->buf0_flag_addr : pp->buf1_flag_addr;
+        uint32_t buf_start = (pp->prod_idx == 0) ? pp->buf0_start     : pp->buf1_start;
+
+        // 等待该缓冲空闲（flag == 0）
+        uint32_t flag = 0;
+		cur_cnt = total_cnt - count;
+		LOG_PROC(cur_cnt, total_cnt);
+
+		do {
+            retval = target_read_u32(trans_target, flag_addr, &flag);
+            if (retval != ERROR_OK) break;
+
+            if (flag != 0) {
+                alive_sleep(2);
+                if (timeout++ >= 2500) {
+                    LOG_ERROR("timeout waiting for free ping-pong buffer");
+					LOG_INFO("read flag 0x%" PRIx32 " addr 0x%" PRIx32, flag, flag_addr);
+                    return ERROR_FLASH_OPERATION_FAILED;
+                }
+                continue;
+            }
+            timeout = 0;
+            break;
+        } while (1);
+
+        if (retval != ERROR_OK) break;
+
+        // 本次填充的块数：不超过缓冲容量与剩余块数
+        int32_t this_blocks = (count < buf_blocks) ? count : buf_blocks;
+        int32_t this_bytes  = this_blocks * block_size;
+
+        // 写入数据
+        retval = target_write_buffer(trans_target, buf_start, this_bytes, buffer);
+        if (retval != ERROR_OK) break;
+
+        // 置位就绪标志（写入有效块数，目标端可据此处理最后一包）
+        retval = target_write_u32(trans_target, flag_addr, this_blocks);
+        if (retval != ERROR_OK) break;
+
+        // 更新计数与指针，翻转到另一半缓冲
+        buffer   += this_bytes;
+        count    -= this_blocks;
+        pp->prod_idx ^= 1;
+		LOG_DEBUG("pp fifo trans %d blocks, remain %d blocks", this_blocks, count);
+
+        keep_alive();
+    }
+
+    if (retval != ERROR_OK) {
+        // 主机异常终止，两个标志置为特殊值（或保留现有约定）
+        LOG_ERROR("target ping-pong trans data fail");
+        target_write_u32(trans_target, pp->buf0_flag_addr, 0xFFFFFFFF);
+        target_write_u32(trans_target, pp->buf1_flag_addr, 0xFFFFFFFF);
+    } else
+		LOG_PROC(total_cnt, total_cnt);
+ 
+	return retval;
+}
+
+int target_run_async_algorithm_ping_pong(struct target *trans_target, struct target *exec_target,
+    const uint8_t *buffer, uint32_t count, int block_size,
+    int num_mem_params, struct mem_param *mem_params,
+    int num_reg_params, struct reg_param *reg_params,
+    uint32_t buffer_start, uint32_t buffer_size,
+    uint32_t entry_point, uint32_t exit_point, void *arch_info)
+{
+    int retval;
+    struct ping_pong_fifo *pp = malloc(sizeof(*pp));
+
+    retval = target_async_algorithm_init_ping_pong_fifo(trans_target, buffer_start, buffer_size, block_size, pp);
+    if (retval != ERROR_OK) { free(pp); return retval; }
+
+    retval = target_start_algorithm(exec_target, num_mem_params, mem_params,
+        num_reg_params, reg_params, entry_point, exit_point, arch_info);
+    if (retval != ERROR_OK) { free(pp); return retval; }
+
+    retval = target_ping_pong_trans_data(trans_target, buffer, count, block_size, pp);
+    int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
+        num_reg_params, reg_params, exit_point, 10000, arch_info);
+    if (retval2 != ERROR_OK) retval = retval2;
+
+    free(pp);
+    return retval;
+}
 /**
  * Streams data to a circular buffer on target intended for consumption by code
  * running asynchronously on target.
@@ -1497,7 +1631,7 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 	struct async_fifo *fifo;
 
 	fifo = malloc(sizeof(struct async_fifo));
-	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, fifo);
+	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, block_size, fifo);
 	if (retval != ERROR_OK)
 		return retval;
 

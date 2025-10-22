@@ -368,6 +368,19 @@ struct async_fifo {
 	uint32_t rp;
 };
 
+struct ping_pong_fifo {
+    uint32_t buf_size;       // 整个数据区大小（不含2个标志）
+    uint32_t half_size;      // 每个乒乓缓冲大小
+    uint32_t buf0_flag_addr;
+    uint32_t buf1_flag_addr;
+	uint32_t buf0_start_addr;
+	uint32_t buf1_start_addr;
+    uint32_t buf0_start;
+    uint32_t buf0_end;
+    uint32_t buf1_start;
+    uint32_t buf1_end;
+    uint32_t prod_idx;       // 0或1，当前主机写入的缓冲索引
+};
 
 int target_register_commands(struct command_context *cmd_ctx);
 int target_examine(void);
@@ -610,7 +623,6 @@ int target_run_flash_async_algorithm(struct target *target,
 		uint32_t entry_point, uint32_t exit_point,
 		void *arch_info);
 
-
 /**
  * This routine is a wrapper for asynchronous algorithms.
  *
@@ -622,6 +634,16 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 		uint32_t buffer_start, uint32_t buffer_size,
 		uint32_t entry_point, uint32_t exit_point,
 		void *arch_info);
+
+
+int target_run_async_algorithm_ping_pong(
+	struct target *trans_target, struct target *exec_target,
+	const uint8_t *buffer, uint32_t count, int block_size,
+	int num_mem_params, struct mem_param *mem_params,
+	int num_reg_params, struct reg_param *reg_params,
+	uint32_t buffer_start, uint32_t buffer_size,
+	uint32_t entry_point, uint32_t exit_point,
+	void *arch_info);
 
 
 /**

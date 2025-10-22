@@ -160,9 +160,9 @@ int emmc_probe(struct emmc_device *emmc)
 	in_field = malloc(1024);
 	// emmc->device->block_size = EMMC_BLOCK_SIZE;
 
-	status = emmc->controller->init(emmc, in_field);
-	if(status != ERROR_OK)
-		return ERROR_FAIL;
+	// status = emmc->controller->init(emmc, in_field);
+	// if(status != ERROR_OK)
+	// 	return ERROR_FAIL;
 
 	status = emmc_cid_parse(emmc, in_field);
 

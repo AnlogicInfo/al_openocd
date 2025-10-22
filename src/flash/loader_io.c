@@ -142,8 +142,11 @@ static int loader_code_to_wa(struct flash_loader *loader)
 	 * That's usually correct; but there are boards with
 	 * both large and small page chips, where it won't be...
 	 */
-	wa_size = target_get_working_area_avail(target);
-	LOG_DEBUG("wa init size %x", wa_size);
+	LOG_INFO("wa write code size %x", loader->code_src->size);
+
+	 wa_size = target_get_working_area_avail(target);
+	LOG_INFO("wa init size %x", wa_size);
+
 	/* make sure we have a working area */
 	if (!*area) {
 		retval = target_alloc_working_area(target, wa_size, area);
@@ -152,9 +155,7 @@ static int loader_code_to_wa(struct flash_loader *loader)
 			return ERROR_BUF_TOO_SMALL;
 		}
 	}
-	LOG_DEBUG("wa allocated");
 	target_write_buffer(target, (*area)->address, loader->code_src->size, loader->code_src->bin);
-	LOG_DEBUG("wa write code");
 	return wa_size;
 }
 
@@ -204,7 +205,7 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 			LOG_DEBUG("target set %s value %x", loader->reg_params[i].reg_name ,
 			*(uint32_t *)loader->reg_params[i].value);
 		else
-			LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
+			LOG_INFO("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
 				*(target_addr_t *)loader->reg_params[i].value);
 	}
 
@@ -231,11 +232,13 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 			return ERROR_FAIL;
 		loader->op = LOADER_WRITE;
 		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
-		loader->buf_start = loader->copy_area->address + loader->code_area;
-		if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
-			loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
-		else
-			loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
+		// loader->buf_start = loader->copy_area->address + loader->code_area;
+		loader->buf_start = 0x6102f000;
+		loader->data_size  = 0x10000;
+		// if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
+		// 	loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
+		// else
+		// 	loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
 		LOG_DEBUG("init loader data_size %x", loader->data_size);
 	}
 
@@ -295,15 +298,22 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 	int retval;
 
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
-
+	LOG_INFO("loader write async size %x, block cnt %x", loader->image_size, image_block_cnt);
 	retval = loader_init(loader, srcs);
 	if (retval != ERROR_OK)
 		return ERROR_FAIL;
 	loader_set_wa(loader, addr, data);
-	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
-	data, image_block_cnt, loader->block_size,
-	0, NULL, loader->param_cnt, loader->reg_params,
-	loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
+	// retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
+	// data, image_block_cnt, loader->block_size,
+	// 0, NULL, loader->param_cnt, loader->reg_params,
+	// loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
+
+	retval = target_run_async_algorithm_ping_pong(
+		loader->trans_target, loader->exec_target,
+		data, image_block_cnt, loader->block_size,
+		0, NULL, loader->param_cnt, loader->reg_params,
+		loader->buf_start, loader->data_size, 
+		loader->copy_area->address, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);
 	return retval;
