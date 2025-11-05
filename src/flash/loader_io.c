@@ -234,7 +234,7 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
 		// loader->buf_start = loader->copy_area->address + loader->code_area;
 		loader->buf_start = 0x6102f000;
-		loader->data_size  = 0x10000;
+		loader->data_size  = 0x400000;
 		// if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
 		// 	loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
 		// else

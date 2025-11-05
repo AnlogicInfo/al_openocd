@@ -1037,7 +1037,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
 	pp->buf0_start_addr = buffer_start + 8;
 	pp->buf1_start_addr = buffer_start + 0xC;
 
-    pp->buf0_start = buffer_start + block_size;
+    pp->buf0_start = 0;
     pp->buf0_end   = pp->buf0_start + pp->half_size;
     pp->buf1_start = pp->buf0_end;
     pp->buf1_end   = pp->buf1_start + pp->half_size;
@@ -1149,12 +1149,11 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		if (fifo->wp >= fifo->fifo_end_addr)
 			fifo->wp = fifo->fifo_start_addr;
 
-		LOG_INFO("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
+		LOG_DEBUG("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
 			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
 			
 		/* Store updated write pointer to target */
 		retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
-		LOG_INFO("update wp addr %x value %x", fifo->wp_addr, fifo->wp);
 		if (retval != ERROR_OK)
 			break;
 		// LOG_INFO("transdata wp %x block cnt %x bytes %x remain block %x", fifo->wp, thisrun_block_cnt, thisrun_bytes, count);
@@ -1189,7 +1188,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         // 选择当前写缓冲
         uint32_t flag_addr = (pp->prod_idx == 0) ? pp->buf0_flag_addr : pp->buf1_flag_addr;
         uint32_t buf_start = (pp->prod_idx == 0) ? pp->buf0_start     : pp->buf1_start;
-
+		LOG_DEBUG("prod_idx %d flag_addr 0x%" PRIx32 " buf_start 0x%" PRIx32, pp->prod_idx, flag_addr, buf_start);
         // 等待该缓冲空闲（flag == 0）
         uint32_t flag = 0;
 		cur_cnt = total_cnt - count;
@@ -1235,6 +1234,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         keep_alive();
     }
 
+	LOG_INFO("pp fifo trans done");
     if (retval != ERROR_OK) {
         // 主机异常终止，两个标志置为特殊值（或保留现有约定）
         LOG_ERROR("target ping-pong trans data fail");
