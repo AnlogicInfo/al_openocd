@@ -232,13 +232,17 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 			return ERROR_FAIL;
 		loader->op = LOADER_WRITE;
 		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
-		// loader->buf_start = loader->copy_area->address + loader->code_area;
-		loader->buf_start = 0x6102f000;
-		loader->data_size  = 0x400000;
-		// if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
-		// 	loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
-		// else
-		// 	loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
+		if(loader->exec_target->ddr_en) {
+			loader->buf_start = 0x6102f000;
+			loader->data_size = 0x400000;			
+		}
+		else{
+			loader->buf_start = loader->copy_area->address + loader->code_area;
+			if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
+				loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
+			else
+				loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
+		}
 		LOG_DEBUG("init loader data_size %x", loader->data_size);
 	}
 

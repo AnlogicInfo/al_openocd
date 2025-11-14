@@ -783,8 +783,8 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t a
 	struct flash_loader *loader = &driver_priv->flash_loader;
 	int block_addr = addr/emmc->device->block_size;
 
-	dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+	// dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+	// dwcmshc_emmc_cmd_set_block_count(emmc, 1);
 
 	loader->work_mode = CRC_CHECK;
 	loader->block_size = emmc->device->block_size;

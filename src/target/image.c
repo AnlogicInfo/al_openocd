@@ -1520,20 +1520,23 @@ int image_calculate_checksum(const uint8_t *buffer, uint32_t nbytes, uint32_t *c
 			for (c = i << 24, j = 8; j > 0; --j)
 				c = c & 0x80000000 ? (c << 1) ^ 0x04c11db7 : (c << 1);
 			crc32_table[i] = c;
+			LOG_INFO("init crc table %x val %x", i, crc32_table[i]);
 		}
 
 		first_init = true;
 	}
 
-	while (nbytes > 0) {
+	while (nbytes > 0)
+	{
 		int run = nbytes;
-		if (run > 32768)
-			run = 32768;
+		if (run > 512)
+			run = 512;
 		nbytes -= run;
 		while (run--) {
 			/* as per gdb */
 			crc = (crc << 8) ^ crc32_table[((crc >> 24) ^ *buffer++) & 255];
 		}
+		LOG_INFO("image nbytes %x crc %x", nbytes, crc);
 		keep_alive();
 	}
 

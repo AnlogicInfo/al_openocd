@@ -1037,7 +1037,10 @@ static int target_async_algorithm_init_ping_pong_fifo(
 	pp->buf0_start_addr = buffer_start + 8;
 	pp->buf1_start_addr = buffer_start + 0xC;
 
-    pp->buf0_start = 0;
+	if(trans_target->ddr_en)
+    	pp->buf0_start = 0;
+	else
+		pp->buf0_start = buffer_start + block_size;
     pp->buf0_end   = pp->buf0_start + pp->half_size;
     pp->buf1_start = pp->buf0_end;
     pp->buf1_end   = pp->buf1_start + pp->half_size;
@@ -5640,6 +5643,7 @@ bool target_has_event_action(struct target *target, enum target_event event)
 enum target_cfg_param {
 	TCFG_TYPE,
 	TCFG_EVENT,
+	TCFG_DDR_EN,
 	TCFG_WORK_AREA_VIRT,
 	TCFG_WORK_AREA_PHYS,
 	TCFG_WORK_AREA_SIZE,
@@ -5657,6 +5661,7 @@ enum target_cfg_param {
 static struct jim_nvp nvp_config_opts[] = {
 	{ .name = "-type",             .value = TCFG_TYPE },
 	{ .name = "-event",            .value = TCFG_EVENT },
+	{ .name = "-ddr-enable",       .value = TCFG_DDR_EN },
 	{ .name = "-work-area-virt",   .value = TCFG_WORK_AREA_VIRT },
 	{ .name = "-work-area-phys",   .value = TCFG_WORK_AREA_PHYS },
 	{ .name = "-work-area-size",   .value = TCFG_WORK_AREA_SIZE },
@@ -5805,6 +5810,20 @@ no_params:
 			/* loop for more */
 			break;
 
+		case TCFG_DDR_EN:
+			if (goi->isconfigure) {
+				e = jim_getopt_wide(goi, &w);
+				if (e != JIM_OK)
+					return e;
+				/* make this exactly 1 or 0 */
+				target->ddr_en = (!!w);
+			} else {
+				if (goi->argc != 0)
+					goto no_params;
+			}
+			Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, target->ddr_en));
+			/* loop for more */
+			break;
 		case TCFG_WORK_AREA_VIRT:
 			if (goi->isconfigure) {
 				target_free_all_working_areas(target);
