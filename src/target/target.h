@@ -376,10 +376,12 @@ struct ping_pong_fifo {
     uint32_t buf1_flag_addr;
 	uint32_t buf0_start_addr;
 	uint32_t buf1_start_addr;
+	uint32_t buf2_start_addr;
     uint32_t buf0_start;
     uint32_t buf0_end;
     uint32_t buf1_start;
     uint32_t buf1_end;
+	uint32_t buf2_start;
     uint32_t prod_idx;       // 0或1，当前主机写入的缓冲索引
 };
 

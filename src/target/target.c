@@ -1036,6 +1036,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
     pp->buf1_flag_addr = buffer_start + 4;
 	pp->buf0_start_addr = buffer_start + 8;
 	pp->buf1_start_addr = buffer_start + 0xC;
+	pp->buf2_start_addr = buffer_start + 0x10;
 
 	if(trans_target->ddr_en)
     	pp->buf0_start = 0;
@@ -1044,6 +1045,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
     pp->buf0_end   = pp->buf0_start + pp->half_size;
     pp->buf1_start = pp->buf0_end;
     pp->buf1_end   = pp->buf1_start + pp->half_size;
+	pp->buf2_start = pp->buf1_end;
 
     pp->prod_idx = 0;
 
@@ -1056,6 +1058,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
     if (retval != ERROR_OK) return retval;
     retval = target_write_u32(trans_target, pp->buf1_flag_addr, 0);
 	target_write_u32(trans_target, pp->buf1_start_addr, pp->buf1_start);
+	target_write_u32(trans_target, pp->buf2_start_addr, pp->buf2_start);
     return retval;
 }
 

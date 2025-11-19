@@ -174,7 +174,6 @@ static int loader_data_to_wa(struct flash_loader *loader, const uint8_t *data)
 static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 {
 	target_addr_t buf_end = 0;
-
 	if (loader->work_mode == SYNC_TRANS) {
 		buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
 		buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->block_size);
@@ -234,7 +233,7 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
 		if(loader->exec_target->ddr_en) {
 			loader->buf_start = 0x6102f000;
-			loader->data_size = 0x400000;			
+			loader->data_size = 0x4000;			
 		}
 		else{
 			loader->buf_start = loader->copy_area->address + loader->code_area;

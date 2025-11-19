@@ -132,11 +132,10 @@ int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_
 	if (retval != ERROR_OK)
 		return retval;
 
-	if(0) {
 	retval = dwcmshc_checksum(emmc, buffer, addr, count, &target_crc);
 	if (retval != ERROR_OK)
 		return retval;
-
+	if(0) {
 	if (~image_crc != ~target_crc) {
 		LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
 		fail_location = find_difference(emmc, buffer, count, addr);

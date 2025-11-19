@@ -778,19 +778,16 @@ static struct code_src crc_srcs[3] =
 
 int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc)
 {
-	int retval = ERROR_OK;
 	struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
 	struct flash_loader *loader = &driver_priv->flash_loader;
 	int block_addr = addr/emmc->device->block_size;
-
-	// dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-	// dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-
-	loader->work_mode = CRC_CHECK;
+	int retval;
+	loader->work_mode = ASYNC_TRANS;
 	loader->block_size = emmc->device->block_size;
 	loader->image_size = count;
-	loader->param_cnt = 4;
-
-	retval = loader_flash_crc(loader, crc_srcs, block_addr, crc);
+	loader->param_cnt = 6;
+	dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+	retval = loader_flash_write_async(loader, crc_srcs, buffer, block_addr, count);
 	return retval;
 }
