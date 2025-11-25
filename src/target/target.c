@@ -40,12 +40,12 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-
 #include <helper/align.h>
 #include <helper/time_support.h>
+#include <helper/binarybuffer.h>
+#include <helper/command.h>
 #include <jtag/jtag.h>
 #include <flash/nor/core.h>
-
 #include "target.h"
 #include "target_type.h"
 #include "target_request.h"
@@ -1179,8 +1179,6 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 
 }
 
-
-
 static int target_ping_pong_trans_data(struct target *trans_target,
     const uint8_t *buffer, int count, uint32_t block_size, struct ping_pong_fifo *pp)
 {
@@ -1189,6 +1187,8 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 	int total_cnt = count;
 	int cur_cnt = 0;
     int32_t buf_blocks = pp->half_size / block_size;
+
+	
 
     while (count > 0) {
         // 选择当前写缓冲
@@ -1227,6 +1227,24 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         retval = target_write_buffer(trans_target, buf_start, this_bytes, buffer);
         if (retval != ERROR_OK) break;
 
+        // 调试：读取并打印本批次前部的数据样本（最多32字节）
+        {
+            const uint32_t sample_len = this_bytes < 32 ? this_bytes : 32;
+            if (sample_len > 0) {
+                uint8_t sample_buf[32];
+                int r = target_read_buffer(trans_target, buf_start, sample_len, sample_buf);
+                if (r == ERROR_OK) {
+                    char *hex = buf_to_hex_str(sample_buf, sample_len);
+                    if (hex) {
+                        LOG_INFO("pp fifo batch sample addr 0x%" PRIx32 " len %" PRIu32 ": %s", buf_start, sample_len, hex);
+                        free(hex);
+                    }
+                } else {
+                    LOG_DEBUG("pp fifo batch sample read failed addr 0x%" PRIx32 " len %" PRIu32, buf_start, sample_len);
+                }
+            }
+        }
+
         // 置位就绪标志（写入有效块数，目标端可据此处理最后一包）
         retval = target_write_u32(trans_target, flag_addr, this_blocks);
         if (retval != ERROR_OK) break;
@@ -1252,6 +1270,33 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 	return retval;
 }
 
+/* Wait for DDR initialization to complete by polling status registers. */
+static int target_wait_ddr_init(struct target *target)
+{
+    /* Use the code-passed target by temporarily overriding command context. */
+    extern struct command_context *global_cmd_ctx;
+    struct command_context *cmd_ctx = global_cmd_ctx;
+    struct target *saved_override = NULL;
+    int retval = ERROR_OK;
+    if (cmd_ctx) {
+        saved_override = cmd_ctx->current_target_override;
+        cmd_ctx->current_target_override = target;
+        retval = command_run_linef(cmd_ctx,
+            "if {[llength [info procs wait_ddr_init]]} { wait_ddr_init }"
+        );
+        /* Restore previous override to avoid side-effects. */
+        cmd_ctx->current_target_override = saved_override;
+    } else {
+        LOG_WARNING("No command context; skipping DDR init check");
+    }
+    /* If the proc doesn't exist or failed, keep flow generic. */
+    if (retval != ERROR_OK) {
+        LOG_WARNING("DDR init proc not found or failed; continuing without explicit check");
+        retval = ERROR_OK;
+    }
+    return retval;
+}
+
 int target_run_async_algorithm_ping_pong(struct target *trans_target, struct target *exec_target,
     const uint8_t *buffer, uint32_t count, int block_size,
     int num_mem_params, struct mem_param *mem_params,
@@ -1268,6 +1313,12 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     retval = target_start_algorithm(exec_target, num_mem_params, mem_params,
         num_reg_params, reg_params, entry_point, exit_point, arch_info);
     if (retval != ERROR_OK) { free(pp); return retval; }
+
+    /* If DDR is enabled, wait for DDR initialization to complete before transfer */
+    if (exec_target->ddr_en) {
+        retval = target_wait_ddr_init(trans_target);
+        if (retval != ERROR_OK) { free(pp); return retval; }
+    }
 
     retval = target_ping_pong_trans_data(trans_target, buffer, count, block_size, pp);
     int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,

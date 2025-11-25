@@ -79,6 +79,7 @@ proc program {media filename args} {
 		if {[catch {eval $media write_image erase $quad_en $flash_args}] == 0} {
 			echo "** Programming Finished **"
 			if {[info exists verify]} {
+				reset halt
 				# verify phase
 				echo "** Verify Started **"
 				if {[catch {eval $media verify_image $quad_en $flash_args}] == 0} {
