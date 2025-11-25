@@ -231,11 +231,11 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 			return ERROR_FAIL;
 		loader->op = LOADER_WRITE;
 		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
-		if(loader->exec_target->ddr_en) {
-			loader->buf_start = 0x6102f000;
-			loader->data_size = 0x4000;			
-		}
-		else{
+		/* Prefer user-configured buffer start/size if provided */
+		if (loader->exec_target->loader_buf_cfg) {
+			loader->buf_start = loader->exec_target->loader_buf_start;
+			loader->data_size = loader->exec_target->loader_buf_size;
+		} else {
 			loader->buf_start = loader->copy_area->address + loader->code_area;
 			if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
 				loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
@@ -248,7 +248,8 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 	loader_set_params(loader, addr);
 
 	if (loader->work_mode == SYNC_TRANS)	{
-		LOG_DEBUG("trans %x bytes start data %x to wa %x", loader->data_size, *data, loader->buf_start);
+		LOG_DEBUG("trans %x bytes; first byte %x; to buf " TARGET_ADDR_FMT,
+			loader->data_size, data ? *data : 0, loader->buf_start);
 		loader_data_to_wa(loader, data);
 	}
 

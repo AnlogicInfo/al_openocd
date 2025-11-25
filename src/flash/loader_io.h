@@ -76,7 +76,7 @@ struct flash_loader {
     // data wa setting
     int ddr_en;
     int data_size;
-    int buf_start;
+    target_addr_t buf_start;
 };
 
 

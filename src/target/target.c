@@ -1024,7 +1024,7 @@ static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32
 }
 
 static int target_async_algorithm_init_ping_pong_fifo(
-    struct target *trans_target, uint32_t buffer_start, uint32_t buffer_size,
+    struct target *exec_target, uint32_t buffer_start, uint32_t buffer_size,
 	uint32_t block_size, struct ping_pong_fifo *pp)
 {
     int retval;
@@ -1038,7 +1038,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
 	pp->buf1_start_addr = buffer_start + 0xC;
 	pp->buf2_start_addr = buffer_start + 0x10;
 
-	if(trans_target->ddr_en)
+	if(exec_target->ddr_en)
     	pp->buf0_start = 0;
 	else
 		pp->buf0_start = buffer_start + block_size;
@@ -1053,12 +1053,12 @@ static int target_async_algorithm_init_ping_pong_fifo(
 			  pp->buf_size, pp->half_size,
 			  pp->buf0_start, pp->buf1_start);
     // 清零两个标志，表示两个缓冲都空闲
-    retval = target_write_u32(trans_target, pp->buf0_flag_addr, 0);
-	target_write_u32(trans_target, pp->buf0_start_addr, pp->buf0_start);
+    retval = target_write_u32(exec_target, pp->buf0_flag_addr, 0);
+	target_write_u32(exec_target, pp->buf0_start_addr, pp->buf0_start);
     if (retval != ERROR_OK) return retval;
-    retval = target_write_u32(trans_target, pp->buf1_flag_addr, 0);
-	target_write_u32(trans_target, pp->buf1_start_addr, pp->buf1_start);
-	target_write_u32(trans_target, pp->buf2_start_addr, pp->buf2_start);
+    retval = target_write_u32(exec_target, pp->buf1_flag_addr, 0);
+	target_write_u32(exec_target, pp->buf1_start_addr, pp->buf1_start);
+	target_write_u32(exec_target, pp->buf2_start_addr, pp->buf2_start);
     return retval;
 }
 
@@ -1262,7 +1262,7 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     int retval;
     struct ping_pong_fifo *pp = malloc(sizeof(*pp));
 
-    retval = target_async_algorithm_init_ping_pong_fifo(trans_target, buffer_start, buffer_size, block_size, pp);
+    retval = target_async_algorithm_init_ping_pong_fifo(exec_target, buffer_start, buffer_size, block_size, pp);
     if (retval != ERROR_OK) { free(pp); return retval; }
 
     retval = target_start_algorithm(exec_target, num_mem_params, mem_params,
@@ -5644,14 +5644,16 @@ bool target_has_event_action(struct target *target, enum target_event event)
 }
 
 enum target_cfg_param {
-	TCFG_TYPE,
-	TCFG_EVENT,
-	TCFG_DDR_EN,
-	TCFG_WORK_AREA_VIRT,
-	TCFG_WORK_AREA_PHYS,
-	TCFG_WORK_AREA_SIZE,
-	TCFG_WORK_AREA_BACKUP,
-	TCFG_ENDIAN,
+    TCFG_TYPE,
+    TCFG_EVENT,
+    TCFG_DDR_EN,
+    TCFG_LOADER_BUF_START,
+    TCFG_LOADER_BUF_SIZE,
+    TCFG_WORK_AREA_VIRT,
+    TCFG_WORK_AREA_PHYS,
+    TCFG_WORK_AREA_SIZE,
+    TCFG_WORK_AREA_BACKUP,
+    TCFG_ENDIAN,
 	TCFG_COREID,
 	TCFG_CHAIN_POSITION,
 	TCFG_DBGBASE,
@@ -5662,14 +5664,16 @@ enum target_cfg_param {
 };
 
 static struct jim_nvp nvp_config_opts[] = {
-	{ .name = "-type",             .value = TCFG_TYPE },
-	{ .name = "-event",            .value = TCFG_EVENT },
-	{ .name = "-ddr-enable",       .value = TCFG_DDR_EN },
-	{ .name = "-work-area-virt",   .value = TCFG_WORK_AREA_VIRT },
-	{ .name = "-work-area-phys",   .value = TCFG_WORK_AREA_PHYS },
-	{ .name = "-work-area-size",   .value = TCFG_WORK_AREA_SIZE },
-	{ .name = "-work-area-backup", .value = TCFG_WORK_AREA_BACKUP },
-	{ .name = "-endian",           .value = TCFG_ENDIAN },
+    { .name = "-type",             .value = TCFG_TYPE },
+    { .name = "-event",            .value = TCFG_EVENT },
+    { .name = "-ddr-enable",       .value = TCFG_DDR_EN },
+    { .name = "-loader-buf-start", .value = TCFG_LOADER_BUF_START },
+    { .name = "-loader-buf-size",  .value = TCFG_LOADER_BUF_SIZE },
+    { .name = "-work-area-virt",   .value = TCFG_WORK_AREA_VIRT },
+    { .name = "-work-area-phys",   .value = TCFG_WORK_AREA_PHYS },
+    { .name = "-work-area-size",   .value = TCFG_WORK_AREA_SIZE },
+    { .name = "-work-area-backup", .value = TCFG_WORK_AREA_BACKUP },
+    { .name = "-endian",           .value = TCFG_ENDIAN },
 	{ .name = "-coreid",           .value = TCFG_COREID },
 	{ .name = "-chain-position",   .value = TCFG_CHAIN_POSITION },
 	{ .name = "-dbgbase",          .value = TCFG_DBGBASE },
@@ -5813,20 +5817,48 @@ no_params:
 			/* loop for more */
 			break;
 
-		case TCFG_DDR_EN:
-			if (goi->isconfigure) {
-				e = jim_getopt_wide(goi, &w);
-				if (e != JIM_OK)
-					return e;
-				/* make this exactly 1 or 0 */
-				target->ddr_en = (!!w);
-			} else {
-				if (goi->argc != 0)
-					goto no_params;
-			}
-			Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, target->ddr_en));
-			/* loop for more */
-			break;
+        case TCFG_DDR_EN:
+            if (goi->isconfigure) {
+                e = jim_getopt_wide(goi, &w);
+                if (e != JIM_OK)
+                    return e;
+                /* make this exactly 1 or 0 */
+                target->ddr_en = (!!w);
+            } else {
+                if (goi->argc != 0)
+                    goto no_params;
+            }
+            Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, target->ddr_en));
+            /* loop for more */
+            break;
+        case TCFG_LOADER_BUF_START:
+            if (goi->isconfigure) {
+                e = jim_getopt_wide(goi, &w);
+                if (e != JIM_OK)
+                    return e;
+                target->loader_buf_start = (target_addr_t)w;
+                target->loader_buf_cfg = true;
+            } else {
+                if (goi->argc != 0)
+                    goto no_params;
+            }
+            Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, (jim_wide)target->loader_buf_start));
+            /* loop for more */
+            break;
+        case TCFG_LOADER_BUF_SIZE:
+            if (goi->isconfigure) {
+                e = jim_getopt_wide(goi, &w);
+                if (e != JIM_OK)
+                    return e;
+                target->loader_buf_size = (uint32_t)w;
+                target->loader_buf_cfg = true;
+            } else {
+                if (goi->argc != 0)
+                    goto no_params;
+            }
+            Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, (jim_wide)target->loader_buf_size));
+            /* loop for more */
+            break;
 		case TCFG_WORK_AREA_VIRT:
 			if (goi->isconfigure) {
 				target_free_all_working_areas(target);

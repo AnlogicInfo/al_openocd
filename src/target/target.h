@@ -159,8 +159,12 @@ struct target {
 
 	bool reset_halt;						/* attempt resetting the CPU into the halted mode? */
 	bool ddr_en;                              /* ddr enable for flash loader */
-	target_addr_t working_area;				/* working area (initialised RAM). Evaluated
-										 * upon first allocation from virtual/physical address. */
+	/* Optional override for flash loader data buffer location/size */
+	bool loader_buf_cfg;                       /* true if buf is set via config */
+	target_addr_t loader_buf_start;           /* start address for loader data buffer */
+	uint32_t loader_buf_size;                 /* size of data chunk to use when overriding */
+	target_addr_t working_area;			/* working area (initialised RAM). Evaluated
+											 * upon first allocation from virtual/physical address. */
 	bool working_area_virt_spec;		/* virtual address specified? */
 	target_addr_t working_area_virt;			/* virtual address */
 	bool working_area_phys_spec;		/* physical address specified? */
