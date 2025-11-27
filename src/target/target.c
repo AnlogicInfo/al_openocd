@@ -42,7 +42,6 @@
 #endif
 #include <helper/align.h>
 #include <helper/time_support.h>
-#include <helper/binarybuffer.h>
 #include <helper/command.h>
 #include <jtag/jtag.h>
 #include <flash/nor/core.h>
@@ -1227,24 +1226,6 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         retval = target_write_buffer(trans_target, buf_start, this_bytes, buffer);
         if (retval != ERROR_OK) break;
 
-        // 调试：读取并打印本批次前部的数据样本（最多32字节）
-        {
-            const uint32_t sample_len = this_bytes < 32 ? this_bytes : 32;
-            if (sample_len > 0) {
-                uint8_t sample_buf[32];
-                int r = target_read_buffer(trans_target, buf_start, sample_len, sample_buf);
-                if (r == ERROR_OK) {
-                    char *hex = buf_to_hex_str(sample_buf, sample_len);
-                    if (hex) {
-                        LOG_INFO("pp fifo batch sample addr 0x%" PRIx32 " len %" PRIu32 ": %s", buf_start, sample_len, hex);
-                        free(hex);
-                    }
-                } else {
-                    LOG_DEBUG("pp fifo batch sample read failed addr 0x%" PRIx32 " len %" PRIu32, buf_start, sample_len);
-                }
-            }
-        }
-
         // 置位就绪标志（写入有效块数，目标端可据此处理最后一包）
         retval = target_write_u32(trans_target, flag_addr, this_blocks);
         if (retval != ERROR_OK) break;
@@ -1306,6 +1287,9 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
 {
     int retval;
     struct ping_pong_fifo *pp = malloc(sizeof(*pp));
+    struct duration dur_trans;
+    struct duration dur_prog;
+    size_t total_bytes = (size_t)count * (size_t)block_size;
 
     retval = target_async_algorithm_init_ping_pong_fifo(exec_target, buffer_start, buffer_size, block_size, pp);
     if (retval != ERROR_OK) { free(pp); return retval; }
@@ -1314,16 +1298,28 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
         num_reg_params, reg_params, entry_point, exit_point, arch_info);
     if (retval != ERROR_OK) { free(pp); return retval; }
 
-    /* If DDR is enabled, wait for DDR initialization to complete before transfer */
     if (exec_target->ddr_en) {
         retval = target_wait_ddr_init(trans_target);
         if (retval != ERROR_OK) { free(pp); return retval; }
     }
 
+    duration_start(&dur_prog);
+    duration_start(&dur_trans);
     retval = target_ping_pong_trans_data(trans_target, buffer, count, block_size, pp);
+    duration_measure(&dur_trans);
+    if (retval == ERROR_OK) {
+        LOG_INFO("Transfer completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+            duration_elapsed(&dur_trans), duration_kbps(&dur_trans, total_bytes), (unsigned int)total_bytes);
+    }
+
     int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
         num_reg_params, reg_params, exit_point, 10000, arch_info);
+    duration_measure(&dur_prog);
     if (retval2 != ERROR_OK) retval = retval2;
+    if (retval == ERROR_OK) {
+        LOG_INFO("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+            duration_elapsed(&dur_prog), duration_kbps(&dur_prog, total_bytes), (unsigned int)total_bytes);
+    }
 
     free(pp);
     return retval;

@@ -68,12 +68,13 @@ typedef union
 } AL_MMC_Cmd6ArgUnion;
 
 struct dwcmshc_emmc_controller {
-	bool                probed;
-	uint8_t             io_location;
-	target_addr_t       ctrl_base;
-	dwcmshc_cmd_pkt_t   ctrl_cmd;
-	uint32_t            io_bank_pwr;
-	struct flash_loader flash_loader;
+    bool                probed;
+    uint8_t             io_location;
+    target_addr_t       ctrl_base;
+    dwcmshc_cmd_pkt_t   ctrl_cmd;
+    uint32_t            io_bank_pwr;
+    struct flash_loader flash_loader;
+    char               *elf_dir;
 };
 
 

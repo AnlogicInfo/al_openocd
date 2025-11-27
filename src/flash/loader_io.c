@@ -142,10 +142,7 @@ static int loader_code_to_wa(struct flash_loader *loader)
 	 * That's usually correct; but there are boards with
 	 * both large and small page chips, where it won't be...
 	 */
-	LOG_INFO("wa write code size %x", loader->code_src->size);
-
-	 wa_size = target_get_working_area_avail(target);
-	LOG_INFO("wa init size %x", wa_size);
+	wa_size = target_get_working_area_avail(target);
 
 	/* make sure we have a working area */
 	if (!*area) {
@@ -204,7 +201,7 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 			LOG_DEBUG("target set %s value %x", loader->reg_params[i].reg_name ,
 			*(uint32_t *)loader->reg_params[i].value);
 		else
-			LOG_INFO("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
+			LOG_DEBUG("target set %s value " TARGET_ADDR_FMT, loader->reg_params[i].reg_name ,
 				*(target_addr_t *)loader->reg_params[i].value);
 	}
 

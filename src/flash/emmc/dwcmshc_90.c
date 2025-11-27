@@ -1,12 +1,14 @@
 #include "dwcmshc_subs.h"
+#include <string.h>
 
 EMMC_DEVICE_COMMAND_HANDLER(dr90_dwcmshc_emmc_device_command)
 {
 	struct dwcmshc_emmc_controller *dwcmshc_emmc;
 	uint32_t base;
 	uint8_t io_location;
-	if (CMD_ARGC != 4)
-		return ERROR_COMMAND_SYNTAX_ERROR;
+    if (CMD_ARGC < 4) {
+        return ERROR_COMMAND_SYNTAX_ERROR;
+    }
 
 	dwcmshc_emmc = malloc(sizeof(struct dwcmshc_emmc_controller));
 	if (!dwcmshc_emmc) {
@@ -23,8 +25,12 @@ EMMC_DEVICE_COMMAND_HANDLER(dr90_dwcmshc_emmc_device_command)
 	dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller *) dwcmshc_emmc;
 	dwcmshc_emmc->flash_loader.set_params_priv = NULL;
 	dwcmshc_emmc->flash_loader.exec_target = emmc->target;
-	dwcmshc_emmc->flash_loader.copy_area = NULL;
-	dwcmshc_emmc->flash_loader.ctrl_base = base;
+    dwcmshc_emmc->flash_loader.copy_area = NULL;
+    dwcmshc_emmc->flash_loader.ctrl_base = base;
+    dwcmshc_emmc->elf_dir = NULL;
+    if (CMD_ARGC >= 5) {
+        dwcmshc_emmc->elf_dir = strdup(CMD_ARGV[4]);
+    }
 
 	return ERROR_OK;
 }
@@ -106,13 +112,14 @@ static int dr90_dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
 
 
 const struct emmc_flash_controller dr90_dwcmshc_emmc_controller = {
-	.name = "dwcmshc_90",
-	.emmc_device_command = dr90_dwcmshc_emmc_device_command,
-	.reset = dwcmshc_emmc_reset,
-	.write_image = dwcmshc_emmc_write_image,
-	.write_block_data = dwcmshc_emmc_write_block,
-	.read_block_data = dwcmshc_emmc_read_block,
-	.verify_image = dwcmshc_emmc_verify,
-	.emmc_ready = dwcmshc_emmc_ready,
-	.init = dr90_dwcmshc_emmc_init,
+    .name = "dwcmshc_90",
+    .usage = "bank_id driver target base io [elf_dir]",
+    .emmc_device_command = dr90_dwcmshc_emmc_device_command,
+    .reset = dwcmshc_emmc_reset,
+    .write_image = dwcmshc_emmc_write_image,
+    .write_block_data = dwcmshc_emmc_write_block,
+    .read_block_data = dwcmshc_emmc_read_block,
+    .verify_image = dwcmshc_emmc_verify,
+    .emmc_ready = dwcmshc_emmc_ready,
+    .init = dr90_dwcmshc_emmc_init,
 };
