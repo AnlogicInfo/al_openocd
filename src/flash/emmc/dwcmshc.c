@@ -90,16 +90,10 @@ int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_
 
 int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
 {
-	int retval = ERROR_OK;
+    int retval = ERROR_OK;
 
-	retval = dwcmshc_emmc_async_write_image(emmc, buffer, addr, size);
-
-	if (retval != ERROR_OK) {
-		LOG_ERROR("async write fail, try sync write");
-		retval = dwcmshc_emmc_sync_write_image(emmc, buffer, addr, size);
-	}
-
-	return retval;
+    retval = dwcmshc_emmc_async_write_image(emmc, buffer, addr, size);
+    return retval;
 }
 
 int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
