@@ -742,7 +742,7 @@ static int dwcmshc_try_load_elf_code_src(struct dwcmshc_emmc_controller *ctrl, e
     } else {
         snprintf(path, sizeof(path), "contrib/loaders/flash/emmc/dwcmshc/build/%s%s.elf", prefix, arch);
     }
-
+	LOG_INFO("load elf from %s", path);
     memset(&img, 0, sizeof(img));
     retval = image_open(&img, path, "elf");
     if (retval != ERROR_OK)

@@ -37,6 +37,8 @@ buildlin-job:       # This job runs in the build stage, which runs first.
     - ../configure --prefix=${PWD}/../binary-linux64 --enable-ftdi --enable-ftdi-oscan1 --enable-jtag_vpi --enable-ftdi-cjtag
     - make -j4
     - make install
+    - mkdir -p ${PWD}/../binary-linux64/share/openocd/loader/emmc
+    - cp -f ../contrib/loaders/flash/emmc/dwcmshc/build/*.elf ${PWD}/../binary-linux64/share/openocd/loader/emmc/
     - cd ../binary-linux64
     - tar -jcf openocd_linux64.tar.bz2 *
     - echo ${CI_JOB_ID} | tee lin64_jobid.log
@@ -71,6 +73,8 @@ buildwin-job:
     - echo '#define HAVE_LIBUSB_GET_PORT_NUMBERS 1' >> config.h
     - make -j4
     - make install
+    - mkdir -p ${PWD}/../binary-win64/share/openocd/loader/emmc
+    - cp -f ../contrib/loaders/flash/emmc/dwcmshc/build/*.elf ${PWD}/../binary-win64/share/openocd/loader/emmc/
     - cd ../binary-win64
     - echo 'Copying dynamic libraries'
     - find $OCDLIB_DIR/libyaml_0_2_2/bin -name '*.dll' -exec cp -v {} ${PWD}/bin \;
