@@ -3,8 +3,10 @@
 #include <stdio.h>
 /* Register offsets */
 /* fields in SPI flash status register */
-#define	SPIFLASH_BSY		0
-#define SPIFLASH_BSY_BIT	(1 << SPIFLASH_BSY)	/* WIP Bit of SPI SR */
+#define	SPIFLASH_BSY			0
+#define SPIFLASH_BSY_BIT	(1 << SPIFLASH_BSY)
+#define	SPIFLASH_WEL			1
+#define SPIFLASH_WEL_BIT	(1 << SPIFLASH_WEL)
 
 /* SPI Flash Commands */
 #define SPIFLASH_READ_STATUS	0x05 /* Read Status Register */
@@ -121,6 +123,7 @@ typedef struct
 static uint32_t nuspi_read_reg(volatile uint32_t *ctrl_base, uint32_t address);
 static int nuspi_txwm_wait(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
 static int nuspi_wip(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
+static int nuspi_wel(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
 static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
 		const uint8_t *buffer, uint32_t offset, uint32_t len,
 		nuspi_info_t* nuspi_info);
@@ -303,17 +306,50 @@ static int nuspi_wip(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info)
 	return ERROR_NUSPI_WIP;
 }
 
+static int nuspi_wel(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info)
+{
+    nuspi_set_dir(ctrl_base, NUSPI_DIR_RX);
+    nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD);
+    int result = nuspi_tx(ctrl_base, SPIFLASH_READ_STATUS, nuspi_info->flags);
+    if (result != ERROR_OK)
+        return result | ERROR_STACK(0x1000000);
+    result = nuspi_rx(ctrl_base, NULL, nuspi_info->flags);
+    if (result != ERROR_OK)
+        return result | ERROR_STACK(0x2000000);
+    unsigned timeout = TIMEOUT;
+    while (timeout--) {
+        result = nuspi_tx(ctrl_base, 0, nuspi_info->flags);
+        if (result != ERROR_OK)
+            return result | ERROR_STACK(0x3000000);
+        uint8_t rx;
+        result = nuspi_rx(ctrl_base, &rx, nuspi_info->flags);
+        if (result != ERROR_OK)
+            return result | ERROR_STACK(0x4000000);
+        if (rx & SPIFLASH_WEL_BIT) {
+            nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO);
+            nuspi_set_dir(ctrl_base, NUSPI_DIR_TX);
+            return ERROR_OK;
+        }
+    }
+    return ERROR_NUSPI_WIP;
+}
+
 /* Can set bits 23:20 in result. */
 static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
 		const uint8_t *buffer, uint32_t offset, uint32_t len,
 		nuspi_info_t* nuspi_info)
 {
-	int result = nuspi_tx(ctrl_base, SPIFLASH_WRITE_ENABLE, nuspi_info->flags);
-	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x100000);
-	result = nuspi_txwm_wait(ctrl_base, nuspi_info);
-	if (result != ERROR_OK)
-		return result | ERROR_STACK(0x200000);
+    int result = nuspi_tx(ctrl_base, SPIFLASH_WRITE_ENABLE, nuspi_info->flags);
+    if (result != ERROR_OK)
+        return result | ERROR_STACK(0x100000);
+    result = nuspi_txwm_wait(ctrl_base, nuspi_info);
+    if (result != ERROR_OK)
+        return result | ERROR_STACK(0x200000);
+
+    result = nuspi_wel(ctrl_base, nuspi_info);
+    if (result != ERROR_OK) {
+        return result | ERROR_STACK(0x210000);
+    }
 
 	nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD);
 
