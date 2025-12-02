@@ -831,12 +831,10 @@ int flash_write_unlock_verify(struct target *target, struct image *image,
 			assert(sections[section_last + 1]->base_address >= c->base);
 			if (sections[section_last + 1]->base_address >= (c->base + c->size)) {
 				/* Done with this bank */
-			LOG_INFO("skip section %d: address " TARGET_ADDR_FMT ", size " TARGET_ADDR_FMT,
-				section_last, sections[section_last + 1]->base_address, (c->base + c->size));
 				break;
 			}
-			LOG_INFO("section %d: address " TARGET_ADDR_FMT ", size %x",
-				section, run_address, run_size);
+		LOG_INFO("section %d: address " TARGET_ADDR_FMT ", size %x",
+			section, run_address, run_size);
 
 			/* if we have multiple sections within our image,
 			 * flash programming could fail due to alignment issues

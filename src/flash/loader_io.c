@@ -239,20 +239,8 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 	loader_set_params(loader, addr);
 
 	if (loader->work_mode == SYNC_TRANS)	{
-		LOG_INFO("trans %x bytes start data %x to wa %x", loader->data_size, *data, loader->buf_start);
+		LOG_DEBUG("trans %x bytes start data %x to wa %x", loader->data_size, *data, loader->buf_start);
 		loader_data_to_wa(loader, data);
-		uint32_t rb = MIN(loader->data_size, 64);
-		if (rb > 0) {
-			uint8_t rb_buf[64];
-			char hex[129];
-			int r = target_read_buffer(loader->trans_target, loader->buf_start, rb, rb_buf);
-			if (r == ERROR_OK) {
-				hexify(hex, rb_buf, rb, sizeof(hex));
-				LOG_INFO("wa %x readback %x bytes: %s", loader->buf_start, rb, hex);
-			} else {
-				LOG_INFO("wa %x readback %x bytes failed", loader->buf_start, rb);
-			}
-		}
 	}
 
 	return ERROR_OK;
@@ -271,8 +259,6 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 		const uint8_t *data, target_addr_t addr, int image_size)
 {
 	int retval = ERROR_OK;
-	int total_cnt = image_size;
-	int cur_cnt = 0;
 	LOG_INFO("loader write sync size %x", image_size);
 	retval = loader_init(loader, srcs);
 	if (retval != ERROR_OK)
@@ -280,7 +266,7 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 
 	while (image_size > 0) {
 		loader->data_size = MIN(loader->data_size, image_size);
-		LOG_INFO("this run image size %x data_size %x", image_size, loader->data_size);
+
 		loader_set_wa(loader, addr, data);
 		retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,
@@ -290,16 +276,10 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 		data += loader->data_size;
 		addr += loader->data_size;
 		image_size -= loader->data_size;
-		cur_cnt = total_cnt - image_size;
-		LOG_INFO("this run write %x bytes to %" PRIx64, loader->data_size, addr);
-		LOG_PROC(cur_cnt, total_cnt);
-		if (retval != ERROR_OK) {
-			LOG_INFO("loader write sync failed at %" PRIx64 " size %x", addr, loader->data_size);
-			break;			
-		}
+		if (retval != ERROR_OK)
+			break;
 	}
 
-	LOG_PROC(total_cnt, total_cnt);
 	loader_exit(loader, NO_RESTORE);
 
 	return retval;
