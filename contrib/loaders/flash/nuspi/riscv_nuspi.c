@@ -124,7 +124,7 @@ static uint32_t nuspi_read_reg(volatile uint32_t *ctrl_base, uint32_t address);
 static int nuspi_txwm_wait(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
 static int nuspi_wip(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
 static int nuspi_wel(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
-static int nuspi_reset(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
+// static int nuspi_reset(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info);
 static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
 		const uint8_t *buffer, uint32_t offset, uint32_t len,
 		nuspi_info_t* nuspi_info);
@@ -158,9 +158,9 @@ int flash_nuspi(volatile uint32_t *ctrl_base, uint32_t page_size, uint32_t offse
 		goto err;
 	}
 
-	result = nuspi_reset(ctrl_base, &nuspi_info);
-	if (result != ERROR_OK)
-		goto err;
+	// result = nuspi_reset(ctrl_base, &nuspi_info);
+	// if (result != ERROR_OK)
+	// 	goto err;
 
 	/* Assume page_size is a power of two so we don't need the modulus code. */
 	uint32_t page_offset = offset & (page_size - 1);
@@ -394,26 +394,27 @@ static int nuspi_write_buffer(volatile uint32_t *ctrl_base,
 		return result | ERROR_STACK(0x900000);
 	return ERROR_OK;
 }
-static int nuspi_reset(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info)
-{
-    int result;
-    nuspi_set_dir(ctrl_base, NUSPI_DIR_TX);
-    nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD);
-    result = nuspi_tx(ctrl_base, SPIFLASH_ENABLE_RESET, nuspi_info->flags);
-    if (result != ERROR_OK)
-        return result | ERROR_STACK(0x1100000);
-    result = nuspi_txwm_wait(ctrl_base, nuspi_info);
-    if (result != ERROR_OK)
-        return result | ERROR_STACK(0x1200000);
-    result = nuspi_tx(ctrl_base, SPIFLASH_RESET_DEVICE, nuspi_info->flags);
-    if (result != ERROR_OK)
-        return result | ERROR_STACK(0x1300000);
-    result = nuspi_txwm_wait(ctrl_base, nuspi_info);
-    if (result != ERROR_OK)
-        return result | ERROR_STACK(0x1400000);
-    nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO);
-    result = nuspi_wip(ctrl_base, nuspi_info);
-    if (result != ERROR_OK)
-        return result | ERROR_STACK(0x1500000);
-    return ERROR_OK;
-}
+
+// static int nuspi_reset(volatile uint32_t *ctrl_base, nuspi_info_t* nuspi_info)
+// {
+//     int result;
+//     nuspi_set_dir(ctrl_base, NUSPI_DIR_TX);
+//     nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD);
+//     result = nuspi_tx(ctrl_base, SPIFLASH_ENABLE_RESET, nuspi_info->flags);
+//     if (result != ERROR_OK)
+//         return result | ERROR_STACK(0x1100000);
+//     result = nuspi_txwm_wait(ctrl_base, nuspi_info);
+//     if (result != ERROR_OK)
+//         return result | ERROR_STACK(0x1200000);
+//     result = nuspi_tx(ctrl_base, SPIFLASH_RESET_DEVICE, nuspi_info->flags);
+//     if (result != ERROR_OK)
+//         return result | ERROR_STACK(0x1300000);
+//     result = nuspi_txwm_wait(ctrl_base, nuspi_info);
+//     if (result != ERROR_OK)
+//         return result | ERROR_STACK(0x1400000);
+//     nuspi_write_reg(ctrl_base, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO);
+//     result = nuspi_wip(ctrl_base, nuspi_info);
+//     if (result != ERROR_OK)
+//         return result | ERROR_STACK(0x1500000);
+//     return ERROR_OK;
+// }
