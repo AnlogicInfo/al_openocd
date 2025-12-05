@@ -31,7 +31,6 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
     COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], base);
     COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], io_location);
     emmc->controller_priv = dwcmshc_emmc;
-    dwcmshc_emmc->probed = false;
     dwcmshc_emmc->io_location = io_location;
     dwcmshc_emmc->ctrl_base = base;
     dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller *) dwcmshc_emmc;
@@ -148,6 +147,7 @@ int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_
 	return retval;
 }
 
+
 int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout)
 {
 	return ERROR_OK;
@@ -162,6 +162,7 @@ const struct emmc_flash_controller dwcmshc_emmc_controller = {
 	.write_block_data = dwcmshc_emmc_write_block,
 	.read_block_data = dwcmshc_emmc_read_block,
 	.verify_image = dwcmshc_emmc_verify,
+	.erase = dwcmshc_emmc_erase_range,
 	.emmc_ready = dwcmshc_emmc_ready,
 	.init = dwcmshc_emmc_init,
 };

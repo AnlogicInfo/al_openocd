@@ -608,6 +608,105 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
 	return ERROR_OK;
 }
 
+static inline uint32_t dwcmshc_convert_erase_arg(struct emmc_device *emmc, uint32_t block_addr)
+{
+	if (emmc->device->chip_size > 2)
+        return block_addr; /* sector units for densities > 2GB */
+    else
+        return block_addr * emmc->device->block_size; /* byte units for densities <= 2GB */
+}
+
+static int dwcmshc_emmc_cmd_35_erase_grp_start(struct emmc_device *emmc, uint32_t addr)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    dwcmshc_cmd_pkt_t *cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = dwcmshc_convert_erase_arg(emmc, addr);
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+    cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
+
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
+    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_ERASE_GRP_START;
+
+    return dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+}
+
+static int dwcmshc_emmc_cmd_36_erase_grp_end(struct emmc_device *emmc, uint32_t addr)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    dwcmshc_cmd_pkt_t *cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = dwcmshc_convert_erase_arg(emmc, addr);
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+    cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
+
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48;
+    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_ERASE_GRP_END;
+
+    return dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+}
+
+int dwcmshc_emmc_cmd_38_erase(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block)
+{
+    struct dwcmshc_emmc_controller *dwcmshc_emmc = emmc->controller_priv;
+    dwcmshc_cmd_pkt_t *cmd_pkt = &(dwcmshc_emmc->ctrl_cmd);
+    int status;
+
+    status = dwcmshc_emmc_cmd_35_erase_grp_start(emmc, start_block);
+    if (status != ERROR_OK)
+        return status;
+
+    status = dwcmshc_emmc_cmd_36_erase_grp_end(emmc, end_block);
+    if (status != ERROR_OK)
+        return status;
+
+    memset(cmd_pkt, 0, sizeof(dwcmshc_cmd_pkt_t));
+    cmd_pkt->argu_en = ARGU_EN;
+    cmd_pkt->argument = 0;
+    cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_READ;
+    cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
+
+    cmd_pkt->cmd_reg.bit.resp_type_select = MMC_C_RESP_LEN_48B;
+    cmd_pkt->cmd_reg.bit.cmd_crc_chk_enable = MMC_C_CMD_CRC_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_idx_chk_enable = MMC_C_CMD_IDX_CHECK_ENABLE;
+    cmd_pkt->cmd_reg.bit.cmd_index = SD_CMD_ERASE;
+
+    status = dwcmshc_emmc_command(emmc, WAIT_CMD_COMPLETE);
+    return status;
+}
+
+
+int dwcmshc_emmc_erase_range(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block)
+{
+    uint32_t blk = emmc->device->block_size;
+    uint32_t grp_bytes = emmc->device->erase_group_size;
+    if (grp_bytes == 0)
+        grp_bytes = 512 * 1024;
+    uint32_t grp_blocks = grp_bytes / blk;
+    if (grp_blocks == 0)
+        grp_blocks = 1024;
+
+    uint32_t aligned_start = (start_block / grp_blocks) * grp_blocks;
+    uint32_t aligned_end = (((end_block + 1 + grp_blocks - 1) / grp_blocks) * grp_blocks) - 1;
+
+    uint64_t total_bytes = ((uint64_t)emmc->device->chip_size) << 30;
+    uint32_t total_blocks = (uint32_t)(total_bytes / blk);
+    if (aligned_end >= total_blocks)
+        aligned_end = total_blocks - 1;
+
+    if (aligned_start != start_block || aligned_end != end_block)
+        LOG_INFO("erase range aligned [%u-%u] -> [%u-%u], group %u blocks", start_block, end_block, aligned_start, aligned_end, grp_blocks);
+
+    return dwcmshc_emmc_cmd_38_erase(emmc, aligned_start, aligned_end);
+}
 
 
 int dwcmshc_emmc_card_init(struct emmc_device *emmc, uint32_t* buf)
@@ -664,6 +763,11 @@ int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ui
 	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
 	dwcmshc_emmc_cmd_24_write_single_block(emmc, buffer, addr);
 	return ERROR_OK;
+}
+
+int dwcmshc_erase_block_range(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block)
+{
+    return dwcmshc_emmc_cmd_38_erase(emmc, start_block, end_block);
 }
 
 

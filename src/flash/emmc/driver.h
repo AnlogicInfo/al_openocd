@@ -49,6 +49,9 @@ struct emmc_flash_controller {
 
 	int (*verify_image)(struct emmc_device *emmc, const uint8_t *data, uint32_t addr, uint32_t count);
 
+	/* Erase entire EMMC device. */
+	int (*erase)(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block);
+
 	/** Check if the EMMC device is ready for more instructions with timeout. */
 	int (*emmc_ready)(struct emmc_device *emmc, int timeout);
 };

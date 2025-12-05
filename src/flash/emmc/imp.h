@@ -22,6 +22,8 @@ int emmc_write_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t a
 int emmc_write_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t address, int size);
 int emmc_read_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t address);
 int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size);
+int emmc_erase_block(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block);
+
 
 
 #endif

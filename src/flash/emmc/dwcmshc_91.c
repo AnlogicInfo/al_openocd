@@ -19,7 +19,6 @@ EMMC_DEVICE_COMMAND_HANDLER(dr91_dwcmshc_emmc_device_command)
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], base);
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], io_location);
 	emmc->controller_priv = dwcmshc_emmc;
-	dwcmshc_emmc->probed = false;
 	dwcmshc_emmc->io_location = io_location;
 	dwcmshc_emmc->ctrl_base = base;
 	dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller *) dwcmshc_emmc;
@@ -145,6 +144,7 @@ const struct emmc_flash_controller dr91_dwcmshc_emmc_controller = {
     .write_block_data = dwcmshc_emmc_write_block,
     .read_block_data = dwcmshc_emmc_read_block,
     .verify_image = dwcmshc_emmc_verify,
+    .erase = dwcmshc_emmc_erase_range,
     .emmc_ready = dwcmshc_emmc_ready,
     .init = dr91_dwcmshc_emmc_init,
 };

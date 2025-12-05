@@ -247,6 +247,39 @@ COMMAND_HANDLER(handle_emmc_verify_command)
 	return ERROR_OK;
 }
 
+COMMAND_HANDLER(handle_emmc_erase_command)
+{
+    if (CMD_ARGC != 1 && CMD_ARGC != 3)
+        return ERROR_COMMAND_SYNTAX_ERROR;
+
+    struct emmc_device *emmc;
+    int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &emmc);
+    if (retval != ERROR_OK)
+        return retval;
+
+    if (!emmc->device || emmc->device->chip_size == 0) {
+        retval = CALL_COMMAND_HANDLER(emmc_command_auto_probe, 0, &emmc);
+        if (retval != ERROR_OK)
+            return retval;
+    }
+
+    if (CMD_ARGC == 3) {
+        uint32_t start_block, end_block;
+        COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], start_block);
+        COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], end_block);
+        retval = emmc_erase_block(emmc, start_block, end_block);
+        if (retval == ERROR_OK)
+            command_print(CMD, "emmc erase blocks [%u - %u] successful", start_block, end_block);
+        else
+            command_print(CMD, "emmc erase blocks [%u - %u] failed", start_block, end_block);
+    }
+	else {
+		LOG_ERROR("please specify start_block and end_block");
+		retval = ERROR_COMMAND_SYNTAX_ERROR;
+	}
+    return retval;
+}
+
 static const struct command_registration emmc_exec_command_handlers[] = {
 	{
 		.name = "list",
@@ -285,24 +318,31 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.usage = "addr [blk_cnt]",
 		.help = "Read blk from emmc",
 	},
-	{
-		.name = "verify_image",
-		.handler = handle_emmc_verify_command,
-		.mode = COMMAND_EXEC,
-		.usage = "bank_id filename offset ",
-		.help = "Verify an image against emmc. Allow optional "
-			"offset from beginning of bank (defaults to zero)",
-	},	
+    {
+        .name = "verify_image",
+        .handler = handle_emmc_verify_command,
+        .mode = COMMAND_EXEC,
+        .usage = "bank_id filename offset ",
+        .help = "Verify an image against emmc. Allow optional "
+            "offset from beginning of bank (defaults to zero)",
+    }, 
+    {
+        .name = "erase_block",
+        .handler = handle_emmc_erase_command,
+        .mode = COMMAND_EXEC,
+        .usage = "bank_id [start_block end_block]",
+        .help = "Erase entire emmc or range by blocks",
+    },
 
-	COMMAND_REGISTRATION_DONE
+    COMMAND_REGISTRATION_DONE
 };
 
 static int emmc_init(struct command_context *cmd_ctx)
 {
-	if (!emmc_devices)
-		return ERROR_OK;
+    if (!emmc_devices)
+        return ERROR_OK;
 
-	return register_commands(cmd_ctx, "emmc", emmc_exec_command_handlers);
+    return register_commands(cmd_ctx, "emmc", emmc_exec_command_handlers);
 }
 
 // init emmc commands
