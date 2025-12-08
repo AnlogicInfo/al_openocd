@@ -61,10 +61,7 @@ struct emmc_device
 #define SD_CMD_SET_WRITE_PROT                      ((uint8_t)28)
 #define SD_CMD_CLR_WRITE_PROT                      ((uint8_t)29)
 #define SD_CMD_SEND_WRITE_PROT                     ((uint8_t)30)
-#define SD_CMD_SD_ERASE_GRP_START                  ((uint8_t)32) /*!< To set the address of the first write
-                                                                  block to be erased. (For SD card only) */
-#define SD_CMD_SD_ERASE_GRP_END                    ((uint8_t)33) /*!< To set the address of the last write block of the
-                                                                  continuous range to be erased. (For SD card only) */
+
 #define SD_CMD_ERASE_GRP_START                     ((uint8_t)35) /*!< To set the address of the first write block to be erased.
                                                                   (For MMC card only spec 3.31) */
 
@@ -141,6 +138,7 @@ struct emmc_info {
     size_t pnm;
     int block_size;
     int chip_size;
+    uint32_t erase_group_size;
     const char *name;
 };
 

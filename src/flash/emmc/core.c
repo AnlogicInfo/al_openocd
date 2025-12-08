@@ -32,25 +32,24 @@ void emmc_device_add(struct emmc_device *c)
 
 static struct emmc_info emmc_flash_ids[] = 
 {
-	// mfr             prd_cid         block_size   chip_size     name
-    {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200,       16,           "Samsung KLMAG1JETD-B041 16GB EMMC "},
-    {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200,       64,           "Samsung KLMCG8GEAC-B031 64GB EMMC "},
-	{EMMC_MFR_MICRON,  0x53304a353658, 0x200,       16,           "Micron MTFC16GAPALBH-IT 16GB EMMC "},
-	{EMMC_MFR_MICRON,  0x52314a35364c, 0x200,       16,           "Micron MTFC16GAKAEJP-4MIT 16GB EMMC "},
-	{EMMC_MFR_MICRON,  0x51324a35354c, 0x200,       8,            "Micron MTFC8GAKAJCN-4MIT 8GB EMMC "},
-	{EMMC_MFR_MICRON,  0x53304a333541, 0x200,       8,            "Micron MTFC8GAMALBH-AIT 8GB EMMC "},
-	{EMMC_MFR_FORESEE, 0x383841333938, 0x200,       8,            "Foresee FEMDRW008g-88A39 8GB EMMC "},
-	{EMMC_MFR_FORESEE, 0x353841343631, 0x200,       16,           "Foresee FEMDNN016G-58A46 16GB EMMC "},
-	{EMMC_MFR_FORESEE, 0x413341353632, 0x200,       128,          "Foresee FEMDNN128G-A3A56 128GB EMMC "},
-	{EMMC_MFR_HYNIX,   0x483847346132, 0x200,       8,            "Hynix H26M41208HPR 8GB EMMC "},
-	{EMMC_MFR_SANDISK, 0x444734303038, 0x200,       8,            "Sandisk SDINBDG4-8G 8GB EMMC "},
-	{EMMC_MFR_SANDISK, 0x444134313238, 0x200,       128,          "Sandisk SDINBDA4-128G 128GB EMMC "},
-	{EMMC_MFR_XINCUN0, 0x654d4d432020, 0x200,       8,            "Xincun XC08MAAJ-NTS 8GB EMMC "},
-	{EMMC_MFR_XINCUN1, 0x4b4d4d524441, 0x200,       32,           "Xincun XC32MAAJ-NTS 32GB EMMC "},
-	{EMMC_MFR_XINCUN1, 0x000093005100, 0x200,       64,           "Xincun XC64MAAJ-NTS 64GB EMMC "},
+    {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200, 16, 0, "Samsung KLMAG1JETD-B041 16GB EMMC "},
+    {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200, 64, 0, "Samsung KLMCG8GEAC-B031 64GB EMMC "},
+    {EMMC_MFR_MICRON,  0x53304a353658, 0x200, 16, 0, "Micron MTFC16GAPALBH-IT 16GB EMMC "},
+    {EMMC_MFR_MICRON,  0x52314a35364c, 0x200, 16, 0, "Micron MTFC16GAKAEJP-4MIT 16GB EMMC "},
+    {EMMC_MFR_MICRON,  0x51324a35354c, 0x200, 8,  0, "Micron MTFC8GAKAJCN-4MIT 8GB EMMC "},
+    {EMMC_MFR_MICRON,  0x53304a333541, 0x200, 8,  0, "Micron MTFC8GAMALBH-AIT 8GB EMMC "},
+    {EMMC_MFR_FORESEE, 0x383841333938, 0x200, 8,  0, "Foresee FEMDRW008g-88A39 8GB EMMC "},
+    {EMMC_MFR_FORESEE, 0x353841343631, 0x200, 16, 0, "Foresee FEMDNN016G-58A46 16GB EMMC "},
+    {EMMC_MFR_FORESEE, 0x413341353632, 0x200, 128,0, "Foresee FEMDNN128G-A3A56 128GB EMMC "},
+    {EMMC_MFR_HYNIX,   0x483847346132, 0x200, 8,  0, "Hynix H26M41208HPR 8GB EMMC "},
+    {EMMC_MFR_SANDISK, 0x444734303038, 0x200, 8,  0, "Sandisk SDINBDG4-8G 8GB EMMC "},
+    {EMMC_MFR_SANDISK, 0x444134313238, 0x200, 128,0, "Sandisk SDINBDA4-128G 128GB EMMC "},
+    {EMMC_MFR_XINCUN0, 0x654d4d432020, 0x200, 8,  0, "Xincun XC08MAAJ-NTS 8GB EMMC "},
+    {EMMC_MFR_XINCUN1, 0x4b4d4d524441, 0x200, 32, 0, "Xincun XC32MAAJ-NTS 32GB EMMC "},
+    {EMMC_MFR_XINCUN1, 0x000093005100, 0x200, 64, 0, "Xincun XC64MAAJ-NTS 64GB EMMC "},
 
-    {0, 0, 0, 0, NULL},
-	{0, 0, 0x200, 0, "Compatible Mode"},
+    {0, 0, 0, 0, 0, NULL},
+    {0, 0, 0x200, 0, 0, "Compatible Mode"},
 };
 /**
  * Returns the flash bank specified by @a name, which matches the
@@ -151,6 +150,23 @@ static void emmc_csd_parse(struct emmc_device *emmc, uint32_t* csd_buf)
 	emmc->device->chip_size =  ((actual_size >> 3) + 1) << 3;
 }
 
+static inline uint8_t emmc_ext_csd_byte(uint32_t *buf, int index)
+{
+    uint32_t w = buf[index >> 2];
+    int s = (index & 3) * 8;
+    return (uint8_t)((w >> s) & 0xFF);
+}
+
+static int emmc_ext_csd_parse(struct emmc_device *emmc, uint32_t* ext_buf)
+{
+    uint8_t def = emmc_ext_csd_byte(ext_buf, 175);
+    if (def == 1) {
+        uint8_t sz = emmc_ext_csd_byte(ext_buf, 224);
+        emmc->device->erase_group_size = ((uint32_t)sz) * (512 * 1024);
+    }
+    return ERROR_OK;
+}
+
 int emmc_probe(struct emmc_device *emmc)
 {
 	int status = ERROR_OK;
@@ -164,10 +180,12 @@ int emmc_probe(struct emmc_device *emmc)
 	if(status != ERROR_OK)
 		return ERROR_FAIL;
 
-	status = emmc_cid_parse(emmc, in_field);
+    status = emmc_cid_parse(emmc, in_field);
 
-	if(emmc->device->chip_size == 0)
-		emmc_csd_parse(emmc, in_field + 4);
+    if(emmc->device->chip_size == 0)
+        emmc_csd_parse(emmc, in_field + 4);
+
+    emmc_ext_csd_parse(emmc, in_field + 8);
 
 	if(!emmc->device)
 	{
@@ -204,5 +222,12 @@ int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, 
 {
 	int retval;
 	retval = emmc->controller->verify_image(emmc, buffer, addr, size);
+	return retval;
+}
+
+int emmc_erase_block(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block)
+{
+	int retval;
+	retval = emmc->controller->erase(emmc, start_block, end_block);
 	return retval;
 }
