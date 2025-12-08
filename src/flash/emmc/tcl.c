@@ -152,55 +152,51 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 
 COMMAND_HANDLER(handle_emmc_read_block_command)
 {
-	int retval;
-	uint32_t block_cnt = 1, byte_cnt;
-	uint8_t *buffer = NULL;
+    int retval;
+    uint32_t block_cnt = 1, byte_cnt;
+    uint8_t *buffer = NULL;
 
-	struct target *target = get_current_target(CMD_CTX);
-	struct emmc_device *emmc;
+    struct target *target = get_current_target(CMD_CTX);
+    struct emmc_device *emmc;
 
-	if (CMD_ARGC < 1 || CMD_ARGC > 2)
-		return ERROR_COMMAND_SYNTAX_ERROR;
+    if (CMD_ARGC < 1 || CMD_ARGC > 2)
+        return ERROR_COMMAND_SYNTAX_ERROR;
 
-	target_addr_t address;
-	COMMAND_PARSE_ADDRESS(CMD_ARGV[0], address);
+    uint32_t block_addr;
+    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], block_addr);
 
-	if(address % 512 != 0)
-	{
-		LOG_ERROR("address should be block aligned");
-		return ERROR_FAIL;
-	}
+    if(CMD_ARGC == 2)
+        COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], block_cnt);
 
-	if(CMD_ARGC == 2)
-		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], block_cnt);
+    emmc = get_emmc_device_by_num(0);
+    if (!emmc)
+    {
+        LOG_INFO("emmc get device error");
+        retval = ERROR_FAIL;
+        goto fail;
+    }
 
+    if(!emmc->device)
+    {
+        LOG_INFO("emmc not probed");
+        retval = ERROR_FAIL;
+        goto fail;
+    }
 
-	byte_cnt = 512 * block_cnt;
-	LOG_INFO("emmc read block start addr %" PRIx64 " byte cnt %x", address, byte_cnt);
-	buffer = calloc(byte_cnt, 1);
-	emmc = get_emmc_device_by_num(0);
-	if (!emmc)
-	{
-		LOG_INFO("emmc get device error");
-		retval = ERROR_FAIL;
-		goto fail;
-	}
+    byte_cnt = emmc->device->block_size * block_cnt;
+    LOG_INFO("emmc read block start block %u byte cnt %x", block_addr, byte_cnt);
+    buffer = calloc(byte_cnt, 1);
 
-	if(!emmc->device)
-	{
-		LOG_INFO("emmc not probed");
-		retval = ERROR_FAIL;
-		goto fail;
-	}
+    retval = emmc_read_data_block(emmc, (uint32_t*) buffer, block_addr);
 
-	retval = emmc_read_data_block(emmc, (uint32_t*) buffer, address);
-
-	if(retval == ERROR_OK)
-		target_handle_md_output(CMD, target, address, 1, byte_cnt, (uint8_t*) buffer,false);
+    if(retval == ERROR_OK) {
+        uint64_t base_byte_addr = (uint64_t)block_addr * emmc->device->block_size;
+        target_handle_md_output(CMD, target, base_byte_addr, 1, byte_cnt, (uint8_t*) buffer,false);
+    }
 
 fail:
-	free(buffer);
-	return retval;
+    free(buffer);
+    return retval;
 }
 
 COMMAND_HANDLER(handle_emmc_verify_command)
@@ -315,7 +311,7 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.name = "read_block",
 		.handler = handle_emmc_read_block_command,
 		.mode = COMMAND_EXEC,
-		.usage = "addr [blk_cnt]",
+		.usage = "start_block [block_cnt]",
 		.help = "Read blk from emmc",
 	},
     {

@@ -895,18 +895,18 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
 
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
-	int retval = ERROR_OK;
-	uint32_t block_addr = addr/emmc->device->block_size;
-	retval = dwcmshc_emmc_cmd_set_block_length(emmc, 512);
-	if (retval != ERROR_OK)
-		LOG_ERROR("set block length error");
-	retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-	if (retval != ERROR_OK)
-		LOG_ERROR("set block count error");
-	retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, block_addr);
-	if (retval != ERROR_OK)
-		LOG_ERROR("read single block addr %x error", block_addr);
-	return retval;
+    int retval = ERROR_OK;
+    uint32_t block_addr = addr;
+    retval = dwcmshc_emmc_cmd_set_block_length(emmc, 512);
+    if (retval != ERROR_OK)
+        LOG_ERROR("set block length error");
+    retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+    if (retval != ERROR_OK)
+        LOG_ERROR("set block count error");
+    retval = dwcmshc_emmc_cmd_17_read_single_block(emmc, buffer, block_addr);
+    if (retval != ERROR_OK)
+        LOG_ERROR("read single block addr %x error", block_addr);
+    return retval;
 }
 
 
