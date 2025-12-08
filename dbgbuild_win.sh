@@ -19,4 +19,6 @@ cd build-win64
 echo '#define HAVE_LIBUSB_GET_PORT_NUMBERS 1' >> config.h
 make -j4
 make install
+mkdir -p ${PWD}/../binary-win64/share/openocd/loader/emmc
+cp -f ../contrib/loaders/flash/emmc/dwcmshc/build/*.elf ${PWD}/../binary-win64/share/openocd/loader/emmc/
 

@@ -39,11 +39,13 @@ static int loader_init_arch(struct flash_loader *loader)
 	struct target *target = loader->exec_target;
 	int retval = ERROR_OK;
 	if (strcmp(target_type_name(target), "riscv") == 0) {
+		target = get_first_target("pstap");
 		loader->trans_target = loader_init_trans_target(target_name(target));
 		loader->xlen = riscv_xlen(target);
 		loader->arch_info = (struct riscv_algorithm *)malloc(sizeof(struct riscv_algorithm));
 	} else {
-		target = get_first_target("aarch64");
+		// target = get_first_target("aarch64");
+		target = get_first_target("pstap");
 		if (target == NULL)
 			return ERROR_FAIL;
 
@@ -82,7 +84,7 @@ static int loader_init_reg_params(struct flash_loader *loader, char **params_nam
 
 static void loader_init_rv_code(struct flash_loader *loader, struct code_src *srcs)
 {
-	struct target *target = loader->trans_target;
+	struct target *target = loader->exec_target;
 	int code_index;
 	loader->xlen = riscv_xlen(target);
 	if (loader->xlen == 32)
@@ -101,9 +103,9 @@ static void loader_init_aarch64_code(struct flash_loader *loader, struct code_sr
 
 static int loader_init_code(struct flash_loader *loader, struct code_src *srcs)
 {
-	struct target *trans_target = loader->trans_target;
+	struct target *exec_target = loader->exec_target;
 
-	if (strcmp(target_type_name(trans_target), "riscv") == 0) {
+	if (strcmp(target_type_name(exec_target), "riscv") == 0) {
 		loader_init_rv_code(loader, srcs);
 		loader_init_reg_params(loader, rv_reg_params);
 	} else {
@@ -140,7 +142,7 @@ static int loader_code_to_wa(struct flash_loader *loader)
 	 * both large and small page chips, where it won't be...
 	 */
 	wa_size = target_get_working_area_avail(target);
-	LOG_DEBUG("wa init size %x", wa_size);
+
 	/* make sure we have a working area */
 	if (!*area) {
 		retval = target_alloc_working_area(target, wa_size, area);
@@ -149,9 +151,7 @@ static int loader_code_to_wa(struct flash_loader *loader)
 			return ERROR_BUF_TOO_SMALL;
 		}
 	}
-	LOG_DEBUG("wa allocated");
 	target_write_buffer(target, (*area)->address, loader->code_src->size, loader->code_src->bin);
-	LOG_DEBUG("wa write code");
 	return wa_size;
 }
 
@@ -170,7 +170,6 @@ static int loader_data_to_wa(struct flash_loader *loader, const uint8_t *data)
 static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 {
 	target_addr_t buf_end = 0;
-
 	if (loader->work_mode == SYNC_TRANS) {
 		buf_set_u64(loader->reg_params[0].value, 0, loader->xlen, loader->ctrl_base);
 		buf_set_u64(loader->reg_params[1].value, 0, loader->xlen, loader->block_size);
@@ -228,18 +227,25 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 			return ERROR_FAIL;
 		loader->op = LOADER_WRITE;
 		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
-		loader->buf_start = loader->copy_area->address + loader->code_area;
-		if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
-			loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
-		else
-			loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
+		/* Prefer user-configured buffer start/size if provided */
+		if (loader->exec_target->loader_buf_cfg) {
+			loader->buf_start = loader->exec_target->loader_buf_start;
+			loader->data_size = loader->exec_target->loader_buf_size;
+		} else {
+			loader->buf_start = loader->copy_area->address + loader->code_area;
+			if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
+				loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
+			else
+				loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
+		}
 		LOG_DEBUG("init loader data_size %x", loader->data_size);
 	}
 
 	loader_set_params(loader, addr);
 
 	if (loader->work_mode == SYNC_TRANS)	{
-		LOG_DEBUG("trans %x bytes start data %x to wa %x", loader->data_size, *data, loader->buf_start);
+		LOG_DEBUG("trans %x bytes; first byte %x; to buf " TARGET_ADDR_FMT,
+			loader->data_size, data ? *data : 0, loader->buf_start);
 		loader_data_to_wa(loader, data);
 	}
 
@@ -292,15 +298,22 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 	int retval;
 
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
-
+	LOG_INFO("loader write async size %x, block cnt %x", loader->image_size, image_block_cnt);
 	retval = loader_init(loader, srcs);
 	if (retval != ERROR_OK)
 		return ERROR_FAIL;
 	loader_set_wa(loader, addr, data);
-	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
-	data, image_block_cnt, loader->block_size,
-	0, NULL, loader->param_cnt, loader->reg_params,
-	loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
+	// retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
+	// data, image_block_cnt, loader->block_size,
+	// 0, NULL, loader->param_cnt, loader->reg_params,
+	// loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
+
+	retval = target_run_async_algorithm_ping_pong(
+		loader->trans_target, loader->exec_target,
+		data, image_block_cnt, loader->block_size,
+		0, NULL, loader->param_cnt, loader->reg_params,
+		loader->buf_start, loader->data_size, 
+		loader->copy_area->address, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);
 	return retval;

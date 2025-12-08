@@ -14,7 +14,7 @@ void emmc_dwcmshc(volatile uint32_t *ctrl_base, int32_t block_size, int count, u
         rp += (block_size>>2);
 
         if(rp == buf_end)
-            rp = buf_start + 2;
+            rp = buf_start + 2`;
         // store rp
         *(buf_start + 1) = (uint32_t) rp;
         // update count

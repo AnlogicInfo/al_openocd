@@ -40,12 +40,11 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-
 #include <helper/align.h>
 #include <helper/time_support.h>
+#include <helper/command.h>
 #include <jtag/jtag.h>
 #include <flash/nor/core.h>
-
 #include "target.h"
 #include "target_type.h"
 #include "target_request.h"
@@ -992,13 +991,13 @@ done:
 	return retval;
 }
 
-static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, struct async_fifo *fifo)
+static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, uint32_t block_size, struct async_fifo *fifo)
 {
 	int retval;
 	uint32_t wp_result = 0, rp_result = 0;
 	fifo->wp_addr = buffer_start;
 	fifo->rp_addr = buffer_start + 4;
-	fifo->fifo_start_addr = buffer_start + 8;
+	fifo->fifo_start_addr = buffer_start + block_size;
 	fifo->fifo_end_addr = buffer_start + buffer_size;
 	fifo->wp = fifo->fifo_start_addr;
 	fifo->rp = fifo->fifo_start_addr;
@@ -1021,6 +1020,45 @@ static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32
 	// LOG_ERROR("rp init get %x expect %x", rp_result, fifo->rp);
 
 	return retval;
+}
+
+static int target_async_algorithm_init_ping_pong_fifo(
+    struct target *exec_target, uint32_t buffer_start, uint32_t buffer_size,
+	uint32_t block_size, struct ping_pong_fifo *pp)
+{
+    int retval;
+
+    pp->buf_size = buffer_size - block_size;
+    pp->half_size = pp->buf_size / 2;
+
+    pp->buf0_flag_addr = buffer_start;
+    pp->buf1_flag_addr = buffer_start + 4;
+	pp->buf0_start_addr = buffer_start + 8;
+	pp->buf1_start_addr = buffer_start + 0xC;
+	pp->buf2_start_addr = buffer_start + 0x10;
+
+	if(exec_target->ddr_en)
+    	pp->buf0_start = 0;
+	else
+		pp->buf0_start = buffer_start + block_size;
+    pp->buf0_end   = pp->buf0_start + pp->half_size;
+    pp->buf1_start = pp->buf0_end;
+    pp->buf1_end   = pp->buf1_start + pp->half_size;
+	pp->buf2_start = pp->buf1_end;
+
+    pp->prod_idx = 0;
+
+	LOG_INFO("init pp fifo buf size %x half size %x buf0 start %x buf1 start %x", 
+			  pp->buf_size, pp->half_size,
+			  pp->buf0_start, pp->buf1_start);
+    // 清零两个标志，表示两个缓冲都空闲
+    retval = target_write_u32(exec_target, pp->buf0_flag_addr, 0);
+	target_write_u32(exec_target, pp->buf0_start_addr, pp->buf0_start);
+    if (retval != ERROR_OK) return retval;
+    retval = target_write_u32(exec_target, pp->buf1_flag_addr, 0);
+	target_write_u32(exec_target, pp->buf1_start_addr, pp->buf1_start);
+	target_write_u32(exec_target, pp->buf2_start_addr, pp->buf2_start);
+    return retval;
 }
 
 
@@ -1052,16 +1090,24 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 			break;
 		}
 
-		/* Count the number of bytes available in the fifo without
-		 * crossing the wrap around. Make sure to not fill it completely,
-		 * because that would make wp == rp and that's the empty condition. */
-		uint32_t thisrun_bytes, thisrun_block_cnt;
-		if (fifo->rp > fifo->wp)
-			thisrun_bytes = fifo->rp - fifo->wp - block_size;
-		else if (fifo->rp > fifo->fifo_start_addr)
+        /* Count the number of bytes available in the fifo without
+         * crossing the wrap around. Handle FIFO-empty explicitly to avoid 0.
+         * Keep a one-block safety margin when rp > wp to prevent full condition. */
+        uint32_t thisrun_bytes, thisrun_block_cnt;
+
+		if (fifo->wp >= fifo->rp) {
 			thisrun_bytes = fifo->fifo_end_addr - fifo->wp;
-		else
-			thisrun_bytes = fifo->fifo_end_addr - fifo->wp - block_size;
+			if(fifo-> rp == fifo->fifo_start_addr)
+				thisrun_bytes -= block_size;
+		} else {
+			thisrun_bytes = fifo->rp - fifo->wp - block_size;
+		}
+
+
+        /* Align to block_size and avoid negatives */
+        if ((int32_t)thisrun_bytes < 0)
+            thisrun_bytes = 0;
+        thisrun_bytes = (thisrun_bytes / block_size) * block_size;
 
 		if (thisrun_bytes == 0) {
 			/* Throttle polling a bit if transfer is (much) faster than flash
@@ -1090,8 +1136,6 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		thisrun_block_cnt = thisrun_bytes/block_size;
 		thisrun_bytes = thisrun_block_cnt * block_size;
 
-		LOG_DEBUG("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
-			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
 
 		/* Write data to fifo */
 		// start = timeval_ms();
@@ -1110,6 +1154,9 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		if (fifo->wp >= fifo->fifo_end_addr)
 			fifo->wp = fifo->fifo_start_addr;
 
+		LOG_DEBUG("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
+			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
+			
 		/* Store updated write pointer to target */
 		retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 		if (retval != ERROR_OK)
@@ -1131,12 +1178,152 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 
 }
 
-// static int target_async_algorithm_wait(struct target* exec_target)
-// {
-// 	return ERROR_OK;
-// }
+static int target_ping_pong_trans_data(struct target *trans_target,
+    const uint8_t *buffer, int count, uint32_t block_size, struct ping_pong_fifo *pp)
+{
+    int retval = ERROR_OK;
+    int timeout = 0;
+	int total_cnt = count;
+	int cur_cnt = 0;
+    int32_t buf_blocks = pp->half_size / block_size;
 
+	
 
+    while (count > 0) {
+        // 选择当前写缓冲
+        uint32_t flag_addr = (pp->prod_idx == 0) ? pp->buf0_flag_addr : pp->buf1_flag_addr;
+        uint32_t buf_start = (pp->prod_idx == 0) ? pp->buf0_start     : pp->buf1_start;
+		LOG_DEBUG("prod_idx %d flag_addr 0x%" PRIx32 " buf_start 0x%" PRIx32, pp->prod_idx, flag_addr, buf_start);
+        // 等待该缓冲空闲（flag == 0）
+        uint32_t flag = 0;
+		cur_cnt = total_cnt - count;
+		LOG_PROC(cur_cnt, total_cnt);
+
+		do {
+            retval = target_read_u32(trans_target, flag_addr, &flag);
+            if (retval != ERROR_OK) break;
+
+            if (flag != 0) {
+                alive_sleep(2);
+                if (timeout++ >= 2500) {
+                    LOG_ERROR("timeout waiting for free ping-pong buffer");
+					LOG_INFO("read flag 0x%" PRIx32 " addr 0x%" PRIx32, flag, flag_addr);
+                    return ERROR_FLASH_OPERATION_FAILED;
+                }
+                continue;
+            }
+            timeout = 0;
+            break;
+        } while (1);
+
+        if (retval != ERROR_OK) break;
+
+        // 本次填充的块数：不超过缓冲容量与剩余块数
+        int32_t this_blocks = (count < buf_blocks) ? count : buf_blocks;
+        int32_t this_bytes  = this_blocks * block_size;
+
+        // 写入数据
+        retval = target_write_buffer(trans_target, buf_start, this_bytes, buffer);
+        if (retval != ERROR_OK) break;
+
+        // 置位就绪标志（写入有效块数，目标端可据此处理最后一包）
+        retval = target_write_u32(trans_target, flag_addr, this_blocks);
+        if (retval != ERROR_OK) break;
+
+        // 更新计数与指针，翻转到另一半缓冲
+        buffer   += this_bytes;
+        count    -= this_blocks;
+        pp->prod_idx ^= 1;
+		LOG_DEBUG("pp fifo trans %d blocks, remain %d blocks", this_blocks, count);
+
+        keep_alive();
+    }
+
+	LOG_INFO("pp fifo trans done");
+    if (retval != ERROR_OK) {
+        // 主机异常终止，两个标志置为特殊值（或保留现有约定）
+        LOG_ERROR("target ping-pong trans data fail");
+        target_write_u32(trans_target, pp->buf0_flag_addr, 0xFFFFFFFF);
+        target_write_u32(trans_target, pp->buf1_flag_addr, 0xFFFFFFFF);
+    } else
+		LOG_PROC(total_cnt, total_cnt);
+ 
+	return retval;
+}
+
+/* Wait for DDR initialization to complete by polling status registers. */
+static int target_wait_ddr_init(struct target *target)
+{
+    /* Use the code-passed target by temporarily overriding command context. */
+    extern struct command_context *global_cmd_ctx;
+    struct command_context *cmd_ctx = global_cmd_ctx;
+    struct target *saved_override = NULL;
+    int retval = ERROR_OK;
+    if (cmd_ctx) {
+        saved_override = cmd_ctx->current_target_override;
+        cmd_ctx->current_target_override = target;
+        retval = command_run_linef(cmd_ctx,
+            "if {[llength [info procs wait_ddr_init]]} { wait_ddr_init }"
+        );
+        /* Restore previous override to avoid side-effects. */
+        cmd_ctx->current_target_override = saved_override;
+    } else {
+        LOG_WARNING("No command context; skipping DDR init check");
+    }
+    /* If the proc doesn't exist or failed, keep flow generic. */
+    if (retval != ERROR_OK) {
+        LOG_WARNING("DDR init proc not found or failed; continuing without explicit check");
+        retval = ERROR_OK;
+    }
+    return retval;
+}
+
+int target_run_async_algorithm_ping_pong(struct target *trans_target, struct target *exec_target,
+    const uint8_t *buffer, uint32_t count, int block_size,
+    int num_mem_params, struct mem_param *mem_params,
+    int num_reg_params, struct reg_param *reg_params,
+    uint32_t buffer_start, uint32_t buffer_size,
+    uint32_t entry_point, uint32_t exit_point, void *arch_info)
+{
+    int retval;
+    struct ping_pong_fifo *pp = malloc(sizeof(*pp));
+    struct duration dur_trans;
+    struct duration dur_prog;
+    size_t total_bytes = (size_t)count * (size_t)block_size;
+
+    retval = target_async_algorithm_init_ping_pong_fifo(exec_target, buffer_start, buffer_size, block_size, pp);
+    if (retval != ERROR_OK) { free(pp); return retval; }
+
+    retval = target_start_algorithm(exec_target, num_mem_params, mem_params,
+        num_reg_params, reg_params, entry_point, exit_point, arch_info);
+    if (retval != ERROR_OK) { free(pp); return retval; }
+
+    if (exec_target->ddr_en) {
+        retval = target_wait_ddr_init(trans_target);
+        if (retval != ERROR_OK) { free(pp); return retval; }
+    }
+
+    duration_start(&dur_prog);
+    duration_start(&dur_trans);
+    retval = target_ping_pong_trans_data(trans_target, buffer, count, block_size, pp);
+    duration_measure(&dur_trans);
+    if (retval == ERROR_OK) {
+        LOG_INFO("Transfer completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+            duration_elapsed(&dur_trans), duration_kbps(&dur_trans, total_bytes), (unsigned int)total_bytes);
+    }
+
+    int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
+        num_reg_params, reg_params, exit_point, 10000, arch_info);
+    duration_measure(&dur_prog);
+    if (retval2 != ERROR_OK) retval = retval2;
+    if (retval == ERROR_OK) {
+        LOG_INFO("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+            duration_elapsed(&dur_prog), duration_kbps(&dur_prog, total_bytes), (unsigned int)total_bytes);
+    }
+
+    free(pp);
+    return retval;
+}
 /**
  * Streams data to a circular buffer on target intended for consumption by code
  * running asynchronously on target.
@@ -1497,7 +1684,7 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 	struct async_fifo *fifo;
 
 	fifo = malloc(sizeof(struct async_fifo));
-	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, fifo);
+	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, block_size, fifo);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -5504,13 +5691,16 @@ bool target_has_event_action(struct target *target, enum target_event event)
 }
 
 enum target_cfg_param {
-	TCFG_TYPE,
-	TCFG_EVENT,
-	TCFG_WORK_AREA_VIRT,
-	TCFG_WORK_AREA_PHYS,
-	TCFG_WORK_AREA_SIZE,
-	TCFG_WORK_AREA_BACKUP,
-	TCFG_ENDIAN,
+    TCFG_TYPE,
+    TCFG_EVENT,
+    TCFG_DDR_EN,
+    TCFG_LOADER_BUF_START,
+    TCFG_LOADER_BUF_SIZE,
+    TCFG_WORK_AREA_VIRT,
+    TCFG_WORK_AREA_PHYS,
+    TCFG_WORK_AREA_SIZE,
+    TCFG_WORK_AREA_BACKUP,
+    TCFG_ENDIAN,
 	TCFG_COREID,
 	TCFG_CHAIN_POSITION,
 	TCFG_DBGBASE,
@@ -5521,13 +5711,16 @@ enum target_cfg_param {
 };
 
 static struct jim_nvp nvp_config_opts[] = {
-	{ .name = "-type",             .value = TCFG_TYPE },
-	{ .name = "-event",            .value = TCFG_EVENT },
-	{ .name = "-work-area-virt",   .value = TCFG_WORK_AREA_VIRT },
-	{ .name = "-work-area-phys",   .value = TCFG_WORK_AREA_PHYS },
-	{ .name = "-work-area-size",   .value = TCFG_WORK_AREA_SIZE },
-	{ .name = "-work-area-backup", .value = TCFG_WORK_AREA_BACKUP },
-	{ .name = "-endian",           .value = TCFG_ENDIAN },
+    { .name = "-type",             .value = TCFG_TYPE },
+    { .name = "-event",            .value = TCFG_EVENT },
+    { .name = "-ddr-enable",       .value = TCFG_DDR_EN },
+    { .name = "-loader-buf-start", .value = TCFG_LOADER_BUF_START },
+    { .name = "-loader-buf-size",  .value = TCFG_LOADER_BUF_SIZE },
+    { .name = "-work-area-virt",   .value = TCFG_WORK_AREA_VIRT },
+    { .name = "-work-area-phys",   .value = TCFG_WORK_AREA_PHYS },
+    { .name = "-work-area-size",   .value = TCFG_WORK_AREA_SIZE },
+    { .name = "-work-area-backup", .value = TCFG_WORK_AREA_BACKUP },
+    { .name = "-endian",           .value = TCFG_ENDIAN },
 	{ .name = "-coreid",           .value = TCFG_COREID },
 	{ .name = "-chain-position",   .value = TCFG_CHAIN_POSITION },
 	{ .name = "-dbgbase",          .value = TCFG_DBGBASE },
@@ -5671,6 +5864,48 @@ no_params:
 			/* loop for more */
 			break;
 
+        case TCFG_DDR_EN:
+            if (goi->isconfigure) {
+                e = jim_getopt_wide(goi, &w);
+                if (e != JIM_OK)
+                    return e;
+                /* make this exactly 1 or 0 */
+                target->ddr_en = (!!w);
+            } else {
+                if (goi->argc != 0)
+                    goto no_params;
+            }
+            Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, target->ddr_en));
+            /* loop for more */
+            break;
+        case TCFG_LOADER_BUF_START:
+            if (goi->isconfigure) {
+                e = jim_getopt_wide(goi, &w);
+                if (e != JIM_OK)
+                    return e;
+                target->loader_buf_start = (target_addr_t)w;
+                target->loader_buf_cfg = true;
+            } else {
+                if (goi->argc != 0)
+                    goto no_params;
+            }
+            Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, (jim_wide)target->loader_buf_start));
+            /* loop for more */
+            break;
+        case TCFG_LOADER_BUF_SIZE:
+            if (goi->isconfigure) {
+                e = jim_getopt_wide(goi, &w);
+                if (e != JIM_OK)
+                    return e;
+                target->loader_buf_size = (uint32_t)w;
+                target->loader_buf_cfg = true;
+            } else {
+                if (goi->argc != 0)
+                    goto no_params;
+            }
+            Jim_SetResult(goi->interp, Jim_NewIntObj(goi->interp, (jim_wide)target->loader_buf_size));
+            /* loop for more */
+            break;
 		case TCFG_WORK_AREA_VIRT:
 			if (goi->isconfigure) {
 				target_free_all_working_areas(target);

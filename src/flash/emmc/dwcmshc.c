@@ -10,14 +10,17 @@
 #endif
 
 #include "dwcmshc_subs.h"
+#include <string.h>
+#include <stdlib.h>
 
 EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 {
-	struct dwcmshc_emmc_controller *dwcmshc_emmc;
-	uint32_t base;
-	uint8_t io_location;
-	if (CMD_ARGC != 4)
-		return ERROR_COMMAND_SYNTAX_ERROR;
+    struct dwcmshc_emmc_controller *dwcmshc_emmc;
+    uint32_t base;
+    uint8_t io_location;
+    if (CMD_ARGC < 4) {
+        return ERROR_COMMAND_SYNTAX_ERROR;
+    }
 
 	dwcmshc_emmc = malloc(sizeof(struct dwcmshc_emmc_controller));
 	if (!dwcmshc_emmc) {
@@ -25,19 +28,22 @@ EMMC_DEVICE_COMMAND_HANDLER(dwcmshc_emmc_device_command)
 		return ERROR_FAIL;
 	}
 
-	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], base);
-	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], io_location);
-	emmc->controller_priv = dwcmshc_emmc;
-	dwcmshc_emmc->probed = false;
-	dwcmshc_emmc->io_location = io_location;
-	dwcmshc_emmc->ctrl_base = base;
-	dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller *) dwcmshc_emmc;
-	dwcmshc_emmc->flash_loader.set_params_priv = NULL;
-	dwcmshc_emmc->flash_loader.exec_target = emmc->target;
-	dwcmshc_emmc->flash_loader.copy_area = NULL;
-	dwcmshc_emmc->flash_loader.ctrl_base = base;
+    COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], base);
+    COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], io_location);
+    emmc->controller_priv = dwcmshc_emmc;
+    dwcmshc_emmc->probed = false;
+    dwcmshc_emmc->io_location = io_location;
+    dwcmshc_emmc->ctrl_base = base;
+    dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller *) dwcmshc_emmc;
+    dwcmshc_emmc->flash_loader.set_params_priv = NULL;
+    dwcmshc_emmc->flash_loader.exec_target = emmc->target;
+    dwcmshc_emmc->flash_loader.copy_area = NULL;
+    dwcmshc_emmc->flash_loader.ctrl_base = base;
+    dwcmshc_emmc->elf_dir = NULL;
+    if (CMD_ARGC >= 5)
+        dwcmshc_emmc->elf_dir = strdup(CMD_ARGV[4]);
 
-	return ERROR_OK;
+    return ERROR_OK;
 }
 
 int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field)
@@ -84,16 +90,10 @@ int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_
 
 int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
 {
-	int retval = ERROR_OK;
+    int retval = ERROR_OK;
 
-	retval = dwcmshc_emmc_async_write_image(emmc, buffer, addr, size);
-
-	if (retval != ERROR_OK) {
-		LOG_ERROR("async write fail, try sync write");
-		retval = dwcmshc_emmc_sync_write_image(emmc, buffer, addr, size);
-	}
-
-	return retval;
+    retval = dwcmshc_emmc_async_write_image(emmc, buffer, addr, size);
+    return retval;
 }
 
 int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
@@ -127,15 +127,14 @@ int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_
 	int retval = ERROR_OK;
 	uint32_t target_crc = 0, image_crc;
 	uint32_t fail_location;
-
+	LOG_INFO("dwcssi verify image count %x", count);
 	retval = image_calculate_checksum(buffer, count, &image_crc);
 	if (retval != ERROR_OK)
 		return retval;
 
 	retval = dwcmshc_checksum(emmc, buffer, addr, count, &target_crc);
 	if (retval != ERROR_OK)
-		return retval;
-
+		return retval;		
 	if (~image_crc != ~target_crc) {
 		LOG_ERROR("checksum image %x target %x", image_crc, target_crc);
 		fail_location = find_difference(emmc, buffer, count, addr);

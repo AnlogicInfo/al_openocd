@@ -9,3 +9,5 @@ cd build-linux64
     --enable-ftdi-oscan1 --enable-jtag_vpi --enable-ftdi-cjtag
 make -j4
 make install
+mkdir -p ${PWD}/../binary-linux64/share/openocd/loader/emmc
+cp -f ../contrib/loaders/flash/emmc/dwcmshc/build/*.elf ${PWD}/../binary-linux64/share/openocd/loader/emmc/

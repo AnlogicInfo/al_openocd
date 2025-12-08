@@ -6,6 +6,10 @@
  * Last Modified: 2022-11-08
  */
 #include "dwcmshc_subs.h"
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
 
 static int dwcmshc_wait_clk(struct emmc_device *emmc)
 {
@@ -662,84 +666,128 @@ int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ui
 	return ERROR_OK;
 }
 
-static const uint8_t riscv32_sync_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_32.inc"
-};
 
-static const uint8_t riscv64_sync_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_riscv_64.inc"
-};
-
-static const uint8_t aarch64_sync_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_sync_aarch_64.inc"
-};
-
-static const uint8_t riscv32_async_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_async_riscv_32.inc"
-};
-
-static const uint8_t riscv64_async_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_async_riscv_64.inc"
-};
-
-static const uint8_t aarch64_async_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_async_aarch_64.inc"
-};
 
 static struct code_src async_srcs[3] = 
 {
-	[RV64_SRC] = {riscv64_async_bin, sizeof(riscv64_async_bin)},
-	[RV32_SRC] = {riscv32_async_bin, sizeof(riscv32_async_bin)},
-	[AARCH64_SRC] = {aarch64_async_bin, sizeof(aarch64_async_bin)},
+    [RV64_SRC] = {NULL, 0},
+    [RV32_SRC] = {NULL, 0},
+    [AARCH64_SRC] = {NULL, 0},
 };
 
-static struct code_src sync_srcs[3] = 
+
+static int dwcmshc_try_load_elf_code_src(struct dwcmshc_emmc_controller *ctrl, enum work_mode mode, int arch_index, struct code_src *srcs)
 {
-	[RV64_SRC] = {riscv64_sync_bin, sizeof(riscv64_sync_bin)},
-	[RV32_SRC] = {riscv32_sync_bin, sizeof(riscv32_sync_bin)},
-	[AARCH64_SRC] = {aarch64_sync_bin, sizeof(aarch64_sync_bin)},
+    char path[256];
+    struct image img;
+    int retval;
+    uint64_t min_base = (uint64_t)(~0ULL);
+    uint64_t max_end = 0;
+    uint8_t *buf;
+    size_t read_sz;
+    const char *prefix;
+    const char *arch;
 
-};
+    if (mode == ASYNC_TRANS)
+        prefix = "emmc_async_";
+    /* sync write removed */
+    else
+        prefix = "emmc_crc_";
+
+    if (arch_index == RV64_SRC)
+        arch = "riscv_64";
+    else
+        arch = "aarch_64";
+
+    if (ctrl && ctrl->elf_dir && ctrl->elf_dir[0] != '\0') {
+        size_t len = strlen(ctrl->elf_dir);
+        bool need_sep = len > 0 && ctrl->elf_dir[len - 1] != '/' && ctrl->elf_dir[len - 1] != '\\';
+        snprintf(path, sizeof(path), "%s%s%s%s.elf",
+                 ctrl->elf_dir,
+                 need_sep ? "/" : "",
+                 prefix,
+                 arch);
+    } else {
+        snprintf(path, sizeof(path), "contrib/loaders/flash/emmc/dwcmshc/build/%s%s.elf", prefix, arch);
+    }
+	LOG_INFO("load elf from %s", path);
+    memset(&img, 0, sizeof(img));
+    retval = image_open(&img, path, "elf");
+    if (retval != ERROR_OK)
+        return ERROR_FAIL;
+
+    for (unsigned int i = 0; i < img.num_sections; i++) {
+        uint64_t base = img.sections[i].base_address;
+        uint64_t end = base + img.sections[i].size;
+        if (base < min_base)
+            min_base = base;
+        if (end > max_end)
+            max_end = end;
+    }
+
+    if (min_base == (uint64_t)(~0ULL) || max_end <= min_base) {
+        image_close(&img);
+        return ERROR_FAIL;
+    }
+
+    buf = malloc((size_t)(max_end - min_base));
+    if (!buf) {
+        image_close(&img);
+        return ERROR_FAIL;
+    }
+
+    for (unsigned int i = 0; i < img.num_sections; i++) {
+        uint64_t base = img.sections[i].base_address;
+        uint32_t size = img.sections[i].size;
+        retval = image_read_section(&img, i, 0, size, buf + (size_t)(base - min_base), &read_sz);
+        if (retval != ERROR_OK) {
+            free(buf);
+            image_close(&img);
+            return ERROR_FAIL;
+        }
+    }
+
+    srcs[arch_index].bin = buf;
+    srcs[arch_index].size = (int)(max_end - min_base);
+
+    image_close(&img);
+    return ERROR_OK;
+}
+
 
 
 int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, target_addr_t addr, int image_size)
 {
-	struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
-	struct flash_loader *loader = &driver_priv->flash_loader;
-	int block_addr = addr/emmc->device->block_size;
-	int retval;
-	loader->work_mode = ASYNC_TRANS;
-	loader->block_size = emmc->device->block_size;
-	loader->image_size = image_size;
-	loader->param_cnt = 6;
+    struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
+    struct flash_loader *loader = &driver_priv->flash_loader;
+    int block_addr = addr/emmc->device->block_size;
+    int retval;
+    loader->work_mode = ASYNC_TRANS;
+    loader->block_size = emmc->device->block_size;
+    loader->image_size = image_size;
+    loader->param_cnt = 6;
 
-	dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-	retval = loader_flash_write_async(loader, async_srcs, buffer, block_addr, image_size);
-	return retval;
+    int arch_index;
+    if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
+        arch_index = RV64_SRC;
+    } else {
+        arch_index = AARCH64_SRC;
+    }
+    struct code_src local_srcs[3] = {
+        async_srcs[0], async_srcs[1], async_srcs[2]
+    };
+    bool elf_loaded = (dwcmshc_try_load_elf_code_src(driver_priv, ASYNC_TRANS, arch_index, local_srcs) == ERROR_OK);
+    if (!elf_loaded)
+        return ERROR_FAIL;
+
+    dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+    dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+    retval = loader_flash_write_async(loader, local_srcs, buffer, block_addr, image_size);
+    if (elf_loaded)
+        free((void *)local_srcs[arch_index].bin);
+    return retval;
 }
 
-int dwcmshc_emmc_sync_write_image(struct emmc_device* emmc, uint8_t *buffer, target_addr_t addr, int image_size)
-{
-	struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
-	struct flash_loader *loader = &driver_priv->flash_loader;
-	int retval;
-
-	loader->work_mode = SYNC_TRANS;
-	loader->block_size = emmc->device->block_size;
-	loader->image_size = image_size;
-	loader->param_cnt = 5;
-
-	dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-
-	retval = loader_flash_write_sync(loader, sync_srcs, buffer, addr, image_size);
-
-	if (retval != ERROR_OK)
-		LOG_ERROR("dwcssi write sync error");
-
-	return retval;
-}
 
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
 {
@@ -757,40 +805,45 @@ int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uin
 	return retval;
 }
 
-static const uint8_t riscv32_crc_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_crc_riscv_32.inc"
-};
-
-static const uint8_t riscv64_crc_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_crc_riscv_64.inc"
-};
-
-static const uint8_t aarch64_crc_bin[] = {
-#include "../../../contrib/loaders/flash/emmc/dwcmshc/build/emmc_crc_aarch_64.inc"
-};
 
 static struct code_src crc_srcs[3] = 
 {
-	[RV64_SRC] = {riscv64_crc_bin, sizeof(riscv64_crc_bin)},
-	[RV32_SRC] = {riscv32_crc_bin, sizeof(riscv32_crc_bin)},
-	[AARCH64_SRC] = {aarch64_crc_bin, sizeof(aarch64_crc_bin)},
+    [RV64_SRC] = {NULL, 0},
+    [RV32_SRC] = {NULL, 0},
+    [AARCH64_SRC] = {NULL, 0},
 };
+
 
 int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc)
 {
-	int retval = ERROR_OK;
-	struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
-	struct flash_loader *loader = &driver_priv->flash_loader;
-	int block_addr = addr/emmc->device->block_size;
+    int retval = ERROR_OK;
+    struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
+    struct flash_loader *loader = &driver_priv->flash_loader;
+    int block_addr = addr/emmc->device->block_size;
 
-	dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-	dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+	// dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+	// dwcmshc_emmc_cmd_set_block_count(emmc, 1);
 
-	loader->work_mode = CRC_CHECK;
-	loader->block_size = emmc->device->block_size;
-	loader->image_size = count;
-	loader->param_cnt = 4;
+    loader->work_mode = CRC_CHECK;
+    loader->block_size = emmc->device->block_size;
+    loader->image_size = count;
+    loader->param_cnt = 4;
 
-	retval = loader_flash_crc(loader, crc_srcs, block_addr, crc);
-	return retval;
+    int arch_index;
+    if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
+        arch_index = RV64_SRC;
+    } else {
+        arch_index = AARCH64_SRC;
+    }
+    struct code_src local_srcs[3] = {
+        crc_srcs[0], crc_srcs[1], crc_srcs[2]
+    };
+    bool elf_loaded = (dwcmshc_try_load_elf_code_src(driver_priv, CRC_CHECK, arch_index, local_srcs) == ERROR_OK);
+    if (!elf_loaded)
+        return ERROR_FAIL;
+
+    retval = loader_flash_crc(loader, local_srcs, block_addr, crc);
+    if (elf_loaded)
+        free((void *)local_srcs[arch_index].bin);
+    return retval;
 }

@@ -343,7 +343,6 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 	struct target *target;
 	int retval;
 
-	LOG_INFO("get target");
 	if (CMD_ARGC < 2)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	target = get_target(CMD_ARGV[1]);
@@ -351,8 +350,6 @@ static COMMAND_HELPER(create_emmc_device, const char *bank_name,
 		LOG_ERROR("invalid target %s", CMD_ARGV[1]);
 		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
-
-	LOG_INFO("register cmd");
 
 	if (controller->commands) {
 		retval = register_commands(CMD_CTX, NULL, controller->commands);

@@ -68,12 +68,13 @@ typedef union
 } AL_MMC_Cmd6ArgUnion;
 
 struct dwcmshc_emmc_controller {
-	bool                probed;
-	uint8_t             io_location;
-	target_addr_t       ctrl_base;
-	dwcmshc_cmd_pkt_t   ctrl_cmd;
-	uint32_t            io_bank_pwr;
-	struct flash_loader flash_loader;
+    bool                probed;
+    uint8_t             io_location;
+    target_addr_t       ctrl_base;
+    dwcmshc_cmd_pkt_t   ctrl_cmd;
+    uint32_t            io_bank_pwr;
+    struct flash_loader flash_loader;
+    char               *elf_dir;
 };
 
 
@@ -123,7 +124,6 @@ int dwcmshc_emmc_set_clk_ctrl(struct emmc_device *emmc, bool mode, uint32_t div)
 
 int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, target_addr_t addr, int image_size);
 
-int dwcmshc_emmc_sync_write_image(struct emmc_device* emmc, uint8_t *buffer, target_addr_t addr, int image_size);
 
 int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
