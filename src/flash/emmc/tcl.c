@@ -127,7 +127,8 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 			emmc_fileio_cleanup(&s);
 			return retval;
 		}
-
+		LOG_INFO("write image section %u of %u block " TARGET_ADDR_FMT " size 0x%zx",
+			i, s.image.num_sections, s.image.sections[i].base_address, write_size);
 		retval = emmc_write_image(emmc, s.block, s.image.sections[i].base_address, write_size);
 
 		if (retval != ERROR_OK) {

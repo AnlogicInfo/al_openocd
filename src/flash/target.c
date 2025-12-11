@@ -1224,9 +1224,6 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         int32_t this_bytes  = this_blocks * block_size;
 
         // 写入数据
-        LOG_INFO("pp fifo data head: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
-            buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-            buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15]);
         retval = target_write_buffer(trans_target, buf_start, this_bytes, buffer);
         if (retval != ERROR_OK) break;
 
@@ -2570,6 +2567,8 @@ static int target_restore_working_area(struct target *target, struct working_are
 	int retval = ERROR_OK;
 
 	if (target->backup_working_area && area->backup) {
+		LOG_INFO("restoring working area " TARGET_ADDR_FMT "-" TARGET_ADDR_FMT " (%" PRIu32 " bytes)",
+			area->address, area->address + area->size - 1, area->size);
 		retval = target_write_memory(target, area->address, 4, area->size / 4, area->backup);
 		if (retval != ERROR_OK)
 			LOG_ERROR("failed to restore %" PRIu32 " bytes of working area at address " TARGET_ADDR_FMT,
