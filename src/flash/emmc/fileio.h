@@ -13,6 +13,10 @@ struct emmc_fileio_state
 	bool file_opened;
 	struct fileio *fileio;
 	struct duration bench;
+	uint32_t *section_block_addrs;
+	uint32_t *section_offsets_blocks;
+	uint32_t *section_sizes_blocks;
+	unsigned int section_count;
 };
 
 

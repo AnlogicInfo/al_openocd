@@ -292,6 +292,37 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 	return retval;
 }
 
+int loader_flash_write_async_pp(struct flash_loader *loader, struct code_src *srcs,
+		const uint8_t *data, target_addr_t addr, int image_size)
+{
+	uint32_t image_block_cnt;
+	int retval;
+
+	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
+	LOG_INFO("loader write async size %x, block cnt %x", loader->image_size, image_block_cnt);
+	retval = loader_init(loader, srcs);
+	if (retval != ERROR_OK)
+		return ERROR_FAIL;
+	loader_set_wa(loader, addr, data);
+
+	{
+		uint32_t ctrl = 1U;
+		uint32_t next = (uint32_t)addr;
+		target_write_buffer(loader->trans_target, loader->buf_start + 4 * sizeof(uint32_t), sizeof(ctrl), (const uint8_t *)&ctrl);
+		target_write_buffer(loader->trans_target, loader->buf_start + 5 * sizeof(uint32_t), sizeof(next), (const uint8_t *)&next);
+	}
+
+	retval = target_run_async_algorithm_ping_pong(
+		loader->trans_target, loader->exec_target,
+		data, image_block_cnt, loader->block_size,
+		0, NULL, loader->param_cnt, loader->reg_params,
+		loader->buf_start, loader->data_size, 
+		loader->copy_area->address, 0, loader->arch_info);
+
+	loader_exit(loader, RESTORE);
+	return retval;
+};
+
 int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 		const uint8_t *data, target_addr_t addr, int image_size)
 {
@@ -305,21 +336,15 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 		return ERROR_FAIL;
 	loader_set_wa(loader, addr, data);
 
-	// retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
-	// data, image_block_cnt, loader->block_size,
-	// 0, NULL, loader->param_cnt, loader->reg_params,
-	// loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
-
-	retval = target_run_async_algorithm_ping_pong(
-		loader->trans_target, loader->exec_target,
-		data, image_block_cnt, loader->block_size,
-		0, NULL, loader->param_cnt, loader->reg_params,
-		loader->buf_start, loader->data_size, 
-		loader->copy_area->address, 0, loader->arch_info);
+	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
+	data, image_block_cnt, loader->block_size,
+	0, NULL, loader->param_cnt, loader->reg_params,
+	loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);
 	return retval;
 };
+
 
 int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, uint32_t* target_crc)
 {

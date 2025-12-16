@@ -1033,6 +1033,9 @@ static int target_async_algorithm_init_ping_pong_fifo(
 
     pp->buf0_flag_addr = buffer_start;
     pp->buf1_flag_addr = buffer_start + 4;
+    pp->ctrl_flag_addr = buffer_start + 4 * sizeof(uint32_t);
+    pp->section_start_ptr = buffer_start + 5 * sizeof(uint32_t);
+	pp->section_size_ptr = buffer_start + 6 * sizeof(uint32_t);
 	pp->buf0_start_addr = buffer_start + 8;
 	pp->buf1_start_addr = buffer_start + 0xC;
 	pp->buf2_start_addr = buffer_start + 0x10;
@@ -1048,7 +1051,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
 
     pp->prod_idx = 0;
 
-	LOG_INFO("init pp fifo buf size %x half size %x buf0 start %x buf1 start %x", 
+    LOG_INFO("init pp fifo buf size %x half size %x buf0 start %x buf1 start %x", 
 			  pp->buf_size, pp->half_size,
 			  pp->buf0_start, pp->buf1_start);
     // 清零两个标志，表示两个缓冲都空闲
@@ -1061,6 +1064,50 @@ static int target_async_algorithm_init_ping_pong_fifo(
     return retval;
 }
 
+struct mailbox_section {
+    uint32_t buf_offset_blocks;
+    uint32_t section_start_addr;
+    uint32_t size_blocks;
+};
+static struct {
+    struct mailbox_section *list;
+    unsigned int count;
+} g_mailbox = { NULL, 0 };
+
+int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_t *section_start_addrs, const uint32_t *size_blocks, unsigned int count)
+{
+    LOG_INFO("target_set_mailbox_sections called: buf_offset_blocks %p, section_start_addrs %p, size_blocks %p, count %u",
+             buf_offset_blocks, section_start_addrs, size_blocks, count);
+    if (g_mailbox.list) {
+        LOG_INFO("clearing previous mailbox, count %u", g_mailbox.count);
+        free(g_mailbox.list);
+        g_mailbox.list = NULL;
+    }
+    g_mailbox.count = 0;
+    if (!buf_offset_blocks || !section_start_addrs || !size_blocks || count == 0) {
+        LOG_INFO("no mailbox sections, buf_offset_blocks %p, section_start_addrs %p, size_blocks %p, count %u",
+                 buf_offset_blocks, section_start_addrs, size_blocks, count);
+        return ERROR_OK;
+    }
+    g_mailbox.list = (struct mailbox_section *)malloc(sizeof(struct mailbox_section) * count);
+    if (!g_mailbox.list) {
+        LOG_ERROR("failed to malloc mailbox sections, count %u", count);
+        return ERROR_FAIL;
+    }
+    LOG_INFO("allocated mailbox list for %u sections", count);
+    for (unsigned int i = 0; i < count; i++) {
+        g_mailbox.list[i].buf_offset_blocks   = buf_offset_blocks[i];
+        g_mailbox.list[i].section_start_addr  = section_start_addrs[i];
+        g_mailbox.list[i].size_blocks         = size_blocks[i];
+    }
+    g_mailbox.count = count;
+    LOG_INFO("mailbox configured: count %u", g_mailbox.count);
+    for (unsigned int i = 0; i < g_mailbox.count; i++) {
+        LOG_INFO("Mailbox section %u: buf_offset_blocks=%" PRIu32 ", section_start_addr=0x%" PRIx32 ", size_blocks=%" PRIu32,
+                 i, g_mailbox.list[i].buf_offset_blocks, g_mailbox.list[i].section_start_addr, g_mailbox.list[i].size_blocks);
+    }
+    return ERROR_OK;
+}
 
 static int target_async_algorithm_trans_data(struct target *trans_target, const uint8_t *buffer, int count, uint32_t block_size, struct async_fifo *fifo)
 {
@@ -1185,12 +1232,49 @@ static int target_ping_pong_trans_data(struct target *trans_target,
     int timeout = 0;
 	int total_cnt = count;
 	int cur_cnt = 0;
+	int remain_section_blks =  0;
     int32_t buf_blocks = pp->half_size / block_size;
     unsigned int batch_cnt = 0;
+    unsigned int mb_index = 0;
 
-	
+    while (count > 0) {			
+		if (remain_section_blks == 0) {
+			LOG_INFO("cur section %x section blocks %x ", mb_index,  g_mailbox.list[mb_index].size_blocks);
+			uint32_t ctrl = 1U;
+            target_write_u32(trans_target, pp->section_start_ptr, g_mailbox.list[mb_index].section_start_addr);
+			target_write_u32(trans_target, pp->section_size_ptr, g_mailbox.list[mb_index].size_blocks);
+            target_write_u32(trans_target, pp->ctrl_flag_addr, ctrl);
+            LOG_INFO("update mail box addr %x size %x ", g_mailbox.list[mb_index].section_start_addr, g_mailbox.list[mb_index].size_blocks);
+			/* 等待 loader 侧读取并清除 ctrl_flag，防止段信息被后续更新覆盖 */
+			{
+				uint32_t ack = 1U;
+				timeout = 0;
+				LOG_INFO("wait loader ack ctrl_flag at %x", pp->ctrl_flag_addr);
+				do {
+					retval = target_read_u32(trans_target, pp->ctrl_flag_addr, &ack);
+					if (retval != ERROR_OK)
+						break;
+					if (ack != 0U) {
+						alive_sleep(2);
+						if (timeout++ >= 2500) {
+							LOG_ERROR("timeout waiting loader to ack mailbox ctrl_flag");
+							return ERROR_FLASH_OPERATION_FAILED;
+						}
+						if ((timeout & 0x7F) == 0)
+							LOG_INFO("waiting ack ctrl_flag, read %x tries %d", ack, timeout);
+						continue;
+					}
+					timeout = 0;
+					break;
+				} while (1);
+				if (retval != ERROR_OK)
+					break;
+			}
+			remain_section_blks = g_mailbox.list[mb_index].size_blocks;
+			mb_index++;
+        }
 
-    while (count > 0) {
+
         // 选择当前写缓冲
         uint32_t flag_addr = (pp->prod_idx == 0) ? pp->buf0_flag_addr : pp->buf1_flag_addr;
         uint32_t buf_start = (pp->prod_idx == 0) ? pp->buf0_start     : pp->buf1_start;
@@ -1200,6 +1284,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 		cur_cnt = total_cnt - count;
 		LOG_PROC(cur_cnt, total_cnt);
 
+		LOG_INFO("wait free buffer idx %d flag_addr %x", pp->prod_idx, flag_addr);
 		do {
             retval = target_read_u32(trans_target, flag_addr, &flag);
             if (retval != ERROR_OK) break;
@@ -1211,6 +1296,8 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 					LOG_INFO("read flag 0x%" PRIx32 " addr 0x%" PRIx32, flag, flag_addr);
                     return ERROR_FLASH_OPERATION_FAILED;
                 }
+				if ((timeout & 0x7F) == 0)
+					LOG_INFO("buffer busy idx %d flag %x tries %d", pp->prod_idx, flag, timeout);
                 continue;
             }
             timeout = 0;
@@ -1220,25 +1307,58 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         if (retval != ERROR_OK) break;
 
         // 本次填充的块数：不超过缓冲容量与剩余块数
-        int32_t this_blocks = (count < buf_blocks) ? count : buf_blocks;
+        int32_t this_blocks = 0;
+
+        // 如果配置了 mailbox，确保传输不跨越 section 边界
+		if (remain_section_blks > buf_blocks)
+			this_blocks = buf_blocks;
+		else
+			this_blocks = remain_section_blks;
+		LOG_INFO("compute this_blocks: remain %x buf_blocks %x -> %x", remain_section_blks, buf_blocks, this_blocks);
+		if (remain_section_blks == 1)
+			LOG_INFO("last block of section %x", mb_index - 1);
+		
         int32_t this_bytes  = this_blocks * block_size;
 
         // 写入数据
-        LOG_INFO("pp fifo data head: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
-            buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-            buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15]);
         retval = target_write_buffer(trans_target, buf_start, this_bytes, buffer);
         if (retval != ERROR_OK) break;
 
         // 置位就绪标志（写入有效块数，目标端可据此处理最后一包）
         retval = target_write_u32(trans_target, flag_addr, this_blocks);
         if (retval != ERROR_OK) break;
+		LOG_INFO("set buffer idx %d ready blocks %x at %x", pp->prod_idx, this_blocks, flag_addr);
 
         // 更新计数与指针，翻转到另一半缓冲
         buffer   += this_bytes;
         count    -= this_blocks;
+		remain_section_blks -= this_blocks;
+
+		/* If current section is done, wait for loader to consume the last buffer.
+		 * Otherwise, updating mailbox in the next iteration could cause race condition
+		 * where loader processes old data with new section info.
+		 */
+		if (remain_section_blks == 0) {
+			uint32_t wait_flag = 0;
+			timeout = 0;
+			LOG_INFO("wait loader consume last buffer idx %d addr %x", pp->prod_idx, flag_addr);
+			do {
+				retval = target_read_u32(trans_target, flag_addr, &wait_flag);
+				if (retval != ERROR_OK) break;
+				if (wait_flag == 0) break;
+				alive_sleep(2);
+				if (timeout++ >= 2500) {
+					LOG_ERROR("timeout waiting for loader to consume last section buffer");
+					return ERROR_FLASH_OPERATION_FAILED;
+				}
+				if ((timeout & 0x7F) == 0)
+					LOG_INFO("waiting consume flag %x tries %d", wait_flag, timeout);
+			} while (1);
+			if (retval != ERROR_OK) break;
+		}
+
         pp->prod_idx ^= 1;
-		LOG_INFO("pp fifo trans batch %u, %X blocks, remain %X blocks", ++batch_cnt, this_blocks, count);
+		LOG_INFO("pp fifo trans batch %u, %X blocks, remain section %x total %X blocks", ++batch_cnt, this_blocks, remain_section_blks, count);
 
         keep_alive();
     }

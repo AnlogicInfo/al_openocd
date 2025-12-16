@@ -95,8 +95,9 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 {
 	struct emmc_device *emmc = NULL;
 	struct emmc_fileio_state s;
-	size_t buf_cnt;
-	size_t write_size;
+	size_t buf_cnt = 0;
+	size_t write_size = 0;
+	size_t total_write_size = 0;
 	int retval;
 
 	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
@@ -104,42 +105,79 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 	if(retval != ERROR_OK) 
 		return retval;
 
-	/* write image per section */
-	for (unsigned int i = 0; i < s.image.num_sections; i++) {
-		if (s.image.sections[i].size % s.block_size != 0) {
-			if (s.image.num_sections == 1)
-				write_size = (s.image.sections[i].size / s.block_size + 1) * s.block_size;
-			else {
-				LOG_ERROR("section size is not block aligned");
-				emmc_fileio_cleanup(&s);
-				return ERROR_FAIL;
-			}
-		} else
-			write_size = s.image.sections[i].size;
-
-		s.block = malloc(write_size);
-
-		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block, &buf_cnt);
-
-		if (retval != ERROR_OK) {
-			LOG_ERROR("read section fail");
-			free(s.block);
+	/* concatenate sections into one buffer and prepare mailbox boundaries */
+	s.section_block_addrs = NULL;
+	s.section_offsets_blocks = NULL;
+	s.section_sizes_blocks = NULL;
+	if (s.image.num_sections > 0) {
+		s.section_block_addrs = (uint32_t *)calloc(s.image.num_sections, sizeof(uint32_t));
+		s.section_offsets_blocks = (uint32_t *)calloc(s.image.num_sections, sizeof(uint32_t));
+		s.section_sizes_blocks = (uint32_t *)calloc(s.image.num_sections, sizeof(uint32_t));
+		if (!s.section_block_addrs || !s.section_offsets_blocks || !s.section_sizes_blocks) {
+			free(s.section_block_addrs);
+			free(s.section_offsets_blocks);
+			free(s.section_sizes_blocks);
 			emmc_fileio_cleanup(&s);
-			return retval;
+			return ERROR_FAIL;
 		}
-		LOG_INFO("write image section %u of %u block " TARGET_ADDR_FMT " size 0x%zx",
-			i, s.image.num_sections, s.image.sections[i].base_address, write_size);
-		retval = emmc_write_image(emmc, s.block, s.image.sections[i].base_address, write_size);
-
-		if (retval != ERROR_OK) {
-			LOG_ERROR("write image fail");
-			free(s.block);
-			emmc_fileio_cleanup(&s);
-			return retval;
-		}
-
-		free(s.block);
 	}
+
+	s.block = NULL;
+	for (unsigned int i = 0; i < s.image.num_sections; i++) {
+		size_t sz = s.image.sections[i].size;
+		if (sz % s.block_size != 0)
+			write_size = (sz / s.block_size + 1) * s.block_size;
+		else
+			write_size = sz;
+		s.section_block_addrs[i] = (uint32_t)(s.image.sections[i].base_address / s.block_size);
+		s.section_offsets_blocks[i] = (uint32_t)(total_write_size / s.block_size);
+		s.section_sizes_blocks[i] = (uint32_t)(write_size / s.block_size);
+
+		uint8_t *tmp = (uint8_t *)realloc(s.block, total_write_size + write_size);
+		if (!tmp) {
+			free(s.block);
+			free(s.section_block_addrs);
+			free(s.section_offsets_blocks);
+			free(s.section_sizes_blocks);
+			emmc_fileio_cleanup(&s);
+			return ERROR_FAIL;
+		}
+		s.block = tmp;
+
+		retval = image_read_section(&s.image, i, 0x0, s.image.sections[i].size, s.block + total_write_size, &buf_cnt);
+		if (retval != ERROR_OK) {
+			free(s.block);
+			free(s.section_block_addrs);
+			free(s.section_offsets_blocks);
+			free(s.section_sizes_blocks);
+			emmc_fileio_cleanup(&s);
+			return retval;
+		}
+		if (buf_cnt < s.image.sections[i].size)
+			memset(s.block + total_write_size + buf_cnt, 0xff, write_size - buf_cnt);
+		LOG_INFO("section %x write_size %"PRIx64, i, write_size);
+		total_write_size += write_size;
+	}
+
+	LOG_INFO("num_sections %d", s.image.num_sections);
+	unsigned int mb_count = s.image.num_sections;
+	LOG_INFO("config mailbox sections count %u", mb_count);
+	{
+		int ms_ret = target_set_mailbox_sections(s.section_offsets_blocks, s.section_block_addrs, s.section_sizes_blocks, mb_count);
+		LOG_INFO("target_set_mailbox_sections returned %d", ms_ret);
+	}
+
+	retval = emmc_write_image(emmc, s.block, (uint32_t)s.image.sections[0].base_address, (int)total_write_size);
+
+	{
+		int ms_ret2 = target_set_mailbox_sections(NULL, NULL, NULL, 0);
+		LOG_INFO("target_set_mailbox_sections(clear) returned %d", ms_ret2);
+	}
+
+	free(s.block);
+	free(s.section_block_addrs);
+	free(s.section_offsets_blocks);
+	free(s.section_sizes_blocks);
 
 	if (emmc_fileio_finish(&s) == ERROR_OK) {
 		command_print(CMD, "wrote file %s to EMMC flash %d up to "

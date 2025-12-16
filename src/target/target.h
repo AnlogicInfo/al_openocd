@@ -376,19 +376,26 @@ struct async_fifo {
 struct ping_pong_fifo {
     uint32_t buf_size;       // 整个数据区大小（不含2个标志）
     uint32_t half_size;      // 每个乒乓缓冲大小
-    uint32_t buf0_flag_addr;
+
+    uint32_t ctrl_flag_addr;
+    uint32_t section_start_ptr;
+	uint32_t section_size_ptr;
+
+	uint32_t buf0_flag_addr;
     uint32_t buf1_flag_addr;
-	uint32_t buf0_start_addr;
-	uint32_t buf1_start_addr;
-	uint32_t buf2_start_addr;
+
+    uint32_t buf0_start_addr;
+    uint32_t buf1_start_addr;
+    uint32_t buf2_start_addr;
     uint32_t buf0_start;
     uint32_t buf0_end;
     uint32_t buf1_start;
     uint32_t buf1_end;
-	uint32_t buf2_start;
+    uint32_t buf2_start;
     uint32_t prod_idx;       // 0或1，当前主机写入的缓冲索引
 };
 
+int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_t *section_start_addrs, const uint32_t *size_blocks, unsigned int count);
 int target_register_commands(struct command_context *cmd_ctx);
 int target_examine(void);
 

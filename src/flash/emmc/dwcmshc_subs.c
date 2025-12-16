@@ -886,7 +886,7 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
 
     dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    retval = loader_flash_write_async(loader, local_srcs, buffer, block_addr, image_size);
+    retval = loader_flash_write_async_pp(loader, local_srcs, buffer, block_addr, image_size);
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
     return retval;
