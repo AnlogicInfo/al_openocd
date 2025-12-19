@@ -364,9 +364,9 @@ typedef struct {
 
 typedef struct {
 	Sparse_Chdr *chunk_header;
-	uint32_t input_offset;
-	uint32_t output_offset;
-	uint32_t size;
+	uint64_t input_offset;
+	uint64_t output_offset;
+	uint64_t size;
 	uint8_t  data_flag;
 } Sparse_Chk;
 
