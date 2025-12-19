@@ -1032,13 +1032,13 @@ static int target_async_algorithm_init_ping_pong_fifo(
     pp->half_size = pp->buf_size / 2;
 
     pp->buf0_flag_addr = buffer_start;
-    pp->buf1_flag_addr = buffer_start + 4;
-    pp->ctrl_flag_addr = buffer_start + 4 * sizeof(uint32_t);
-    pp->section_start_ptr = buffer_start + 5 * sizeof(uint32_t);
-	pp->section_size_ptr = buffer_start + 6 * sizeof(uint32_t);
-	pp->buf0_start_addr = buffer_start + 8;
-	pp->buf1_start_addr = buffer_start + 0xC;
-	pp->buf2_start_addr = buffer_start + 0x10;
+    pp->buf1_flag_addr = buffer_start + 0x40;
+    pp->ctrl_flag_addr = buffer_start + 0x80;
+    pp->section_start_ptr = buffer_start + 0xC0;
+	pp->section_size_ptr = buffer_start + 0x100;
+	pp->buf0_start_addr = buffer_start + 0x140;
+	pp->buf1_start_addr = buffer_start + 0x180;
+	pp->buf2_start_addr = buffer_start + 0x1C0;
 
 	if(exec_target->ddr_en)
     	pp->buf0_start = 0;
@@ -1327,7 +1327,24 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         // 置位就绪标志（写入有效块数，目标端可据此处理最后一包）
         retval = target_write_u32(trans_target, flag_addr, this_blocks);
         if (retval != ERROR_OK) break;
+        {
+            uint32_t verify_flag = 0;
+            retval = target_read_u32(trans_target, flag_addr, &verify_flag);
+            if (retval != ERROR_OK) break;
+            if (verify_flag != (uint32_t)this_blocks) {
+                LOG_WARNING("flag write verify mismatch: wrote %x read %x at %x", this_blocks, verify_flag, flag_addr);
+                retval = target_write_u32(trans_target, flag_addr, this_blocks);
+                if (retval != ERROR_OK) break;
+                retval = target_read_u32(trans_target, flag_addr, &verify_flag);
+                if (retval != ERROR_OK) break;
+                if (verify_flag != (uint32_t)this_blocks) {
+                    LOG_ERROR("flag write verify failed: wrote %x read %x at %x", this_blocks, verify_flag, flag_addr);
+                    return ERROR_FLASH_OPERATION_FAILED;
+                }
+            }
+        }
 		LOG_INFO("set buffer idx %d ready blocks %x at %x", pp->prod_idx, this_blocks, flag_addr);
+		
 
         // 更新计数与指针，翻转到另一半缓冲
         buffer   += this_bytes;
