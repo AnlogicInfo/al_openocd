@@ -62,7 +62,7 @@ COMMAND_HANDLER(handle_emmc_probe_command)
 
 COMMAND_HANDLER(handle_emmc_write_block_command)
 {
-	uint32_t addr=0;
+	uint64_t addr=0;
 	uint8_t *buffer;
 
 	// struct duration bench;
@@ -167,7 +167,7 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 		LOG_INFO("target_set_mailbox_sections returned %d", ms_ret);
 	}
 
-	retval = emmc_write_image(emmc, s.block, (uint32_t)s.image.sections[0].base_address, (int)total_write_size);
+	retval = emmc_write_image(emmc, s.block, s.image.sections[0].base_address, (int)total_write_size);
 
 	{
 		int ms_ret2 = target_set_mailbox_sections(NULL, NULL, NULL, 0);

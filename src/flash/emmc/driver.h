@@ -8,6 +8,7 @@
 
 #ifndef OPENOCD_FLASH_EMMC_DRIVER_H
 #define OPENOCD_FLASH_EMMC_DRIVER_H
+#include <stdint.h>
 
 struct emmc_device;
 #define __EMMC_DEVICE_COMMAND(name) \
@@ -34,25 +35,25 @@ struct emmc_flash_controller {
 	/** Reset the EMMC device. */
 	int (*reset)(struct emmc_device *emmc);
 
-	int (*command)(struct emmc_device *emmc, uint8_t command, uint32_t argument);
+    int (*command)(struct emmc_device *emmc, uint8_t command, uint32_t argument);
 
-	// int (*read_resp)(struct emmc_device *emmc, uint8_t resp_len, uint32_t* resp_buf);
+    // int (*read_resp)(struct emmc_device *emmc, uint8_t resp_len, uint32_t* resp_buf);
 
-	/** Write a block of data to the EMMC device. */
+    /** Write a block of data to the EMMC device. */
 	int (*write_block_data)(struct emmc_device *emmc, uint32_t *data, uint32_t addr);
 
-	/** Write image to the EMMC device. */
-	int (*write_image)(struct emmc_device *emmc, uint8_t *data, uint32_t addr, int size);	
+    /** Write image to the EMMC device. */
+    int (*write_image)(struct emmc_device *emmc, uint8_t *data, uint64_t addr, int size);	
 
-	/** Read a block of data from the EMMC device. */
+    /** Read a block of data from the EMMC device. */
 	int (*read_block_data)(struct emmc_device *emmc, uint32_t *data, uint32_t addr);
 
-	int (*verify_image)(struct emmc_device *emmc, const uint8_t *data, uint32_t addr, uint32_t count);
+    int (*verify_image)(struct emmc_device *emmc, const uint8_t *data, uint64_t addr, uint32_t count);
 
-	/* Erase entire EMMC device. */
-	int (*erase)(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block);
+    /* Erase entire EMMC device. */
+    int (*erase)(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block);
 
-	/** Check if the EMMC device is ready for more instructions with timeout. */
+    /** Check if the EMMC device is ready for more instructions with timeout. */
 	int (*emmc_ready)(struct emmc_device *emmc, int timeout);
 };
 

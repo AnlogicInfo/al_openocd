@@ -210,13 +210,13 @@ int emmc_read_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t ad
 }
 
 
-int emmc_write_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size)
+int emmc_write_image(struct emmc_device *emmc, uint8_t *buffer, uint64_t addr, int size)
 {
 	emmc->controller->write_image(emmc, buffer, addr, size);
 	return ERROR_OK;
 }
 
-int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size)
+int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint64_t addr, int size)
 {
 	int retval;
 	retval = emmc->controller->verify_image(emmc, buffer, addr, size);

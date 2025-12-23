@@ -87,7 +87,7 @@ int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_
 }
 
 
-int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size)
+int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint64_t addr, int size)
 {
     int retval = ERROR_OK;
 
@@ -121,7 +121,7 @@ static int find_difference(struct emmc_device *emmc, const uint8_t *buffer, uint
 		return find_difference(emmc, buffer + half, size - half, offset + half);
 }
 
-int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count)
+int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint64_t addr, uint32_t count)
 {
 	int retval = ERROR_OK;
 	uint32_t target_crc = 0, image_crc;

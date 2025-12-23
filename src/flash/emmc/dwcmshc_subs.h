@@ -11,6 +11,7 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+#include <stdint.h>
 
 
 #include "dwcmshc_regs.h"
@@ -128,14 +129,14 @@ int slow_dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, ui
 int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
 int dwcmshc_emmc_erase_range(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block);
 
-int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc);
+int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t addr, uint32_t count, uint32_t* crc);
 
 int dwcmshc_emmc_init(struct emmc_device *emmc, uint32_t* in_field);
 int dwcmshc_emmc_reset(struct emmc_device *emmc);
 int dwcmshc_emmc_write_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
-int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint32_t addr, int size);
+int dwcmshc_emmc_write_image(struct emmc_device* emmc, uint8_t *buffer, uint64_t addr, int size);
 int dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr);
-int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count);
+int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint64_t addr, uint32_t count);
 int dwcmshc_emmc_ready(struct emmc_device *emmc, int timeout);
 
 #endif
