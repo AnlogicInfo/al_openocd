@@ -1101,11 +1101,6 @@ int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_
         g_mailbox.list[i].size_blocks         = size_blocks[i];
     }
     g_mailbox.count = count;
-    LOG_INFO("mailbox configured: count %u", g_mailbox.count);
-    for (unsigned int i = 0; i < g_mailbox.count; i++) {
-        LOG_INFO("Mailbox section %u: buf_offset_blocks=%" PRIu32 ", section_start_addr=0x%" PRIx32 ", size_blocks=%" PRIu32,
-                 i, g_mailbox.list[i].buf_offset_blocks, g_mailbox.list[i].section_start_addr, g_mailbox.list[i].size_blocks);
-    }
     return ERROR_OK;
 }
 
@@ -1234,22 +1229,18 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 	int cur_cnt = 0;
 	int remain_section_blks =  0;
     int32_t buf_blocks = pp->half_size / block_size;
-    unsigned int batch_cnt = 0;
     unsigned int mb_index = 0;
 
     while (count > 0) {			
 		if (remain_section_blks == 0) {
-			LOG_INFO("cur section %x section blocks %x ", mb_index,  g_mailbox.list[mb_index].size_blocks);
 			uint32_t ctrl = 1U;
             target_write_u32(trans_target, pp->section_start_ptr, g_mailbox.list[mb_index].section_start_addr);
 			target_write_u32(trans_target, pp->section_size_ptr, g_mailbox.list[mb_index].size_blocks);
             target_write_u32(trans_target, pp->ctrl_flag_addr, ctrl);
-            LOG_INFO("update mail box addr %x size %x ", g_mailbox.list[mb_index].section_start_addr, g_mailbox.list[mb_index].size_blocks);
 			/* 等待 loader 侧读取并清除 ctrl_flag，防止段信息被后续更新覆盖 */
 			{
 				uint32_t ack = 1U;
 				timeout = 0;
-				LOG_INFO("wait loader ack ctrl_flag at %x", pp->ctrl_flag_addr);
 				do {
 					retval = target_read_u32(trans_target, pp->ctrl_flag_addr, &ack);
 					if (retval != ERROR_OK)
@@ -1273,18 +1264,14 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 			remain_section_blks = g_mailbox.list[mb_index].size_blocks;
 			mb_index++;
         }
-
-
         // 选择当前写缓冲
         uint32_t flag_addr = (pp->prod_idx == 0) ? pp->buf0_flag_addr : pp->buf1_flag_addr;
         uint32_t buf_start = (pp->prod_idx == 0) ? pp->buf0_start     : pp->buf1_start;
-		LOG_DEBUG("prod_idx %d flag_addr 0x%" PRIx32 " buf_start 0x%" PRIx32, pp->prod_idx, flag_addr, buf_start);
         // 等待该缓冲空闲（flag == 0）
         uint32_t flag = 0;
 		cur_cnt = total_cnt - count;
 		LOG_PROC(cur_cnt, total_cnt);
 
-		LOG_INFO("wait free buffer idx %d flag_addr %x", pp->prod_idx, flag_addr);
 		do {
             retval = target_read_u32(trans_target, flag_addr, &flag);
             if (retval != ERROR_OK) break;
@@ -1314,9 +1301,6 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 			this_blocks = buf_blocks;
 		else
 			this_blocks = remain_section_blks;
-		LOG_INFO("compute this_blocks: remain %x buf_blocks %x -> %x", remain_section_blks, buf_blocks, this_blocks);
-		if (remain_section_blks == 1)
-			LOG_INFO("last block of section %x", mb_index - 1);
 		
         int32_t this_bytes  = this_blocks * block_size;
 
@@ -1342,9 +1326,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
                     return ERROR_FLASH_OPERATION_FAILED;
                 }
             }
-        }
-		LOG_INFO("set buffer idx %d ready blocks %x at %x", pp->prod_idx, this_blocks, flag_addr);
-		
+        }		
 
         // 更新计数与指针，翻转到另一半缓冲
         buffer   += this_bytes;
@@ -1358,7 +1340,6 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 		if (remain_section_blks == 0) {
 			uint32_t wait_flag = 0;
 			timeout = 0;
-			LOG_INFO("wait loader consume last buffer idx %d addr %x", pp->prod_idx, flag_addr);
 			do {
 				retval = target_read_u32(trans_target, flag_addr, &wait_flag);
 				if (retval != ERROR_OK) break;
@@ -1375,12 +1356,10 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 		}
 
         pp->prod_idx ^= 1;
-		LOG_INFO("pp fifo trans batch %u, %X blocks, remain section %x total %X blocks", ++batch_cnt, this_blocks, remain_section_blks, count);
 
         keep_alive();
     }
 
-	LOG_INFO("pp fifo trans done");
     if (retval != ERROR_OK) {
         // 主机异常终止，两个标志置为特殊值（或保留现有约定）
         LOG_ERROR("target ping-pong trans data fail");
