@@ -886,7 +886,7 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
 
     dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    retval = loader_flash_write_async(loader, local_srcs, buffer, block_addr, image_size);
+    retval = loader_flash_write_async_pp(loader, local_srcs, buffer, block_addr, image_size);
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
     return retval;
@@ -918,12 +918,12 @@ static struct code_src crc_srcs[3] =
 };
 
 
-int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint32_t addr, uint32_t count, uint32_t* crc)
+int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t addr, uint32_t count, uint32_t* crc)
 {
     int retval = ERROR_OK;
     struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
     struct flash_loader *loader = &driver_priv->flash_loader;
-    int block_addr = addr/emmc->device->block_size;
+    int block_addr = (int)(addr/emmc->device->block_size);
 
 	// dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
 	// dwcmshc_emmc_cmd_set_block_count(emmc, 1);

@@ -51,6 +51,16 @@ static struct emmc_info emmc_flash_ids[] =
     {0, 0, 0, 0, 0, NULL},
     {0, 0, 0x200, 0, 0, "Compatible Mode"},
 };
+
+static struct emmc_info *emmc_get_compatible_info(void)
+{
+    int i = 0;
+    while (emmc_flash_ids[i].name) {
+        i++;
+    }
+    /* i now points to the sentinel entry (name == NULL), next is compatible */
+    return &emmc_flash_ids[i + 1];
+}
 /**
  * Returns the flash bank specified by @a name, which matches the
  * driver name and a suffix (option) specify the driver-specific
@@ -150,48 +160,36 @@ static void emmc_csd_parse(struct emmc_device *emmc, uint32_t* csd_buf)
 	emmc->device->chip_size =  ((actual_size >> 3) + 1) << 3;
 }
 
-static inline uint8_t emmc_ext_csd_byte(uint32_t *buf, int index)
-{
-    uint32_t w = buf[index >> 2];
-    int s = (index & 3) * 8;
-    return (uint8_t)((w >> s) & 0xFF);
-}
-
-static int emmc_ext_csd_parse(struct emmc_device *emmc, uint32_t* ext_buf)
-{
-    uint8_t def = emmc_ext_csd_byte(ext_buf, 175);
-    if (def == 1) {
-        uint8_t sz = emmc_ext_csd_byte(ext_buf, 224);
-        emmc->device->erase_group_size = ((uint32_t)sz) * (512 * 1024);
-    }
-    return ERROR_OK;
-}
-
 int emmc_probe(struct emmc_device *emmc)
 {
-	int status = ERROR_OK;
+    int status = ERROR_OK;
 	// uint32_t in_field[32] = {0};
 	uint32_t* in_field;
 
 	in_field = malloc(1024);
 	// emmc->device->block_size = EMMC_BLOCK_SIZE;
 
-	status = emmc->controller->init(emmc, in_field);
-	if(status != ERROR_OK)
-		return ERROR_FAIL;
+    status = emmc->controller->init(emmc, in_field);
+    if(status != ERROR_OK) {
+        LOG_WARNING("EMMC controller init failed; entering compatible mode");
+        emmc->device = emmc_get_compatible_info();
+        emmc->device->block_size = 0x200;
+        status = ERROR_OK;
+    }
+    else 
+    {
+        status = emmc_cid_parse(emmc, in_field);
 
-    status = emmc_cid_parse(emmc, in_field);
+        if(emmc->device->chip_size == 0)
+            emmc_csd_parse(emmc, in_field + 4);
+    }
 
-    if(emmc->device->chip_size == 0)
-        emmc_csd_parse(emmc, in_field + 4);
 
-    emmc_ext_csd_parse(emmc, in_field + 8);
-
-	if(!emmc->device)
-	{
-		LOG_ERROR("unknown EMMC flash device found");
-		return ERROR_EMMC_OPERATION_FAILED;
-	}
+    if(!emmc->device)
+    {
+        LOG_ERROR("unknown EMMC flash device found");
+        return ERROR_EMMC_OPERATION_FAILED;
+    }
 
     LOG_INFO("found %s", emmc->device->name);
 	free(in_field);
@@ -212,19 +210,18 @@ int emmc_read_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t ad
 }
 
 
-int emmc_write_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size)
+int emmc_write_image(struct emmc_device *emmc, uint8_t *buffer, uint64_t addr, int size)
 {
 	emmc->controller->write_image(emmc, buffer, addr, size);
 	return ERROR_OK;
 }
 
-int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size)
+int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint64_t addr, int size)
 {
 	int retval;
 	retval = emmc->controller->verify_image(emmc, buffer, addr, size);
 	return retval;
 }
-
 int emmc_erase_block(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block)
 {
 	int retval;

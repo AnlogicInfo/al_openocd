@@ -799,7 +799,7 @@ static int image_sparse_read_fill_section(struct image_sparse *sparse,
 	uint32_t fill_value;
 	uint8_t *fill_buffer;
 
-	fill_size = chk->chunk_header->chunk_sz * sparse->header->blk_sz;
+	fill_size = (uint64_t)chk->chunk_header->chunk_sz * sparse->header->blk_sz;
 	retval = fileio_seek(sparse->fileio, chk->input_offset);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("cannot find sparse chunk content, seek failed");
@@ -1116,7 +1116,7 @@ static int image_sparse_read_chunk_headers(struct image *image)
 			sparse->chunks[i].output_offset = sparse->chunks[i-1].output_offset + sparse->chunks[i-1].size;
 		}
 
-		LOG_DEBUG("chunk %d input_offset %d data size %d output_offset %d type %x ",
+		LOG_DEBUG("chunk %d input_offset 0x%" PRIx64 " data size 0x%" PRIx64 " output_offset 0x%" PRIx64 " type %x ",
 							i+1, sparse->chunks[i].input_offset, sparse->chunks[i].size,
 							sparse->chunks[i].output_offset/sparse->header->blk_sz,
 							chunk_type);

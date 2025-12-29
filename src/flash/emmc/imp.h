@@ -9,6 +9,7 @@
 #ifndef OPENOCD_FALSH_EMMC_IMP_H
 #define OPENOCD_FLASH_EMMC_IMP_H
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "core.h"
 #include "driver.h"
@@ -19,10 +20,11 @@ void emmc_device_add(struct emmc_device *c);
 int emmc_probe(struct emmc_device *emmc);
 
 int emmc_write_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t address);
-int emmc_write_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t address, int size);
+int emmc_write_image(struct emmc_device *emmc, uint8_t *buffer, uint64_t address, int size);
 int emmc_read_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t address);
-int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint32_t addr, int size);
+int emmc_verify_image(struct emmc_device *emmc, uint8_t *buffer, uint64_t addr, int size);
 int emmc_erase_block(struct emmc_device *emmc, uint32_t start_block, uint32_t end_block);
+
 
 
 
