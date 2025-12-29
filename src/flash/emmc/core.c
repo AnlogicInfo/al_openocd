@@ -27,7 +27,7 @@ void emmc_device_add(struct emmc_device *c)
 }
 
 /*	Chip ID list
-* Manufacturer ID, product name, blocksize, chipsize in MegaByte, name
+* Manufacturer ID, product name, blocksize, chipsize in MegaByte, erase group size, name
  */
 
 static struct emmc_info emmc_flash_ids[] = 

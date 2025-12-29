@@ -991,13 +991,13 @@ done:
 	return retval;
 }
 
-static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, uint32_t block_size, struct async_fifo *fifo)
+static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, struct async_fifo *fifo)
 {
 	int retval;
 	uint32_t wp_result = 0, rp_result = 0;
 	fifo->wp_addr = buffer_start;
 	fifo->rp_addr = buffer_start + 4;
-	fifo->fifo_start_addr = buffer_start + block_size;
+	fifo->fifo_start_addr = buffer_start + 8;
 	fifo->fifo_end_addr = buffer_start + buffer_size;
 	fifo->wp = fifo->fifo_start_addr;
 	fifo->rp = fifo->fifo_start_addr;
@@ -1132,24 +1132,16 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 			break;
 		}
 
-        /* Count the number of bytes available in the fifo without
-         * crossing the wrap around. Handle FIFO-empty explicitly to avoid 0.
-         * Keep a one-block safety margin when rp > wp to prevent full condition. */
-        uint32_t thisrun_bytes, thisrun_block_cnt;
-
-		if (fifo->wp >= fifo->rp) {
-			thisrun_bytes = fifo->fifo_end_addr - fifo->wp;
-			if(fifo-> rp == fifo->fifo_start_addr)
-				thisrun_bytes -= block_size;
-		} else {
+		/* Count the number of bytes available in the fifo without
+		 * crossing the wrap around. Make sure to not fill it completely,
+		 * because that would make wp == rp and that's the empty condition. */
+		uint32_t thisrun_bytes, thisrun_block_cnt;
+		if (fifo->rp > fifo->wp)
 			thisrun_bytes = fifo->rp - fifo->wp - block_size;
-		}
-
-
-        /* Align to block_size and avoid negatives */
-        if ((int32_t)thisrun_bytes < 0)
-            thisrun_bytes = 0;
-        thisrun_bytes = (thisrun_bytes / block_size) * block_size;
+		else if (fifo->rp > fifo->fifo_start_addr)
+			thisrun_bytes = fifo->fifo_end_addr - fifo->wp;
+		else
+			thisrun_bytes = fifo->fifo_end_addr - fifo->wp - block_size;
 
 		if (thisrun_bytes == 0) {
 			/* Throttle polling a bit if transfer is (much) faster than flash
@@ -1178,6 +1170,8 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		thisrun_block_cnt = thisrun_bytes/block_size;
 		thisrun_bytes = thisrun_block_cnt * block_size;
 
+		LOG_DEBUG("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
+			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
 
 		/* Write data to fifo */
 		// start = timeval_ms();
@@ -1196,9 +1190,6 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		if (fifo->wp >= fifo->fifo_end_addr)
 			fifo->wp = fifo->fifo_start_addr;
 
-		LOG_DEBUG("offs 0x%zx start val %x remain block %x thisrun_bytes 0x%" PRIx32 " wp 0x%" PRIx32 " rp 0x%" PRIx32,
-			(size_t) (buffer - buffer_orig), *buffer, count, thisrun_bytes, fifo->wp, fifo->rp);
-			
 		/* Store updated write pointer to target */
 		retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 		if (retval != ERROR_OK)
@@ -1804,7 +1795,7 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 	struct async_fifo *fifo;
 
 	fifo = malloc(sizeof(struct async_fifo));
-	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, block_size, fifo);
+	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, fifo);
 	if (retval != ERROR_OK)
 		return retval;
 
