@@ -135,13 +135,7 @@ static int emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 		if (emmc_flash_ids[i].pnm == pnm && (emmc_flash_ids[i].mfr_id == mrf_id)) {
 			emmc->device = &emmc_flash_ids[i];
 			emmc->device->block_size = emmc_flash_ids[i].block_size;
-
-			if (emmc->device->chip_size > 0 && emmc->device->block_size > 0) {
-				uint64_t total_bytes = ((uint64_t)emmc->device->chip_size) << 30;
-				emmc->num_blocks = (uint32_t)(total_bytes / emmc->device->block_size);
-			} else {
-				emmc->num_blocks = 0;
-			}
+			emmc->num_blocks = 0;
 
 			break;
 		}
@@ -161,19 +155,13 @@ static int emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 static void emmc_csd_parse(struct emmc_device *emmc, uint32_t* csd_buf)
 {
 	size_t sec_cnt = 0;
-	uint32_t actual_size;
-
 	sec_cnt = csd_buf[SECTOR_COUNT_OFFSET + 4];
-
-	actual_size = (sec_cnt * emmc->device->block_size) >> 30;
-	emmc->device->chip_size =  ((actual_size >> 3) + 1) << 3;
-
-	if (emmc->device->chip_size > 0 && emmc->device->block_size > 0) {
-		uint64_t total_bytes = ((uint64_t)emmc->device->chip_size) << 30;
+	if (emmc->device->block_size > 0) {
+		uint64_t total_bytes = ((uint64_t)sec_cnt) * 512;
 		emmc->num_blocks = (uint32_t)(total_bytes / emmc->device->block_size);
-	} else {
+		emmc->device->chip_size = (int)(total_bytes >> 30);
+	} else
 		emmc->num_blocks = 0;
-	}
 }
 
 int emmc_probe(struct emmc_device *emmc)
@@ -192,13 +180,11 @@ int emmc_probe(struct emmc_device *emmc)
         emmc->device->block_size = 0x200;
         status = ERROR_OK;
     }
-    else 
-    {
-        status = emmc_cid_parse(emmc, in_field);
-
-        if(emmc->device->chip_size == 0)
-            emmc_csd_parse(emmc, in_field + 4);
-    }
+	else 
+	{
+		status = emmc_cid_parse(emmc, in_field);
+		emmc_csd_parse(emmc, in_field + 4);
+	}
 
 
     if(!emmc->device)
