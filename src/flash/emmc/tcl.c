@@ -301,7 +301,11 @@ COMMAND_HANDLER(handle_emmc_erase_command)
     if (CMD_ARGC == 3) {
         uint32_t start_block, end_block;
         COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], start_block);
-        COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], end_block);
+        if (strcmp(CMD_ARGV[2], "last") == 0) {
+            end_block = (emmc->num_blocks > 0) ? (emmc->num_blocks - 1) : 0;
+        } else {
+            COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], end_block);
+        }
         retval = emmc_erase_block(emmc, start_block, end_block);
         if (retval == ERROR_OK)
             command_print(CMD, "emmc erase blocks [%u - %u] successful", start_block, end_block);
