@@ -592,7 +592,7 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
 	uint32_t wr_cnt = 128;
 
 	cmd_pkt->argu_en = ARGU_EN;
-	cmd_pkt->argument = addr/emmc->device->block_size;
+	cmd_pkt->argument = addr;
 	cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_WRITE;
 	cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
 	cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;

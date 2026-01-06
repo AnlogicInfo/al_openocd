@@ -93,8 +93,8 @@ COMMAND_HANDLER(handle_emmc_write_block_command)
 	memset(buffer, (uint8_t)value, emmc->device->block_size);
 
 	for (uint32_t i = 0; i < len; i++) {
-		uint64_t addr_bytes = ((uint64_t)(start_block + i)) * emmc->device->block_size;
-		retval = emmc_write_data_block(emmc, (uint32_t *)buffer, (uint32_t)addr_bytes);
+		uint32_t block_addr = start_block + i;
+		retval = emmc_write_data_block(emmc, (uint32_t *)buffer, block_addr);
 		if (retval != ERROR_OK)
 			break;
 	}
