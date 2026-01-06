@@ -592,7 +592,7 @@ static int dwcmshc_emmc_cmd_24_write_single_block(struct emmc_device *emmc, uint
 	uint32_t wr_cnt = 128;
 
 	cmd_pkt->argu_en = ARGU_EN;
-	cmd_pkt->argument = addr/emmc->device->block_size;
+	cmd_pkt->argument = addr;
 	cmd_pkt->xfer_reg.bit.data_xfer_dir = MMC_XM_DATA_XFER_DIR_WRITE;
 	cmd_pkt->xfer_reg.bit.block_count_enable = MMC_XM_BLOCK_COUNT_ENABLE;
 	cmd_pkt->xfer_reg.bit.resp_err_chk_enable = MMC_XM_RESP_ERR_CHK_ENABLE;
@@ -697,8 +697,17 @@ int dwcmshc_emmc_erase_range(struct emmc_device *emmc, uint32_t start_block, uin
     uint32_t aligned_start = (start_block / grp_blocks) * grp_blocks;
     uint32_t aligned_end = (((end_block + 1 + grp_blocks - 1) / grp_blocks) * grp_blocks) - 1;
 
-    uint64_t total_bytes = ((uint64_t)emmc->device->chip_size) << 30;
-    uint32_t total_blocks = (uint32_t)(total_bytes / blk);
+    uint32_t total_blocks = emmc->num_blocks;
+    if (total_blocks == 0) {
+        if (emmc->device->chip_size > 0 && blk > 0) {
+            uint64_t total_bytes = ((uint64_t)emmc->device->chip_size) << 30;
+            total_blocks = (uint32_t)(total_bytes / blk);
+        }
+    }
+    if (total_blocks == 0) {
+        LOG_ERROR("emmc total blocks unknown");
+        return ERROR_EMMC_DEVICE_NOT_PROBED;
+    }
     if (aligned_end >= total_blocks)
         aligned_end = total_blocks - 1;
 

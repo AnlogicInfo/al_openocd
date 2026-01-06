@@ -18,6 +18,7 @@ struct emmc_device
     struct emmc_flash_controller *controller;
     void *controller_priv;
     struct emmc_info *device;
+    uint32_t num_blocks;
     struct emmc_device *next;
 };
 

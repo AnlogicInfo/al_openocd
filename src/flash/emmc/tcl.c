@@ -62,30 +62,42 @@ COMMAND_HANDLER(handle_emmc_probe_command)
 
 COMMAND_HANDLER(handle_emmc_write_block_command)
 {
-	uint64_t addr=0;
-	uint8_t *buffer;
-
-	// struct duration bench;
-	// duration_start(&bench);
-
+	int retval = ERROR_OK;
+	uint32_t start_block, value, len;
+	uint8_t *buffer = NULL;
 	struct emmc_device *emmc;
-	int retval = CALL_COMMAND_HANDLER(emmc_command_get_device, 0, &emmc);
-	if (retval != ERROR_OK)
-		return retval;
 
-	buffer = malloc(2048);
-	for(int i=0; i<1024; i++)
-	{
-		*(buffer+i) = 0xaa;
+	if (CMD_ARGC != 3)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], start_block);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], value);
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], len);
+
+	emmc = get_emmc_device_by_num(0);
+	if (!emmc) {
+		LOG_ERROR("emmc get device error");
+		return ERROR_FAIL;
+	}
+	if (!emmc->device) {
+		LOG_ERROR("emmc not probed");
+		return ERROR_FAIL;
 	}
 
+	buffer = malloc(emmc->device->block_size);
 	if (!buffer) {
-		// fileio_close(fileio);
 		LOG_ERROR("Out of memory");
 		return ERROR_FAIL;
 	}
 
-	retval = emmc_write_data_block(emmc, (uint32_t*) buffer, addr);
+	memset(buffer, (uint8_t)value, emmc->device->block_size);
+
+	for (uint32_t i = 0; i < len; i++) {
+		uint32_t block_addr = start_block + i;
+		retval = emmc_write_data_block(emmc, (uint32_t *)buffer, block_addr);
+		if (retval != ERROR_OK)
+			break;
+	}
 
 	free(buffer);
 	return retval;
@@ -301,7 +313,11 @@ COMMAND_HANDLER(handle_emmc_erase_command)
     if (CMD_ARGC == 3) {
         uint32_t start_block, end_block;
         COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], start_block);
-        COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], end_block);
+        if (strcmp(CMD_ARGV[2], "last") == 0) {
+            end_block = (emmc->num_blocks > 0) ? (emmc->num_blocks - 1) : 0;
+        } else {
+            COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], end_block);
+        }
         retval = emmc_erase_block(emmc, start_block, end_block);
         if (retval == ERROR_OK)
             command_print(CMD, "emmc erase blocks [%u - %u] successful", start_block, end_block);
@@ -334,9 +350,8 @@ static const struct command_registration emmc_exec_command_handlers[] = {
 		.name = "write_block",
 		.handler = handle_emmc_write_block_command,
 		.mode = COMMAND_EXEC,
-		.usage = "bank_id filename [offset]",
-		.help = "Write binary data from file to flash bank. Allow optional "
-			"offset from beginning of the bank (defaults to zero).",
+		.usage = "start_block value len",
+		.help = "Write len blocks starting at start_block with byte value",
 	},	
 	{
 		.name = "write_image",
