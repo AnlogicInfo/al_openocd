@@ -68,6 +68,7 @@ struct jtag_region {
 struct rbb_service {
 	unsigned int channel;
 	int last_is_read;
+	int next_is_speed;
 	tap_state_t state;
 	struct jtag_region regions[64];
 	int region_count;
@@ -214,29 +215,28 @@ static int rbb_connection_read (struct connection *connection, unsigned char* bu
 
 static void rbb_set_speed(uint8_t val)
 {
-  uint64_t tck_freq_mhz, tck_freq_khz;
-  int speed_tab[] = // In Hz
-  {
-    1000000,
-    750000,
-    500000,
-    250000,
-    125000,
-    75000,
-    2000000,
-    3000000,
-    4500000,
-    9000000,
-    12000000,
-    15000000,
-    20000000
-  };
-  tck_freq_mhz = speed_tab[val - '0'];
-  tck_freq_mhz /= 1000000;
-  if (tck_freq_mhz > 30 || tck_freq_mhz == 0) /* clamp it to 1 MHz */
-    tck_freq_mhz = 1;
-  tck_freq_khz = tck_freq_mhz * 10;
-  adapter_driver->speed(tck_freq_khz);
+	uint64_t tck_freq_mhz, tck_freq_khz;
+	int speed_tab[] = { /* In Hz */
+		1000000,
+		750000,
+		500000,
+		250000,
+		125000,
+		75000,
+		2000000,
+		3000000,
+		4500000,
+		9000000,
+		12000000,
+		15000000,
+		20000000
+	};
+	tck_freq_mhz = speed_tab[val - '0'] / 1000000;
+	if (tck_freq_mhz > 30 || tck_freq_mhz == 0) { /* clamp it to 1 MHz */
+		tck_freq_mhz = 1;
+	}
+	tck_freq_khz = tck_freq_mhz * 1000;
+	adapter_config_khz(tck_freq_khz);
 }
 
 static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_in_buffer, int length,
@@ -245,15 +245,14 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 {
 	char command;
 	int i;
-	int next_is_speed = 0;
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
 	for (i = 0; i < length; i++)
 	{
 		command = rbb_in_buffer[i];
-		if (next_is_speed) {
+		if (service->next_is_speed) {
 			rbb_set_speed(command);
-			next_is_speed = 0;
+			service->next_is_speed = 0;
 			continue;
 		}
 
@@ -261,12 +260,12 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 			char offset = command - '0';
 			tck = (offset >> 2) & 1;
 			tms = (offset >> 1) & 1;
-			tdi = (offset >> 0) & 1; 
+			tdi = (offset >> 0) & 1;
 			if (tck) {
 				tms_input [bits / 8] |= tms << (bits % 8);
 				tdi_input [bits / 8] |= tdi << (bits % 8);
-				bits ++; 
-			} 		
+				bits++;
+			}
 		}
 		else if (command == 'R') {
 			/* read */
@@ -277,7 +276,7 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 		} else if (command == 't' || command == 'u') {
 			/* TRST = 1 */
 		} else if (command == 'S') {
-			next_is_speed = 1;
+			service->next_is_speed = 1;
 		}
 	}
 
@@ -306,9 +305,9 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 
 #ifdef ANALYZE_COMPLETE
 
-static void rbb_region_init(struct rbb_service* service, 
+static void rbb_region_init(struct rbb_service *service,
 							uint8_t is_tms, uint8_t flip_tms,
-							int shift_pos, int cur_pos, 
+							int shift_pos, int cur_pos,
 							tap_state_t cur_state, tap_state_t next_state,
 							int total_read_bits)
 {
@@ -509,18 +508,18 @@ static void rbb_command_prt(unsigned char* command_in, int command_size, struct 
 
 			cur_state = new_state;
 		}
-	
+
 		if (service->last_is_read)
 			fprintf(fp_input, "last is read\n");
 		fclose(fp_input);
 	}
-		
+
 }
 
 static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, unsigned char* tms_buf, unsigned char* read_input)
 {
 	FILE* fp_region = fopen(LOG_FOLDER_PATH LOG_REGION_BUF_FILE, "a");
-	
+
 	int i, bit_index;
 	int bit, read_bit;
 	unsigned char* in_buf = NULL;
@@ -534,7 +533,7 @@ static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, 
 				in_buf = tms_buf;
 			else
 				in_buf = tdi_buf;
-	
+
 			if(in_buf != NULL) {
 				for (bit_index = service->regions[i].begin; bit_index < service->regions[i].end; bit_index++) {
 					bit = (in_buf[bit_index / 8] >> (bit_index % 8)) & 0x1;
@@ -831,6 +830,7 @@ COMMAND_HANDLER(handle_rbb_start_command)
 
 	service->channel = 0;
 	service->last_is_read = 0;
+	service->next_is_speed = 0;
 	service->state = TAP_RESET;
 	service->lasttime = 0;
 
