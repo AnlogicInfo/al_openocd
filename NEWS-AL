@@ -8,6 +8,7 @@ v0.1122
 3. add hw protect for qspi
 4. fix nuspi write bug
 5. fix sparse write addr overflow issue
+6. add speed setting in rbb server
 
 v0.1121
 1. add support for dr1m35
