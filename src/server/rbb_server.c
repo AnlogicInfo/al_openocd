@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <jtag/jtag.h>
 #include <jtag/interface.h>
+#include <jtag/adapter.h>
 
 #include "server.h"
 #include "rbb_server.h"
@@ -35,6 +36,8 @@
 #define LOG_REGION_BUF_FILE "\\openocd_region.log"
 #define LOG_TDI_OUT_FILE "\\openocd_tdi.log"
 
+
+extern struct adapter_driver *adapter_driver;
 int allow_tap_access;
 int arm_workaround;
 
@@ -209,17 +212,50 @@ static int rbb_connection_read (struct connection *connection, unsigned char* bu
 
 }
 
+static void rbb_set_speed(uint8_t val)
+{
+  uint64_t tck_freq_mhz, tck_freq_khz;
+  int speed_tab[] = // In Hz
+  {
+    1000000,
+    750000,
+    500000,
+    250000,
+    125000,
+    75000,
+    2000000,
+    3000000,
+    4500000,
+    9000000,
+    12000000,
+    15000000,
+    20000000
+  };
+  tck_freq_mhz = speed_tab[val - '0'];
+  tck_freq_mhz /= 1000000;
+  if (tck_freq_mhz > 30 || tck_freq_mhz == 0) /* clamp it to 1 MHz */
+    tck_freq_mhz = 1;
+  tck_freq_khz = tck_freq_mhz * 10;
+  adapter_driver->speed(tck_freq_khz);
+}
+
 static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_in_buffer, int length,
 							  unsigned char* tms_input, unsigned char* tdi_input, unsigned char* read_input,
 							  size_t* total_bits, size_t* total_read_bits)
 {
 	char command;
 	int i;
+	int next_is_speed = 0;
 	int tck = 0, tms, tdi;
 	int bits = 0, read_bits = 0;
 	for (i = 0; i < length; i++)
 	{
 		command = rbb_in_buffer[i];
+		if (next_is_speed) {
+			rbb_set_speed(command);
+			next_is_speed = 0;
+			continue;
+		}
 
 		if ('0' <= command && command <= '7') {
 			char offset = command - '0';
@@ -240,6 +276,8 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 			/* TRST = 0 */
 		} else if (command == 't' || command == 'u') {
 			/* TRST = 1 */
+		} else if (command == 'S') {
+			next_is_speed = 1;
 		}
 	}
 
