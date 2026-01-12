@@ -215,7 +215,7 @@ static int rbb_connection_read (struct connection *connection, unsigned char* bu
 
 static void rbb_set_speed(uint8_t val)
 {
-	uint64_t tck_freq_hz, tck_freq_mhz;
+	uint64_t tck_freq_mhz, tck_freq_khz;
 	int speed_tab[] = { /* In Hz */
 		1000000,
 		750000,
@@ -231,13 +231,12 @@ static void rbb_set_speed(uint8_t val)
 		15000000,
 		20000000
 	};
-	tck_freq_hz = speed_tab[val - '0'];
-	tck_freq_mhz = tck_freq_hz / 1000000;
+	tck_freq_mhz = speed_tab[val - '0'] / 1000000;
 	if (tck_freq_mhz > 30 || tck_freq_mhz == 0) { /* clamp it to 1 MHz */
 		tck_freq_mhz = 1;
-		tck_freq_hz = tck_freq_hz * 1000000;
 	}
-	adapter_driver->speed(tck_freq_hz);
+	tck_freq_khz = tck_freq_mhz * 1000;
+	adapter_config_khz(tck_freq_khz);
 }
 
 static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_in_buffer, int length,
