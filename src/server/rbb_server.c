@@ -86,7 +86,7 @@ static int rbb_new_connection(struct connection *connection)
 	service = connection->service->priv;
 	service->state = cmd_queue_cur_state;
 
-	LOG_DEBUG("rbb: New connection for channel %u state %s", service->channel, tap_state_name(cmd_queue_cur_state));
+	LOG_INFO("rbb: New connection for channel %u state %s", service->channel, tap_state_name(cmd_queue_cur_state));
 
 	return ERROR_OK;
 }
@@ -454,9 +454,17 @@ static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_
 	return retval;
 }
 
-static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service)
+static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service, long* file_lines)
 {
-	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
+	static int first = 1;
+	static long input_line_counter = 0;
+	FILE* fp_input;
+	if (first) {
+		fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "w");
+		first = 0;
+	} else {
+		fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
+	}
 	// FILE* fp_input = NULL;
 	char command;
 	int i;
@@ -474,94 +482,136 @@ static void rbb_command_prt(unsigned char* command_in, int command_size, struct 
 				tms = (offset >> 1) & 1;
 				tdi = (offset >> 0) & 1;
 				if(tck) {
+					file_lines[bits] = input_line_counter + 1;
 					new_state = next_state(cur_state, tms);
 					bits ++;
 					fprintf(fp_input, "cmd_index %08d %x ", i, command);
 					fprintf(fp_input, "buf_index %08d ", bits);
 					fprintf(fp_input, "TCK: %d TMS: %d TDI: %d ", tck, tms, tdi);
 					fprintf(fp_input, "st %s -> %s\n", tap_state_name(cur_state), tap_state_name(new_state));
+					input_line_counter++;
 
 				}
 				else {
 					new_state = cur_state;
 					fprintf(fp_input, "cmd_index %08d %x ", i, command);
 					fprintf(fp_input, "TCK: %d\n", tck);
+					input_line_counter++;
 				}
 			} else if (command == 'R') {
 				new_state = cur_state;
 				fprintf(fp_input, "cmd_index %08d %x ", i, command);
 				fprintf(fp_input, "buf_index %08d ", bits);
 				fprintf(fp_input, "Read\n");
+				input_line_counter++;
 			} else if (command == 'r' || command == 's') {
 				new_state = cur_state;
 				fprintf(fp_input, "cmd_index %08d %x ", i, command);
 				fprintf(fp_input, "TRST = 0\n");
+				input_line_counter++;
 			} else if (command == 't' || command == 'u') {
 				new_state = cur_state;
 				fprintf(fp_input, "cmd_index %08d %x ", i, command);
 				fprintf(fp_input, "TRST = 1\n");
+				input_line_counter++;
 			} else {
 				new_state = cur_state;
 				fprintf(fp_input, "cmd_index %08d %x ", i, command);
 				fprintf(fp_input, "Unknown\n");
+				input_line_counter++;
 			}
 
 			cur_state = new_state;
 		}
 
-		if (service->last_is_read)
+		if (service->last_is_read) {
 			fprintf(fp_input, "last is read\n");
+			input_line_counter++;
+		}
 		fclose(fp_input);
 	}
 
 }
 
-static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, unsigned char* tms_buf, unsigned char* read_input)
+static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, unsigned char* tms_buf, unsigned char* read_input, long* file_lines)
 {
-	FILE* fp_region = fopen(LOG_FOLDER_PATH LOG_REGION_BUF_FILE, "a");
+	static int first = 1;
+	FILE* fp_region;
+	if (first) {
+		fp_region = fopen(LOG_FOLDER_PATH LOG_REGION_BUF_FILE, "w");
+		first = 0;
+	} else {
+		fp_region = fopen(LOG_FOLDER_PATH LOG_REGION_BUF_FILE, "a");
+	}
 
 	int i, bit_index;
-	int bit, read_bit;
+	int bit;
 	unsigned char* in_buf = NULL;
 	if(fp_region != NULL) {
 		for (i = 0; i < service->region_count; i++) {
-			fprintf(fp_region, "region %d st %s -> %s start %d end %d size %d\n", i,
+			fprintf(fp_region, "region %d st %s -> %s start %d end %d size %d file_line %ld\n", i,
 					tap_state_name(service->regions[i].begin_state), tap_state_name(service->regions[i].end_state),
 					service->regions[i].begin, service->regions[i].end, 
-					service->regions[i].end - service->regions[i].begin);
+					service->regions[i].end - service->regions[i].begin,
+					file_lines[service->regions[i].begin]);
 			if(service->regions[i].is_tms)
 				in_buf = tms_buf;
 			else
 				in_buf = tdi_buf;
 
 			if(in_buf != NULL) {
-				for (bit_index = service->regions[i].begin; bit_index < service->regions[i].end; bit_index++) {
-					bit = (in_buf[bit_index / 8] >> (bit_index % 8)) & 0x1;
-					read_bit = (read_input[bit_index / 8] >> (bit_index % 8)) & 0x1;
-					fprintf(fp_region, "index %d bit %d read %d\n", bit_index, bit, read_bit);
+				if (0) {
+					for (bit_index = service->regions[i].begin; bit_index < service->regions[i].end; bit_index++) {
+						int read_bit = (read_input[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						bit = (in_buf[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						fprintf(fp_region, "index %d bit %d read %d\n", bit_index, bit, read_bit);
+					}
 				}
 
 				int region_size = (service->regions[i].end - service->regions[i].begin + 7) / 8;
 				if(service->regions[i].is_tms) 
 				{
-					fprintf(fp_region, "TMS: \n");
-					for (int byte_index = 0; byte_index < region_size; byte_index++) {
-						fprintf(fp_region, "%02x ", service->regions[i].tms_buffer[byte_index]);
-					}
-					fprintf(fp_region, "\n");
-				} else {
-					fprintf(fp_region, "TDI: ");
-					for (int byte_index = 0; byte_index < region_size; byte_index++) {
-						fprintf(fp_region, "%02x ", service->regions[i].tdi_buffer[byte_index]);
-					}
-					fprintf(fp_region, "\n");
-					if(service->regions[i].tdo_mask_buffer != NULL) {
-						fprintf(fp_region, "MSK: ");
+					if (0) {
+						fprintf(fp_region, "TMS: \n");
 						for (int byte_index = 0; byte_index < region_size; byte_index++) {
-							fprintf(fp_region, "%02x ", service->regions[i].tdo_mask_buffer[byte_index]);
+							fprintf(fp_region, "%02x ", service->regions[i].tms_buffer[byte_index]);
 						}
 						fprintf(fp_region, "\n");
 					}
+				} else {
+					if (service->regions[i].begin_state == TAP_DRSHIFT || service->regions[i].begin_state == TAP_IRSHIFT) {
+						fprintf(fp_region, "TDI: ");
+						for (int byte_index = 0; byte_index < region_size; byte_index++) {
+							fprintf(fp_region, "%02x ", service->regions[i].tdi_buffer[byte_index]);
+						}
+						fprintf(fp_region, "\n");
+						if(service->regions[i].tdo_buffer != NULL && service->regions[i].begin_state == TAP_DRSHIFT) {
+							fprintf(fp_region, "TDO: ");
+							for (int byte_index = 0; byte_index < region_size; byte_index++) {
+								fprintf(fp_region, "%02x ", service->regions[i].tdo_buffer[byte_index]);
+							}
+							fprintf(fp_region, "\n");
+						}
+						if(service->regions[i].tdo_mask_buffer != NULL && service->regions[i].begin_state == TAP_DRSHIFT) {
+							fprintf(fp_region, "MSK: ");
+							for (int byte_index = 0; byte_index < region_size; byte_index++) {
+								fprintf(fp_region, "%02x ", service->regions[i].tdo_mask_buffer[byte_index]);
+							}
+							fprintf(fp_region, "\n");
+						}
+					}
+				}
+
+				if(service->regions[i].begin_state == TAP_IRSHIFT) {
+					uint32_t tdi_word = 0;
+					int max_bits = service->regions[i].end - service->regions[i].begin;
+					int bits = max_bits < 32 ? max_bits : 32;
+					for (bit_index = 0; bit_index < bits; bit_index++) {
+						bit = (service->regions[i].tdi_buffer[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						tdi_word |= ((uint32_t)bit << bit_index);
+					}
+					uint32_t tap0_ir = tdi_word >> 13;
+					fprintf(fp_region, "IR0: 0x%x\n", tap0_ir);					
 				}
 			}
 		}
@@ -586,6 +636,18 @@ static void rbb_debug_prt(struct rbb_service *service, unsigned char* read_outpu
 					fprintf(fp_tdi, "%02x ", service->regions[i].tdi_buffer[byte_index]);
 				}
 				fprintf(fp_tdi, "\n");
+				if(service->regions[i].begin_state == TAP_IRSHIFT) {
+					uint32_t tdi_word = 0;
+					int max_bits = service->regions[i].end - service->regions[i].begin;
+					int bits = max_bits < 32 ? max_bits : 32;
+					for (int bit_index = 0; bit_index < bits; bit_index++) {
+						uint8_t bit = (service->regions[i].tdi_buffer[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						tdi_word |= ((uint32_t)bit << bit_index);
+					}
+					uint32_t tap0_ir = tdi_word >> 13;
+					fprintf(fp_tdi, "IR0: 0x%x\n", tap0_ir);
+				}
+
 
 				if(service->regions[i].tdo_buffer != NULL) {
 					fprintf(fp_tdi, "TDO: ");
@@ -766,8 +828,11 @@ static int rbb_input(struct connection *connection)
 					  tms_input, tdi_input, read_input,
 					  &total_bits, &total_read_bits);
 
-	if(0)
-		rbb_command_prt(buffer, length, service);
+	long* file_lines = (long*)malloc(sizeof(long) * (total_bits + 1));
+	memset(file_lines, 0, sizeof(long) * (total_bits + 1));
+
+	if(1)
+		rbb_command_prt(buffer, length, service, file_lines);
 
 	free(buffer);
 
@@ -775,8 +840,10 @@ static int rbb_input(struct connection *connection)
 
 	retval = rbb_jtag_drive(service, length, total_bits, tms_input, tdi_input, read_input);
 
-	if(0)
-		rbb_region_prt(service, tdi_input, tms_input, read_input);
+	if(1)
+		rbb_region_prt(service, tdi_input, tms_input, read_input, file_lines);
+
+	free(file_lines);
 
 	free(tdi_input);
 	free(tms_input);
