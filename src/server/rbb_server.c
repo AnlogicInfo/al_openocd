@@ -77,7 +77,12 @@ struct rbb_service {
 	int64_t backofftime;
 	int64_t spacingtime;
 	int allow_tlr;
+	int connection_id;
+	int log_initialized;
+	char input_log_path[512];
 };
+
+static int g_connection_count = 0;
 
 static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service, long* file_lines);
 
@@ -88,8 +93,14 @@ static int rbb_new_connection(struct connection *connection)
 
 	service = connection->service->priv;
 	service->state = cmd_queue_cur_state;
+	service->lasttime = 0;
+	
+	g_connection_count++;
+	service->connection_id = g_connection_count;
+	snprintf(service->input_log_path, sizeof(service->input_log_path), "%s\\td_in_%d.log", LOG_FOLDER_PATH, service->connection_id);
+	service->log_initialized = 0;
 
-	LOG_INFO("rbb: New connection for channel %u state %s", service->channel, tap_state_name(cmd_queue_cur_state));
+	LOG_INFO("rbb: New connection for channel %u state %s (id: %d)", service->channel, tap_state_name(cmd_queue_cur_state), service->connection_id);
 
 	return ERROR_OK;
 }
@@ -429,14 +440,29 @@ static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_
 
 static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service, long* file_lines)
 {
-	static int first = 1;
 	FILE* fp_input;
-	if (first) {
-		fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "w");
-		first = 0;
-	} else {
-		fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
+	const char *filename = service->input_log_path;
+
+	if (command_size <= 0)
+		return;
+
+	if (filename[0] == '\0') {
+		LOG_ERROR("rbb: empty input log path for connection %d", service->connection_id);
+		return;
 	}
+
+	if (service->log_initialized == 0) {
+		fp_input = fopen(filename, "w");
+		if (fp_input != NULL) {
+			service->log_initialized = 1;
+			LOG_INFO("rbb: create input log %s for connection %d", filename, service->connection_id);
+		} else {
+			LOG_ERROR("rbb: failed to create input log %s for connection %d", filename, service->connection_id);
+		}
+	} else {
+		fp_input = fopen(filename, "a");
+	}
+
 	if(fp_input != NULL) {
 		for (int i = 0; i < command_size; i++) {
 			unsigned char command = command_in[i];
@@ -444,7 +470,6 @@ static void rbb_command_prt(unsigned char* command_in, int command_size, struct 
 		}
 		fclose(fp_input);
 	}
-	(void)service;
 	(void)file_lines;
 }
 
@@ -678,31 +703,45 @@ static int rbb_input(struct connection *connection)
 	struct rbb_service *service;
 	int length, bytes_read;
 
-	if (allow_tap_access == 0) { /* Not occuppied by RBB */
-		/* If the TAP state not in TLR or RTI, just return back */
-		if (cmd_queue_cur_state != TAP_IDLE &&
-			cmd_queue_cur_state != TAP_RESET)
-			return ERROR_OK;
-
-		if (jtag_command_queue != NULL)
-			return ERROR_OK;
-	}
-	if (allow_tap_access == 3)
-		return ERROR_OK;
-
 	service = (struct rbb_service *)connection->service->priv;
 
-	if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
-		int64_t curtime = timeval_ms();
-		if ((curtime - service->lasttime) < service->spacingtime)
-			return ERROR_OK; /* Wait for spacing time passed */
+	LOG_INFO("rbb_input: conn_id=%d allow_tap_access=%d state=%s jtag_queue=%p",
+		service->connection_id, allow_tap_access,
+		tap_state_name(cmd_queue_cur_state), jtag_command_queue);
+
+	if (allow_tap_access == 0) {
+		if (cmd_queue_cur_state != TAP_IDLE &&
+			cmd_queue_cur_state != TAP_RESET) {
+			LOG_INFO("rbb_input: conn_id=%d skip, tap state %s",
+				service->connection_id,
+				tap_state_name(cmd_queue_cur_state));
+			return ERROR_OK;
+		}
+
+		if (jtag_command_queue != NULL) {
+			LOG_INFO("rbb_input: conn_id=%d skip, jtag_command_queue busy",
+				service->connection_id);
+			return ERROR_OK;
+		}
 	}
+	if (allow_tap_access == 3) {
+		LOG_INFO("rbb_input: conn_id=%d skip, allow_tap_access == 3",
+			service->connection_id);
+		return ERROR_OK;
+	}
+
+	// if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
+	// 	int64_t curtime = timeval_ms();
+	// 	if ((curtime - service->lasttime) < service->spacingtime)
+	// 		return ERROR_OK; /* Wait for spacing time passed */
+	// }
 
 	/* TODO: dirty call, don't do that */
 	allow_tap_access = 1;
 	buffer = (unsigned char *) malloc(RBB_BUFFERSIZE + 1);
 	memset(buffer, 0x00, RBB_BUFFERSIZE + 1);
 	bytes_read = connection_read(connection, buffer, RBB_BUFFERSIZE + 1 - 128);
+	LOG_INFO("rbb: connection %d read %d bytes", service->connection_id, bytes_read);
 	rbb_command_prt(buffer, bytes_read, service, NULL);
 	/* Needs to Lock the adapter driver, reject any other access */
 
@@ -741,7 +780,7 @@ static int rbb_input(struct connection *connection)
 
 	retval = rbb_jtag_drive(service, length, total_bits, tms_input, tdi_input, read_input);
 
-	if(1)
+	if(0)
 		rbb_region_prt(service, tdi_input, tms_input, read_input, file_lines);
 
 	free(file_lines);
@@ -760,7 +799,7 @@ static int rbb_input(struct connection *connection)
 		rbb_send_buffer_gen(service, send_buffer, total_read_bits);
 		connection_write(connection, send_buffer, total_read_bits);
 	}
-	if(1)
+	if(0)
 		rbb_debug_prt(service, send_buffer, total_read_bits);
 
 	free(send_buffer);
@@ -801,18 +840,21 @@ COMMAND_HANDLER(handle_rbb_start_command)
 	service->next_is_speed = 0;
 	service->state = TAP_RESET;
 	service->lasttime = 0;
+	service->connection_id = 0;
+	service->log_initialized = 0;
+	service->input_log_path[0] = '\0';
 
 	ret = add_service(&rbb_service_driver, CMD_ARGV[0], CONNECTION_LIMIT_UNLIMITED, service);
 
 	if (CMD_ARGC >= 2)
 		service->spacingtime = atoi(CMD_ARGV[1]);
 	else
-		service->spacingtime = 100; /* 100ms */
+		service->spacingtime = 1000; /* 100ms */
 
 	if (CMD_ARGC >= 3)
 		service->backofftime = atoi(CMD_ARGV[2]);
 	else
-		service->backofftime = 100; /* 100ms */
+		service->backofftime = 1000; /* 100ms */
 
 	if (CMD_ARGC >= 4)
 		service->allow_tlr = atoi(CMD_ARGV[3]);
