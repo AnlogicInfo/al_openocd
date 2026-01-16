@@ -70,8 +70,9 @@ struct rbb_service {
 	int last_is_read;
 	int next_is_speed;
 	tap_state_t state;
-	struct jtag_region regions[64];
+	struct jtag_region *regions;
 	int region_count;
+	int region_capacity;
 	int64_t lasttime;
 	int64_t backofftime;
 	int64_t spacingtime;
@@ -254,12 +255,31 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 
 #ifdef ANALYZE_COMPLETE
 
-static void rbb_region_init(struct rbb_service *service,
+static int rbb_ensure_region_capacity(struct rbb_service *service, int needed_count)
+{
+	if (needed_count <= service->region_capacity)
+		return ERROR_OK;
+	int new_capacity = service->region_capacity ? service->region_capacity * 2 : 64;
+	if (new_capacity < needed_count)
+		new_capacity = needed_count;
+	struct jtag_region *new_regions = realloc(service->regions, new_capacity * sizeof(struct jtag_region));
+	if (!new_regions) {
+		LOG_ERROR("rbb: failed to allocate regions");
+		return ERROR_FAIL;
+	}
+	service->regions = new_regions;
+	service->region_capacity = new_capacity;
+	return ERROR_OK;
+}
+
+static int rbb_region_init(struct rbb_service *service,
 							uint8_t is_tms, uint8_t flip_tms,
 							int shift_pos, int cur_pos,
 							tap_state_t cur_state, tap_state_t next_state,
 							int total_read_bits)
 {
+	if (rbb_ensure_region_capacity(service, service->region_count + 2) != ERROR_OK)
+		return ERROR_FAIL;
 	struct jtag_region *region = &(service->regions[service->region_count]);
 	struct jtag_region *next_region = &(service->regions[service->region_count + 1]);
 	region->is_tms = is_tms;
@@ -270,7 +290,7 @@ static void rbb_region_init(struct rbb_service *service,
 	region->next_state = next_state;
 	region->buf_size = (region->end - region->begin + 8 -1) / 8;
 
-	region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);
+	region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);;
 	region->tdi_buffer =(uint8_t*)malloc(region->buf_size + 64);
 
 	if(is_tms == 0 && (total_read_bits > 0)) {
@@ -285,49 +305,49 @@ static void rbb_region_init(struct rbb_service *service,
 
 	service->region_count ++;
 
+	return ERROR_OK;
 }
 
-static void analyze_bitbang(const uint8_t *tms, const uint8_t *read_bits,
-							int total_bits, struct rbb_service *service,
+static void analyze_bitbang(const uint8_t *tms, int total_bits, struct rbb_service *service,
 							int total_read_bits)
 {
 	int shift_pos = 0;
-	uint8_t tdo_read_bit_old = read_bits[0] & 0x1;
+	uint8_t is_tms, is_flip_tms;
 	tap_state_t cur_state = service->state, new_state;
 	service->region_count = 0;
 
+	if (rbb_ensure_region_capacity(service, 1) != ERROR_OK)
+		return;
 	service->regions[0].begin_state = cur_state;
 	for (int i = 0; i < total_bits; i++) {
 		uint8_t tms_bit = (tms[i / 8] >> (i % 8)) & 0x1;
-		uint8_t tdo_read_bit = (read_bits[(i + 1) / 8] >> ((i + 1) % 8)) & 0x1;
 
 		new_state = next_state(cur_state, tms_bit);
+
 		if ((cur_state != TAP_DRSHIFT && new_state == TAP_DRSHIFT) ||
-			(cur_state != TAP_IRSHIFT && new_state == TAP_IRSHIFT)) {
-			rbb_region_init(service, 1, 0, shift_pos, i, cur_state, new_state, total_read_bits);
+			(cur_state != TAP_IRSHIFT && new_state == TAP_IRSHIFT) ||
+			(cur_state != TAP_DRPAUSE && new_state == TAP_DRPAUSE) ||
+			(cur_state != TAP_IRPAUSE && new_state == TAP_IRPAUSE)) {
+			if (rbb_region_init(service, 1, 0, shift_pos, i, cur_state, new_state, total_read_bits) != ERROR_OK)
+				return;
 			shift_pos = i + 1;
 		} else if ((cur_state == TAP_DRSHIFT && new_state != TAP_DRSHIFT) ||
-				   (cur_state == TAP_IRSHIFT && new_state != TAP_IRSHIFT)) {
-			rbb_region_init(service, 0, 1, shift_pos, i, cur_state, new_state, total_read_bits);
+				   (cur_state == TAP_IRSHIFT && new_state != TAP_IRSHIFT) ||
+				   (cur_state == TAP_DRPAUSE && new_state != TAP_DRPAUSE) ||
+				   (cur_state == TAP_IRPAUSE && new_state != TAP_IRPAUSE)) {
+			if (rbb_region_init(service, 0, 1, shift_pos, i, cur_state, new_state, total_read_bits) != ERROR_OK)
+				return;
 			shift_pos = i + 1;
-		} else if ((tdo_read_bit_old != tdo_read_bit && cur_state == TAP_DRSHIFT && new_state == cur_state) ||
-				   (tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state == cur_state)) {
-			rbb_region_init(service, 0, 0, shift_pos, i, cur_state, new_state, total_read_bits);
-			tdo_read_bit_old = tdo_read_bit;
-			shift_pos = i + 1;
-		} else if ((tdo_read_bit_old != tdo_read_bit && cur_state == TAP_DRSHIFT && new_state != cur_state) ||
-				   (tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state != cur_state)) {
-			rbb_region_init(service, 0, 1, shift_pos, i, cur_state, new_state, total_read_bits);
-			tdo_read_bit_old = tdo_read_bit;
-			shift_pos = i + 1;
+		} else {
+			if(i == total_bits - 1) {
+				is_tms = cur_state != TAP_IRSHIFT && cur_state != TAP_DRSHIFT;
+				is_flip_tms = (!is_tms) && tms_bit; 
+				if (rbb_region_init(service, is_tms, is_flip_tms, shift_pos, total_bits - 1, cur_state, new_state, total_read_bits) != ERROR_OK)
+					return;
+				shift_pos = i + 1;
+			}
 		}
-
 		cur_state = new_state;
-	}
-
-	if (shift_pos != total_bits) {
-		uint8_t is_tms = cur_state != TAP_DRSHIFT && cur_state != TAP_IRSHIFT;
-		rbb_region_init(service, is_tms, 0, shift_pos, total_bits - 1, cur_state, cur_state, total_read_bits);
 	}
 
 	service->state = cur_state;
@@ -362,7 +382,8 @@ static int rbb_add_tms_seq(struct jtag_region* region, unsigned char* tms_input,
 
 static int rbb_add_tdi_seq(struct jtag_region* region, unsigned char* tdi_input, unsigned char* read_input)
 {
-	if(region->tdo_mask_buffer != NULL) {
+	if(region->tdo_mask_buffer != NULL)
+	{
 		rbb_create_out_buf(region, read_input, region->tdo_mask_buffer);
 	}
 
@@ -716,7 +737,7 @@ static int rbb_input(struct connection *connection)
 
 	free(buffer);
 
-	analyze_bitbang((uint8_t *) tms_input, (uint8_t *) read_input, total_bits, service, total_read_bits);
+	analyze_bitbang((uint8_t *) tms_input, total_bits, service, total_read_bits);
 
 	retval = rbb_jtag_drive(service, length, total_bits, tms_input, tdi_input, read_input);
 
@@ -803,6 +824,9 @@ COMMAND_HANDLER(handle_rbb_start_command)
 		free(service);
 		return ERROR_FAIL;
 	}
+
+	service->regions = NULL;
+	service->region_capacity = 0;
 
 	return ERROR_OK;
 }
