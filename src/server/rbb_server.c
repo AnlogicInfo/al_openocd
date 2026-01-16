@@ -78,6 +78,8 @@ struct rbb_service {
 	int allow_tlr;
 };
 
+static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service, long* file_lines);
+
 
 static int rbb_new_connection(struct connection *connection)
 {
@@ -162,57 +164,6 @@ tap_state_t next_state(tap_state_t cur, int bit)
 	return TAP_RESET;
 }
 
-static int rbb_connection_check (struct connection *connection)
-{
-	struct rbb_service *service;
-	int retval = -1;
-	/* Check RBB connection */
-	if (allow_tap_access == 0) {/* Not occuppied by RBB */
-		/* If the TAP state not in TLR or RTI, just return back */
-		if (cmd_queue_cur_state != TAP_IDLE &&
-			cmd_queue_cur_state != TAP_RESET)
-			return retval;
-
-		if (jtag_command_queue != NULL)
-			return retval;
-	}
-
-	if (allow_tap_access == 3)
-		return retval;
-
-	service = (struct rbb_service *)connection->service->priv;
-
-	if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
-		int64_t curtime = timeval_ms();
-		if ((curtime - service->lasttime) < service->spacingtime)
-			return retval; /* Wait for spacing time passed */
-	}
-
-	retval = ERROR_OK;
-
-	return retval;
-}
-
-static int rbb_connection_read (struct connection *connection, unsigned char* buffer, int* length)
-{
-	int bytes_read;
-	allow_tap_access = 1;
-	bytes_read = connection_read(connection, buffer, RBB_BUFFERSIZE + 1 - 128);
-	if(!bytes_read) {
-		allow_tap_access = 0;
-		return ERROR_SERVER_REMOTE_CLOSED;
-	}
-	else if (bytes_read < 0) {
-		allow_tap_access = 0;
-		LOG_ERROR("error during read: %s", strerror(errno));
-		return ERROR_SERVER_REMOTE_CLOSED;
-	}
-
-	*length = bytes_read;
-	return ERROR_OK; 
-
-}
-
 static void rbb_set_speed(uint8_t val)
 {
 	uint64_t tck_freq_mhz, tck_freq_khz;
@@ -280,7 +231,6 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 		}
 	}
 
-#ifndef RBB_NOT_HANDLE_LAST
 	if (service->last_is_read) { /* Fix some TDO read issue */
 		LOG_INFO("last is read");
 		int firstbit = 0;
@@ -294,7 +244,6 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	} else {
 		service->last_is_read = 0;
 	}
-#endif
 
 	*total_bits = bits;
 	*total_read_bits = read_bits;
@@ -457,7 +406,6 @@ static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_
 static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service, long* file_lines)
 {
 	static int first = 1;
-	static long input_line_counter = 0;
 	FILE* fp_input;
 	if (first) {
 		fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "w");
@@ -465,72 +413,15 @@ static void rbb_command_prt(unsigned char* command_in, int command_size, struct 
 	} else {
 		fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
 	}
-	// FILE* fp_input = NULL;
-	char command;
-	int i;
-	int tck, tdi, tms;
-	int bits = 0;
-	tap_state_t cur_state, new_state;
-
-	cur_state = service->state;
 	if(fp_input != NULL) {
-		for (i = 0; i < command_size; i++) {
-			command = command_in[i];
-			if ('0' <= command && command <= '7') {
-				char offset = command - '0';
-				tck = (offset >> 2) & 1;
-				tms = (offset >> 1) & 1;
-				tdi = (offset >> 0) & 1;
-				if(tck) {
-					file_lines[bits] = input_line_counter + 1;
-					new_state = next_state(cur_state, tms);
-					bits ++;
-					fprintf(fp_input, "cmd_index %08d %x ", i, command);
-					fprintf(fp_input, "buf_index %08d ", bits);
-					fprintf(fp_input, "TCK: %d TMS: %d TDI: %d ", tck, tms, tdi);
-					fprintf(fp_input, "st %s -> %s\n", tap_state_name(cur_state), tap_state_name(new_state));
-					input_line_counter++;
-
-				}
-				else {
-					new_state = cur_state;
-					fprintf(fp_input, "cmd_index %08d %x ", i, command);
-					fprintf(fp_input, "TCK: %d\n", tck);
-					input_line_counter++;
-				}
-			} else if (command == 'R') {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "buf_index %08d ", bits);
-				fprintf(fp_input, "Read\n");
-				input_line_counter++;
-			} else if (command == 'r' || command == 's') {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "TRST = 0\n");
-				input_line_counter++;
-			} else if (command == 't' || command == 'u') {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "TRST = 1\n");
-				input_line_counter++;
-			} else {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "Unknown\n");
-				input_line_counter++;
-			}
-
-			cur_state = new_state;
-		}
-
-		if (service->last_is_read) {
-			fprintf(fp_input, "last is read\n");
-			input_line_counter++;
+		for (int i = 0; i < command_size; i++) {
+			unsigned char command = command_in[i];
+			fprintf(fp_input, "%c\n", command);
 		}
 		fclose(fp_input);
 	}
-
+	(void)service;
+	(void)file_lines;
 }
 
 static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, unsigned char* tms_buf, unsigned char* read_input, long* file_lines)
@@ -571,8 +462,8 @@ static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, 
 				int region_size = (service->regions[i].end - service->regions[i].begin + 7) / 8;
 				if(service->regions[i].is_tms) 
 				{
-					if (0) {
-						fprintf(fp_region, "TMS: \n");
+					if (1) {
+						fprintf(fp_region, "TMS: size %x \n", region_size);
 						for (int byte_index = 0; byte_index < region_size; byte_index++) {
 							fprintf(fp_region, "%02x ", service->regions[i].tms_buffer[byte_index]);
 						}
@@ -763,21 +654,6 @@ static int rbb_input(struct connection *connection)
 	struct rbb_service *service;
 	int length, bytes_read;
 
-	if(0) {
-		retval = rbb_connection_check(connection);
-		if(retval != ERROR_OK)
-			return ERROR_OK;
-
-		LOG_INFO("rbb connection check");
-		memset(buffer, 0x00, RBB_BUFFERSIZE + 1);
-		retval = rbb_connection_read(connection, buffer, &length);
-		if(retval != ERROR_OK)
-			return ERROR_SERVER_REMOTE_CLOSED;
-
-		LOG_INFO("rbb connection read");
-	}
-
-
 	if (allow_tap_access == 0) { /* Not occuppied by RBB */
 		/* If the TAP state not in TLR or RTI, just return back */
 		if (cmd_queue_cur_state != TAP_IDLE &&
@@ -803,6 +679,7 @@ static int rbb_input(struct connection *connection)
 	buffer = (unsigned char *) malloc(RBB_BUFFERSIZE + 1);
 	memset(buffer, 0x00, RBB_BUFFERSIZE + 1);
 	bytes_read = connection_read(connection, buffer, RBB_BUFFERSIZE + 1 - 128);
+	rbb_command_prt(buffer, bytes_read, service, NULL);
 	/* Needs to Lock the adapter driver, reject any other access */
 
 	if (!bytes_read) {
@@ -831,7 +708,7 @@ static int rbb_input(struct connection *connection)
 	long* file_lines = (long*)malloc(sizeof(long) * (total_bits + 1));
 	memset(file_lines, 0, sizeof(long) * (total_bits + 1));
 
-	if(1)
+	if(0)
 		rbb_command_prt(buffer, length, service, file_lines);
 
 	free(buffer);
