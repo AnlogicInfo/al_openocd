@@ -270,7 +270,7 @@ static void rbb_region_init(struct rbb_service *service,
 	region->next_state = next_state;
 	region->buf_size = (region->end - region->begin + 8 -1) / 8;
 
-	region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);;
+	region->tms_buffer = (uint8_t*)malloc(region->buf_size + 64);
 	region->tdi_buffer =(uint8_t*)malloc(region->buf_size + 64);
 
 	if(is_tms == 0 && (total_read_bits > 0)) {
@@ -287,43 +287,47 @@ static void rbb_region_init(struct rbb_service *service,
 
 }
 
-static void analyze_bitbang(const uint8_t *tms, int total_bits, struct rbb_service *service,
+static void analyze_bitbang(const uint8_t *tms, const uint8_t *read_bits,
+							int total_bits, struct rbb_service *service,
 							int total_read_bits)
 {
 	int shift_pos = 0;
-	uint8_t is_tms, is_flip_tms;
+	uint8_t tdo_read_bit_old = read_bits[0] & 0x1;
 	tap_state_t cur_state = service->state, new_state;
 	service->region_count = 0;
 
 	service->regions[0].begin_state = cur_state;
 	for (int i = 0; i < total_bits; i++) {
 		uint8_t tms_bit = (tms[i / 8] >> (i % 8)) & 0x1;
+		uint8_t tdo_read_bit = (read_bits[(i + 1) / 8] >> ((i + 1) % 8)) & 0x1;
 
 		new_state = next_state(cur_state, tms_bit);
-
 		if ((cur_state != TAP_DRSHIFT && new_state == TAP_DRSHIFT) ||
-			(cur_state != TAP_IRSHIFT && new_state == TAP_IRSHIFT) ||
-			(cur_state != TAP_DRPAUSE && new_state == TAP_DRPAUSE) ||
-			(cur_state != TAP_IRPAUSE && new_state == TAP_IRPAUSE)) {
+			(cur_state != TAP_IRSHIFT && new_state == TAP_IRSHIFT)) {
 			rbb_region_init(service, 1, 0, shift_pos, i, cur_state, new_state, total_read_bits);
 			shift_pos = i + 1;
 		} else if ((cur_state == TAP_DRSHIFT && new_state != TAP_DRSHIFT) ||
-				   (cur_state == TAP_IRSHIFT && new_state != TAP_IRSHIFT) ||
-				   (cur_state == TAP_DRPAUSE && new_state != TAP_DRPAUSE) ||
-				   (cur_state == TAP_IRPAUSE && new_state != TAP_IRPAUSE)) {
+				   (cur_state == TAP_IRSHIFT && new_state != TAP_IRSHIFT)) {
 			rbb_region_init(service, 0, 1, shift_pos, i, cur_state, new_state, total_read_bits);
 			shift_pos = i + 1;
-		} else {
-			/* for unfinished trans */
-
-			if(i == total_bits - 1) {
-				is_tms = cur_state != TAP_IRSHIFT && cur_state != TAP_DRSHIFT;
-				is_flip_tms = (!is_tms) && tms_bit; 
-				rbb_region_init(service, is_tms, is_flip_tms, shift_pos, total_bits - 1, cur_state, new_state, total_read_bits);
-				shift_pos = i + 1;
-			}
+		} else if ((tdo_read_bit_old != tdo_read_bit && cur_state == TAP_DRSHIFT && new_state == cur_state) ||
+				   (tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state == cur_state)) {
+			rbb_region_init(service, 0, 0, shift_pos, i, cur_state, new_state, total_read_bits);
+			tdo_read_bit_old = tdo_read_bit;
+			shift_pos = i + 1;
+		} else if ((tdo_read_bit_old != tdo_read_bit && cur_state == TAP_DRSHIFT && new_state != cur_state) ||
+				   (tdo_read_bit_old != tdo_read_bit && cur_state == TAP_IRSHIFT && new_state != cur_state)) {
+			rbb_region_init(service, 0, 1, shift_pos, i, cur_state, new_state, total_read_bits);
+			tdo_read_bit_old = tdo_read_bit;
+			shift_pos = i + 1;
 		}
+
 		cur_state = new_state;
+	}
+
+	if (shift_pos != total_bits) {
+		uint8_t is_tms = cur_state != TAP_DRSHIFT && cur_state != TAP_IRSHIFT;
+		rbb_region_init(service, is_tms, 0, shift_pos, total_bits - 1, cur_state, cur_state, total_read_bits);
 	}
 
 	service->state = cur_state;
@@ -358,8 +362,7 @@ static int rbb_add_tms_seq(struct jtag_region* region, unsigned char* tms_input,
 
 static int rbb_add_tdi_seq(struct jtag_region* region, unsigned char* tdi_input, unsigned char* read_input)
 {
-	if(region->tdo_mask_buffer != NULL)
-	{
+	if(region->tdo_mask_buffer != NULL) {
 		rbb_create_out_buf(region, read_input, region->tdo_mask_buffer);
 	}
 
@@ -713,7 +716,7 @@ static int rbb_input(struct connection *connection)
 
 	free(buffer);
 
-	analyze_bitbang((uint8_t *) tms_input, total_bits, service, total_read_bits);
+	analyze_bitbang((uint8_t *) tms_input, (uint8_t *) read_input, total_bits, service, total_read_bits);
 
 	retval = rbb_jtag_drive(service, length, total_bits, tms_input, tdi_input, read_input);
 
