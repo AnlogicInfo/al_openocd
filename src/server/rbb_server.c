@@ -130,7 +130,8 @@ static int rbb_new_connection(struct connection *connection)
 	g_connection_count++;
 	service->connection_id = g_connection_count;
 
-	if(0) {
+	if(0)
+	{
 		init_log_folder_path();
 		snprintf(service->input_log_path, sizeof(service->input_log_path), "%s\\td_in_%d.log", log_folder_path, service->connection_id);
 		service->log_initialized = 0;
@@ -489,7 +490,6 @@ static void rbb_command_prt(unsigned char* command_in, int command_size, struct 
 		fp_input = fopen(filename, "w");
 		if (fp_input != NULL) {
 			service->log_initialized = 1;
-			LOG_INFO("rbb: create input log %s for connection %d", filename, service->connection_id);
 		} else {
 			LOG_ERROR("rbb: failed to create input log %s for connection %d", filename, service->connection_id);
 		}
@@ -747,9 +747,9 @@ static int rbb_input(struct connection *connection)
 
 	service = (struct rbb_service *)connection->service->priv;
 
-	LOG_INFO("rbb_input: conn_id=%d allow_tap_access=%d state=%s jtag_queue=%p",
-		service->connection_id, allow_tap_access,
-		tap_state_name(cmd_queue_cur_state), jtag_command_queue);
+	// LOG_INFO("rbb_input: conn_id=%d allow_tap_access=%d state=%s jtag_queue=%p",
+	// 	service->connection_id, allow_tap_access,
+	// 	tap_state_name(cmd_queue_cur_state), jtag_command_queue);
 
 	if (allow_tap_access == 0) {
 		if (cmd_queue_cur_state != TAP_IDLE &&
@@ -772,11 +772,11 @@ static int rbb_input(struct connection *connection)
 		return ERROR_OK;
 	}
 
-	// if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
-	// 	int64_t curtime = timeval_ms();
-	// 	if ((curtime - service->lasttime) < service->spacingtime)
-	// 		return ERROR_OK; /* Wait for spacing time passed */
-	// }
+	if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
+		int64_t curtime = timeval_ms();
+		if ((curtime - service->lasttime) < service->spacingtime)
+			return ERROR_OK; /* Wait for spacing time passed */
+	}
 
 	/* TODO: dirty call, don't do that */
 	allow_tap_access = 1;
@@ -888,12 +888,12 @@ COMMAND_HANDLER(handle_rbb_start_command)
 	if (CMD_ARGC >= 2)
 		service->spacingtime = atoi(CMD_ARGV[1]);
 	else
-		service->spacingtime = 1000; /* 100ms */
+		service->spacingtime = 100; /* 100ms */
 
 	if (CMD_ARGC >= 3)
 		service->backofftime = atoi(CMD_ARGV[2]);
 	else
-		service->backofftime = 1000; /* 100ms */
+		service->backofftime = 100; /* 100ms */
 
 	if (CMD_ARGC >= 4)
 		service->allow_tlr = atoi(CMD_ARGV[3]);
