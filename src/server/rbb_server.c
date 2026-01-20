@@ -30,7 +30,7 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
-#define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bitwriter"
+#define LOG_FOLDER_PATH "D:\\work\\2026\\openocd\\202601_release\\cwc_fail\\data\\openocd_cap\\openocd_in"
 
 #define LOG_TD_IN_FILE "\\td_in.log"
 #define LOG_REGION_BUF_FILE "\\openocd_region.log"
