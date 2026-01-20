@@ -30,9 +30,41 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
-#define LOG_FOLDER_PATH "D:\\work\\2026\\openocd\\202601_release\\cwc_fail\\data\\openocd_cap\\openocd_in"
+#ifdef _WIN32
+#include <windows.h>
+#include <direct.h>
+#define MKDIR(path) _mkdir(path)
+#else
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#define MKDIR(path) mkdir(path, 0777)
+#endif
 
-#define LOG_TD_IN_FILE "\\td_in.log"
+static char log_folder_path[2048] = {0};
+
+static void init_log_folder_path(void)
+{
+	if (log_folder_path[0] != '\0')
+		return;
+
+#ifdef _WIN32
+	if (GetModuleFileName(NULL, log_folder_path, sizeof(log_folder_path)) == 0) {
+		strcpy(log_folder_path, ".");
+	} else {
+		char *last_slash = strrchr(log_folder_path, '\\');
+		if (last_slash) {
+			*last_slash = '\0';
+		}
+	}
+#else
+	strcpy(log_folder_path, ".");
+#endif
+
+	strcat(log_folder_path, "\\rbb_logs");
+	MKDIR(log_folder_path);
+}
+
 #define LOG_REGION_BUF_FILE "\\openocd_region.log"
 #define LOG_TDI_OUT_FILE "\\openocd_tdi.log"
 
@@ -97,10 +129,12 @@ static int rbb_new_connection(struct connection *connection)
 	
 	g_connection_count++;
 	service->connection_id = g_connection_count;
-	snprintf(service->input_log_path, sizeof(service->input_log_path), "%s\\td_in_%d.log", LOG_FOLDER_PATH, service->connection_id);
-	service->log_initialized = 0;
 
-	LOG_INFO("rbb: New connection for channel %u state %s (id: %d)", service->channel, tap_state_name(cmd_queue_cur_state), service->connection_id);
+	if(0) {
+		init_log_folder_path();
+		snprintf(service->input_log_path, sizeof(service->input_log_path), "%s\\td_in_%d.log", log_folder_path, service->connection_id);
+		service->log_initialized = 0;
+	}
 
 	return ERROR_OK;
 }
@@ -477,11 +511,16 @@ static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, 
 {
 	static int first = 1;
 	FILE* fp_region;
+	char file_path[2048];
+
+	init_log_folder_path();
+	snprintf(file_path, sizeof(file_path), "%s%s", log_folder_path, LOG_REGION_BUF_FILE);
+
 	if (first) {
-		fp_region = fopen(LOG_FOLDER_PATH LOG_REGION_BUF_FILE, "w");
+		fp_region = fopen(file_path, "w");
 		first = 0;
 	} else {
-		fp_region = fopen(LOG_FOLDER_PATH LOG_REGION_BUF_FILE, "a");
+		fp_region = fopen(file_path, "a");
 	}
 
 	int i, bit_index;
@@ -561,7 +600,10 @@ static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, 
 
 static void rbb_debug_prt(struct rbb_service *service, unsigned char* read_output, int total_read_bits)
 {
-	FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
+	char file_path[2048];
+	init_log_folder_path();
+	snprintf(file_path, sizeof(file_path), "%s%s", log_folder_path, LOG_TDI_OUT_FILE);
+	FILE *fp_tdi = fopen(file_path, "a");
 	// FILE *fp_tdi = NULL;
 	int i;
 	if(fp_tdi != NULL) {
@@ -741,8 +783,8 @@ static int rbb_input(struct connection *connection)
 	buffer = (unsigned char *) malloc(RBB_BUFFERSIZE + 1);
 	memset(buffer, 0x00, RBB_BUFFERSIZE + 1);
 	bytes_read = connection_read(connection, buffer, RBB_BUFFERSIZE + 1 - 128);
-	LOG_INFO("rbb: connection %d read %d bytes", service->connection_id, bytes_read);
-	rbb_command_prt(buffer, bytes_read, service, NULL);
+	if(0)
+		rbb_command_prt(buffer, bytes_read, service, NULL);
 	/* Needs to Lock the adapter driver, reject any other access */
 
 	if (!bytes_read) {
@@ -770,9 +812,6 @@ static int rbb_input(struct connection *connection)
 
 	long* file_lines = (long*)malloc(sizeof(long) * (total_bits + 1));
 	memset(file_lines, 0, sizeof(long) * (total_bits + 1));
-
-	if(0)
-		rbb_command_prt(buffer, length, service, file_lines);
 
 	free(buffer);
 
