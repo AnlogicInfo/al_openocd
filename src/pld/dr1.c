@@ -170,7 +170,7 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
         return ERROR_FAIL;
     }
 
-    adapter_driver->speed(actual_khz);
+    adapter_config_khz(actual_khz);
     return ERROR_OK;
 }
 
