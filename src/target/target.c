@@ -1076,26 +1076,20 @@ static struct {
 
 int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_t *section_start_addrs, const uint32_t *size_blocks, unsigned int count)
 {
-    LOG_INFO("target_set_mailbox_sections called: buf_offset_blocks %p, section_start_addrs %p, size_blocks %p, count %u",
-             buf_offset_blocks, section_start_addrs, size_blocks, count);
     if (g_mailbox.list) {
-        LOG_INFO("clearing previous mailbox, count %u", g_mailbox.count);
         free(g_mailbox.list);
         g_mailbox.list = NULL;
     }
     g_mailbox.count = 0;
     if (!buf_offset_blocks || !section_start_addrs || !size_blocks || count == 0) {
-        LOG_INFO("no mailbox sections, buf_offset_blocks %p, section_start_addrs %p, size_blocks %p, count %u",
-                 buf_offset_blocks, section_start_addrs, size_blocks, count);
         return ERROR_OK;
     }
     g_mailbox.list = (struct mailbox_section *)malloc(sizeof(struct mailbox_section) * count);
     if (!g_mailbox.list) {
-        LOG_ERROR("failed to malloc mailbox sections, count %u", count);
         return ERROR_FAIL;
     }
-    LOG_INFO("allocated mailbox list for %u sections", count);
-    for (unsigned int i = 0; i < count; i++) {
+
+	for (unsigned int i = 0; i < count; i++) {
         g_mailbox.list[i].buf_offset_blocks   = buf_offset_blocks[i];
         g_mailbox.list[i].section_start_addr  = section_start_addrs[i];
         g_mailbox.list[i].size_blocks         = size_blocks[i];
@@ -1419,7 +1413,7 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     retval = target_ping_pong_trans_data(trans_target, buffer, count, block_size, pp);
     duration_measure(&dur_trans);
     if (retval == ERROR_OK) {
-        LOG_INFO("Transfer completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+        LOG_DEBUG("Transfer completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
             duration_elapsed(&dur_trans), duration_kbps(&dur_trans, total_bytes), (unsigned int)total_bytes);
     }
 
@@ -1428,7 +1422,7 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     duration_measure(&dur_prog);
     if (retval2 != ERROR_OK) retval = retval2;
     if (retval == ERROR_OK) {
-        LOG_INFO("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+        LOG_DEBUG("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
             duration_elapsed(&dur_prog), duration_kbps(&dur_prog, total_bytes), (unsigned int)total_bytes);
     }
 

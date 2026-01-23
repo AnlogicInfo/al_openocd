@@ -126,7 +126,6 @@ int dwcmshc_emmc_verify(struct emmc_device *emmc, const uint8_t *buffer, uint64_
 	int retval = ERROR_OK;
 	uint32_t target_crc = 0, image_crc;
 	uint32_t fail_location;
-	LOG_INFO("dwcssi verify image count %x", count);
 	retval = image_calculate_checksum(buffer, count, &image_crc);
 	if (retval != ERROR_OK)
 		return retval;

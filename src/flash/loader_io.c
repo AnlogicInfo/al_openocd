@@ -79,6 +79,7 @@ static int loader_init_reg_params(struct flash_loader *loader, char **params_nam
 		else
 			direction = PARAM_OUT;
 
+		LOG_DEBUG("init parm %x dir %x", i, direction);
 		init_reg_param(&loader->reg_params[i],  params_name[i], loader->xlen, direction);
 	}
 	return ERROR_OK;
@@ -229,20 +230,19 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 			return ERROR_FAIL;
 		loader->op = LOADER_WRITE;
 		LOG_DEBUG("loader copy area " TARGET_ADDR_FMT " size %x", loader->copy_area->address, loader->code_area);
+		/* Prefer user-configured buffer start/size if provided */
+		if (loader->exec_target->loader_buf_cfg) {
+			loader->buf_start = loader->exec_target->loader_buf_start;
+			loader->data_size = loader->exec_target->loader_buf_size;
+		} else {
+			loader->buf_start = loader->copy_area->address + loader->code_area;
+			if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
+				loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
+			else
+				loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
+		}
+		LOG_DEBUG("init loader data_size %x", loader->data_size);
 	}
-
-	if (loader->exec_target->loader_buf_cfg) {
-		loader->buf_start = loader->exec_target->loader_buf_start;
-		loader->data_size = loader->exec_target->loader_buf_size;
-	} else {
-		loader->buf_start = loader->copy_area->address + loader->code_area;
-		if (loader->work_mode == ASYNC_TRANS) /* update data size for async write */
-			loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size + 8 ;
-		else
-			loader->data_size = (((wa_size - loader->code_area)/loader->block_size) - 1) * loader->block_size;
-	}
-
-	LOG_INFO("set loader buf_start "TARGET_ADDR_FMT, loader->buf_start);
 
 	loader_set_params(loader, addr);
 

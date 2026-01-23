@@ -30,9 +30,41 @@
 #include "rbb_server.h"
 #include <helper/time_support.h>
 
-#define LOG_FOLDER_PATH "D:\\work\\projs\\openocd_tester\\tools\\win\\bitwriter"
+#ifdef _WIN32
+#include <windows.h>
+#include <direct.h>
+#define MKDIR(path) _mkdir(path)
+#else
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#define MKDIR(path) mkdir(path, 0777)
+#endif
 
-#define LOG_TD_IN_FILE "\\td_in.log"
+static char log_folder_path[2048] = {0};
+
+static void init_log_folder_path(void)
+{
+	if (log_folder_path[0] != '\0')
+		return;
+
+#ifdef _WIN32
+	if (GetModuleFileName(NULL, log_folder_path, sizeof(log_folder_path)) == 0) {
+		strcpy(log_folder_path, ".");
+	} else {
+		char *last_slash = strrchr(log_folder_path, '\\');
+		if (last_slash) {
+			*last_slash = '\0';
+		}
+	}
+#else
+	strcpy(log_folder_path, ".");
+#endif
+
+	strcat(log_folder_path, "\\rbb_logs");
+	MKDIR(log_folder_path);
+}
+
 #define LOG_REGION_BUF_FILE "\\openocd_region.log"
 #define LOG_TDI_OUT_FILE "\\openocd_tdi.log"
 
@@ -70,13 +102,21 @@ struct rbb_service {
 	int last_is_read;
 	int next_is_speed;
 	tap_state_t state;
-	struct jtag_region regions[64];
+	struct jtag_region *regions;
 	int region_count;
+	int region_capacity;
 	int64_t lasttime;
 	int64_t backofftime;
 	int64_t spacingtime;
 	int allow_tlr;
+	int connection_id;
+	int log_initialized;
+	char input_log_path[512];
 };
+
+static int g_connection_count = 0;
+
+static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service, long* file_lines);
 
 
 static int rbb_new_connection(struct connection *connection)
@@ -85,8 +125,17 @@ static int rbb_new_connection(struct connection *connection)
 
 	service = connection->service->priv;
 	service->state = cmd_queue_cur_state;
+	service->lasttime = 0;
+	
+	g_connection_count++;
+	service->connection_id = g_connection_count;
 
-	LOG_DEBUG("rbb: New connection for channel %u state %s", service->channel, tap_state_name(cmd_queue_cur_state));
+	if(0)
+	{
+		init_log_folder_path();
+		snprintf(service->input_log_path, sizeof(service->input_log_path), "%s\\td_in_%d.log", log_folder_path, service->connection_id);
+		service->log_initialized = 0;
+	}
 
 	return ERROR_OK;
 }
@@ -162,57 +211,6 @@ tap_state_t next_state(tap_state_t cur, int bit)
 	return TAP_RESET;
 }
 
-static int rbb_connection_check (struct connection *connection)
-{
-	struct rbb_service *service;
-	int retval = -1;
-	/* Check RBB connection */
-	if (allow_tap_access == 0) {/* Not occuppied by RBB */
-		/* If the TAP state not in TLR or RTI, just return back */
-		if (cmd_queue_cur_state != TAP_IDLE &&
-			cmd_queue_cur_state != TAP_RESET)
-			return retval;
-
-		if (jtag_command_queue != NULL)
-			return retval;
-	}
-
-	if (allow_tap_access == 3)
-		return retval;
-
-	service = (struct rbb_service *)connection->service->priv;
-
-	if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
-		int64_t curtime = timeval_ms();
-		if ((curtime - service->lasttime) < service->spacingtime)
-			return retval; /* Wait for spacing time passed */
-	}
-
-	retval = ERROR_OK;
-
-	return retval;
-}
-
-static int rbb_connection_read (struct connection *connection, unsigned char* buffer, int* length)
-{
-	int bytes_read;
-	allow_tap_access = 1;
-	bytes_read = connection_read(connection, buffer, RBB_BUFFERSIZE + 1 - 128);
-	if(!bytes_read) {
-		allow_tap_access = 0;
-		return ERROR_SERVER_REMOTE_CLOSED;
-	}
-	else if (bytes_read < 0) {
-		allow_tap_access = 0;
-		LOG_ERROR("error during read: %s", strerror(errno));
-		return ERROR_SERVER_REMOTE_CLOSED;
-	}
-
-	*length = bytes_read;
-	return ERROR_OK; 
-
-}
-
 static void rbb_set_speed(uint8_t val)
 {
 	uint64_t tck_freq_mhz, tck_freq_khz;
@@ -280,7 +278,6 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 		}
 	}
 
-#ifndef RBB_NOT_HANDLE_LAST
 	if (service->last_is_read) { /* Fix some TDO read issue */
 		LOG_INFO("last is read");
 		int firstbit = 0;
@@ -294,7 +291,6 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 	} else {
 		service->last_is_read = 0;
 	}
-#endif
 
 	*total_bits = bits;
 	*total_read_bits = read_bits;
@@ -305,12 +301,31 @@ static int rbb_input_collect (struct rbb_service *service , unsigned char* rbb_i
 
 #ifdef ANALYZE_COMPLETE
 
-static void rbb_region_init(struct rbb_service *service,
+static int rbb_ensure_region_capacity(struct rbb_service *service, int needed_count)
+{
+	if (needed_count <= service->region_capacity)
+		return ERROR_OK;
+	int new_capacity = service->region_capacity ? service->region_capacity * 2 : 64;
+	if (new_capacity < needed_count)
+		new_capacity = needed_count;
+	struct jtag_region *new_regions = realloc(service->regions, new_capacity * sizeof(struct jtag_region));
+	if (!new_regions) {
+		LOG_ERROR("rbb: failed to allocate regions");
+		return ERROR_FAIL;
+	}
+	service->regions = new_regions;
+	service->region_capacity = new_capacity;
+	return ERROR_OK;
+}
+
+static int rbb_region_init(struct rbb_service *service,
 							uint8_t is_tms, uint8_t flip_tms,
 							int shift_pos, int cur_pos,
 							tap_state_t cur_state, tap_state_t next_state,
 							int total_read_bits)
 {
+	if (rbb_ensure_region_capacity(service, service->region_count + 2) != ERROR_OK)
+		return ERROR_FAIL;
 	struct jtag_region *region = &(service->regions[service->region_count]);
 	struct jtag_region *next_region = &(service->regions[service->region_count + 1]);
 	region->is_tms = is_tms;
@@ -336,6 +351,7 @@ static void rbb_region_init(struct rbb_service *service,
 
 	service->region_count ++;
 
+	return ERROR_OK;
 }
 
 static void analyze_bitbang(const uint8_t *tms, int total_bits, struct rbb_service *service,
@@ -346,6 +362,8 @@ static void analyze_bitbang(const uint8_t *tms, int total_bits, struct rbb_servi
 	tap_state_t cur_state = service->state, new_state;
 	service->region_count = 0;
 
+	if (rbb_ensure_region_capacity(service, 1) != ERROR_OK)
+		return;
 	service->regions[0].begin_state = cur_state;
 	for (int i = 0; i < total_bits; i++) {
 		uint8_t tms_bit = (tms[i / 8] >> (i % 8)) & 0x1;
@@ -356,21 +374,22 @@ static void analyze_bitbang(const uint8_t *tms, int total_bits, struct rbb_servi
 			(cur_state != TAP_IRSHIFT && new_state == TAP_IRSHIFT) ||
 			(cur_state != TAP_DRPAUSE && new_state == TAP_DRPAUSE) ||
 			(cur_state != TAP_IRPAUSE && new_state == TAP_IRPAUSE)) {
-			rbb_region_init(service, 1, 0, shift_pos, i, cur_state, new_state, total_read_bits);
+			if (rbb_region_init(service, 1, 0, shift_pos, i, cur_state, new_state, total_read_bits) != ERROR_OK)
+				return;
 			shift_pos = i + 1;
 		} else if ((cur_state == TAP_DRSHIFT && new_state != TAP_DRSHIFT) ||
 				   (cur_state == TAP_IRSHIFT && new_state != TAP_IRSHIFT) ||
 				   (cur_state == TAP_DRPAUSE && new_state != TAP_DRPAUSE) ||
 				   (cur_state == TAP_IRPAUSE && new_state != TAP_IRPAUSE)) {
-			rbb_region_init(service, 0, 1, shift_pos, i, cur_state, new_state, total_read_bits);
+			if (rbb_region_init(service, 0, 1, shift_pos, i, cur_state, new_state, total_read_bits) != ERROR_OK)
+				return;
 			shift_pos = i + 1;
 		} else {
-			/* for unfinished trans */
-
 			if(i == total_bits - 1) {
 				is_tms = cur_state != TAP_IRSHIFT && cur_state != TAP_DRSHIFT;
 				is_flip_tms = (!is_tms) && tms_bit; 
-				rbb_region_init(service, is_tms, is_flip_tms, shift_pos, total_bits - 1, cur_state, new_state, total_read_bits);
+				if (rbb_region_init(service, is_tms, is_flip_tms, shift_pos, total_bits - 1, cur_state, new_state, total_read_bits) != ERROR_OK)
+					return;
 				shift_pos = i + 1;
 			}
 		}
@@ -454,114 +473,124 @@ static int rbb_jtag_drive(struct rbb_service *service, int length, size_t total_
 	return retval;
 }
 
-static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service)
+static void rbb_command_prt(unsigned char* command_in, int command_size, struct rbb_service *service, long* file_lines)
 {
-	FILE* fp_input = fopen(LOG_FOLDER_PATH LOG_TD_IN_FILE, "a");
-	// FILE* fp_input = NULL;
-	char command;
-	int i;
-	int tck, tdi, tms;
-	int bits = 0;
-	tap_state_t cur_state, new_state;
+	FILE* fp_input;
+	const char *filename = service->input_log_path;
 
-	cur_state = service->state;
-	if(fp_input != NULL) {
-		for (i = 0; i < command_size; i++) {
-			command = command_in[i];
-			if ('0' <= command && command <= '7') {
-				char offset = command - '0';
-				tck = (offset >> 2) & 1;
-				tms = (offset >> 1) & 1;
-				tdi = (offset >> 0) & 1;
-				if(tck) {
-					new_state = next_state(cur_state, tms);
-					bits ++;
-					fprintf(fp_input, "cmd_index %08d %x ", i, command);
-					fprintf(fp_input, "buf_index %08d ", bits);
-					fprintf(fp_input, "TCK: %d TMS: %d TDI: %d ", tck, tms, tdi);
-					fprintf(fp_input, "st %s -> %s\n", tap_state_name(cur_state), tap_state_name(new_state));
+	if (command_size <= 0)
+		return;
 
-				}
-				else {
-					new_state = cur_state;
-					fprintf(fp_input, "cmd_index %08d %x ", i, command);
-					fprintf(fp_input, "TCK: %d\n", tck);
-				}
-			} else if (command == 'R') {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "buf_index %08d ", bits);
-				fprintf(fp_input, "Read\n");
-			} else if (command == 'r' || command == 's') {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "TRST = 0\n");
-			} else if (command == 't' || command == 'u') {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "TRST = 1\n");
-			} else {
-				new_state = cur_state;
-				fprintf(fp_input, "cmd_index %08d %x ", i, command);
-				fprintf(fp_input, "Unknown\n");
-			}
-
-			cur_state = new_state;
-		}
-
-		if (service->last_is_read)
-			fprintf(fp_input, "last is read\n");
-		fclose(fp_input);
+	if (filename[0] == '\0') {
+		LOG_ERROR("rbb: empty input log path for connection %d", service->connection_id);
+		return;
 	}
 
+	if (service->log_initialized == 0) {
+		fp_input = fopen(filename, "w");
+		if (fp_input != NULL) {
+			service->log_initialized = 1;
+		} else {
+			LOG_ERROR("rbb: failed to create input log %s for connection %d", filename, service->connection_id);
+		}
+	} else {
+		fp_input = fopen(filename, "a");
+	}
+
+	if(fp_input != NULL) {
+		for (int i = 0; i < command_size; i++) {
+			unsigned char command = command_in[i];
+			fprintf(fp_input, "%c\n", command);
+		}
+		fclose(fp_input);
+	}
+	(void)file_lines;
 }
 
-static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, unsigned char* tms_buf, unsigned char* read_input)
+static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, unsigned char* tms_buf, unsigned char* read_input, long* file_lines)
 {
-	FILE* fp_region = fopen(LOG_FOLDER_PATH LOG_REGION_BUF_FILE, "a");
+	static int first = 1;
+	FILE* fp_region;
+	char file_path[2048];
+
+	init_log_folder_path();
+	snprintf(file_path, sizeof(file_path), "%s%s", log_folder_path, LOG_REGION_BUF_FILE);
+
+	if (first) {
+		fp_region = fopen(file_path, "w");
+		first = 0;
+	} else {
+		fp_region = fopen(file_path, "a");
+	}
 
 	int i, bit_index;
-	int bit, read_bit;
+	int bit;
 	unsigned char* in_buf = NULL;
 	if(fp_region != NULL) {
 		for (i = 0; i < service->region_count; i++) {
-			fprintf(fp_region, "region %d st %s -> %s start %d end %d size %d\n", i,
+			fprintf(fp_region, "region %d st %s -> %s start %d end %d size %d file_line %ld\n", i,
 					tap_state_name(service->regions[i].begin_state), tap_state_name(service->regions[i].end_state),
 					service->regions[i].begin, service->regions[i].end, 
-					service->regions[i].end - service->regions[i].begin);
+					service->regions[i].end - service->regions[i].begin,
+					file_lines[service->regions[i].begin]);
 			if(service->regions[i].is_tms)
 				in_buf = tms_buf;
 			else
 				in_buf = tdi_buf;
 
 			if(in_buf != NULL) {
-				for (bit_index = service->regions[i].begin; bit_index < service->regions[i].end; bit_index++) {
-					bit = (in_buf[bit_index / 8] >> (bit_index % 8)) & 0x1;
-					read_bit = (read_input[bit_index / 8] >> (bit_index % 8)) & 0x1;
-					fprintf(fp_region, "index %d bit %d read %d\n", bit_index, bit, read_bit);
+				if (0) {
+					for (bit_index = service->regions[i].begin; bit_index < service->regions[i].end; bit_index++) {
+						int read_bit = (read_input[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						bit = (in_buf[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						fprintf(fp_region, "index %d bit %d read %d\n", bit_index, bit, read_bit);
+					}
 				}
 
 				int region_size = (service->regions[i].end - service->regions[i].begin + 7) / 8;
 				if(service->regions[i].is_tms) 
 				{
-					fprintf(fp_region, "TMS: \n");
-					for (int byte_index = 0; byte_index < region_size; byte_index++) {
-						fprintf(fp_region, "%02x ", service->regions[i].tms_buffer[byte_index]);
-					}
-					fprintf(fp_region, "\n");
-				} else {
-					fprintf(fp_region, "TDI: ");
-					for (int byte_index = 0; byte_index < region_size; byte_index++) {
-						fprintf(fp_region, "%02x ", service->regions[i].tdi_buffer[byte_index]);
-					}
-					fprintf(fp_region, "\n");
-					if(service->regions[i].tdo_mask_buffer != NULL) {
-						fprintf(fp_region, "MSK: ");
+					if (1) {
+						fprintf(fp_region, "TMS: size %x \n", region_size);
 						for (int byte_index = 0; byte_index < region_size; byte_index++) {
-							fprintf(fp_region, "%02x ", service->regions[i].tdo_mask_buffer[byte_index]);
+							fprintf(fp_region, "%02x ", service->regions[i].tms_buffer[byte_index]);
 						}
 						fprintf(fp_region, "\n");
 					}
+				} else {
+					if (service->regions[i].begin_state == TAP_DRSHIFT || service->regions[i].begin_state == TAP_IRSHIFT) {
+						fprintf(fp_region, "TDI: ");
+						for (int byte_index = 0; byte_index < region_size; byte_index++) {
+							fprintf(fp_region, "%02x ", service->regions[i].tdi_buffer[byte_index]);
+						}
+						fprintf(fp_region, "\n");
+						if(service->regions[i].tdo_buffer != NULL && service->regions[i].begin_state == TAP_DRSHIFT) {
+							fprintf(fp_region, "TDO: ");
+							for (int byte_index = 0; byte_index < region_size; byte_index++) {
+								fprintf(fp_region, "%02x ", service->regions[i].tdo_buffer[byte_index]);
+							}
+							fprintf(fp_region, "\n");
+						}
+						if(service->regions[i].tdo_mask_buffer != NULL && service->regions[i].begin_state == TAP_DRSHIFT) {
+							fprintf(fp_region, "MSK: ");
+							for (int byte_index = 0; byte_index < region_size; byte_index++) {
+								fprintf(fp_region, "%02x ", service->regions[i].tdo_mask_buffer[byte_index]);
+							}
+							fprintf(fp_region, "\n");
+						}
+					}
+				}
+
+				if(service->regions[i].begin_state == TAP_IRSHIFT) {
+					uint32_t tdi_word = 0;
+					int max_bits = service->regions[i].end - service->regions[i].begin;
+					int bits = max_bits < 32 ? max_bits : 32;
+					for (bit_index = 0; bit_index < bits; bit_index++) {
+						bit = (service->regions[i].tdi_buffer[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						tdi_word |= ((uint32_t)bit << bit_index);
+					}
+					uint32_t tap0_ir = tdi_word >> 13;
+					fprintf(fp_region, "IR0: 0x%x\n", tap0_ir);					
 				}
 			}
 		}
@@ -571,7 +600,10 @@ static void rbb_region_prt(struct rbb_service *service, unsigned char* tdi_buf, 
 
 static void rbb_debug_prt(struct rbb_service *service, unsigned char* read_output, int total_read_bits)
 {
-	FILE *fp_tdi = fopen(LOG_FOLDER_PATH LOG_TDI_OUT_FILE, "a");
+	char file_path[2048];
+	init_log_folder_path();
+	snprintf(file_path, sizeof(file_path), "%s%s", log_folder_path, LOG_TDI_OUT_FILE);
+	FILE *fp_tdi = fopen(file_path, "a");
 	// FILE *fp_tdi = NULL;
 	int i;
 	if(fp_tdi != NULL) {
@@ -586,6 +618,18 @@ static void rbb_debug_prt(struct rbb_service *service, unsigned char* read_outpu
 					fprintf(fp_tdi, "%02x ", service->regions[i].tdi_buffer[byte_index]);
 				}
 				fprintf(fp_tdi, "\n");
+				if(service->regions[i].begin_state == TAP_IRSHIFT) {
+					uint32_t tdi_word = 0;
+					int max_bits = service->regions[i].end - service->regions[i].begin;
+					int bits = max_bits < 32 ? max_bits : 32;
+					for (int bit_index = 0; bit_index < bits; bit_index++) {
+						uint8_t bit = (service->regions[i].tdi_buffer[bit_index / 8] >> (bit_index % 8)) & 0x1;
+						tdi_word |= ((uint32_t)bit << bit_index);
+					}
+					uint32_t tap0_ir = tdi_word >> 13;
+					fprintf(fp_tdi, "IR0: 0x%x\n", tap0_ir);
+				}
+
 
 				if(service->regions[i].tdo_buffer != NULL) {
 					fprintf(fp_tdi, "TDO: ");
@@ -701,34 +745,32 @@ static int rbb_input(struct connection *connection)
 	struct rbb_service *service;
 	int length, bytes_read;
 
-	if(0) {
-		retval = rbb_connection_check(connection);
-		if(retval != ERROR_OK)
-			return ERROR_OK;
-
-		LOG_INFO("rbb connection check");
-		memset(buffer, 0x00, RBB_BUFFERSIZE + 1);
-		retval = rbb_connection_read(connection, buffer, &length);
-		if(retval != ERROR_OK)
-			return ERROR_SERVER_REMOTE_CLOSED;
-
-		LOG_INFO("rbb connection read");
-	}
-
-
-	if (allow_tap_access == 0) { /* Not occuppied by RBB */
-		/* If the TAP state not in TLR or RTI, just return back */
-		if (cmd_queue_cur_state != TAP_IDLE &&
-			cmd_queue_cur_state != TAP_RESET)
-			return ERROR_OK;
-
-		if (jtag_command_queue != NULL)
-			return ERROR_OK;
-	}
-	if (allow_tap_access == 3)
-		return ERROR_OK;
-
 	service = (struct rbb_service *)connection->service->priv;
+
+	// LOG_INFO("rbb_input: conn_id=%d allow_tap_access=%d state=%s jtag_queue=%p",
+	// 	service->connection_id, allow_tap_access,
+	// 	tap_state_name(cmd_queue_cur_state), jtag_command_queue);
+
+	if (allow_tap_access == 0) {
+		if (cmd_queue_cur_state != TAP_IDLE &&
+			cmd_queue_cur_state != TAP_RESET) {
+			LOG_INFO("rbb_input: conn_id=%d skip, tap state %s",
+				service->connection_id,
+				tap_state_name(cmd_queue_cur_state));
+			return ERROR_OK;
+		}
+
+		if (jtag_command_queue != NULL) {
+			LOG_INFO("rbb_input: conn_id=%d skip, jtag_command_queue busy",
+				service->connection_id);
+			return ERROR_OK;
+		}
+	}
+	if (allow_tap_access == 3) {
+		LOG_INFO("rbb_input: conn_id=%d skip, allow_tap_access == 3",
+			service->connection_id);
+		return ERROR_OK;
+	}
 
 	if (service->lasttime != 0 && allow_tap_access == 0) { /* More than one access cycle */
 		int64_t curtime = timeval_ms();
@@ -741,6 +783,8 @@ static int rbb_input(struct connection *connection)
 	buffer = (unsigned char *) malloc(RBB_BUFFERSIZE + 1);
 	memset(buffer, 0x00, RBB_BUFFERSIZE + 1);
 	bytes_read = connection_read(connection, buffer, RBB_BUFFERSIZE + 1 - 128);
+	if(0)
+		rbb_command_prt(buffer, bytes_read, service, NULL);
 	/* Needs to Lock the adapter driver, reject any other access */
 
 	if (!bytes_read) {
@@ -766,8 +810,8 @@ static int rbb_input(struct connection *connection)
 					  tms_input, tdi_input, read_input,
 					  &total_bits, &total_read_bits);
 
-	if(0)
-		rbb_command_prt(buffer, length, service);
+	long* file_lines = (long*)malloc(sizeof(long) * (total_bits + 1));
+	memset(file_lines, 0, sizeof(long) * (total_bits + 1));
 
 	free(buffer);
 
@@ -776,7 +820,9 @@ static int rbb_input(struct connection *connection)
 	retval = rbb_jtag_drive(service, length, total_bits, tms_input, tdi_input, read_input);
 
 	if(0)
-		rbb_region_prt(service, tdi_input, tms_input, read_input);
+		rbb_region_prt(service, tdi_input, tms_input, read_input, file_lines);
+
+	free(file_lines);
 
 	free(tdi_input);
 	free(tms_input);
@@ -792,7 +838,7 @@ static int rbb_input(struct connection *connection)
 		rbb_send_buffer_gen(service, send_buffer, total_read_bits);
 		connection_write(connection, send_buffer, total_read_bits);
 	}
-	if(1)
+	if(0)
 		rbb_debug_prt(service, send_buffer, total_read_bits);
 
 	free(send_buffer);
@@ -833,6 +879,9 @@ COMMAND_HANDLER(handle_rbb_start_command)
 	service->next_is_speed = 0;
 	service->state = TAP_RESET;
 	service->lasttime = 0;
+	service->connection_id = 0;
+	service->log_initialized = 0;
+	service->input_log_path[0] = '\0';
 
 	ret = add_service(&rbb_service_driver, CMD_ARGV[0], CONNECTION_LIMIT_UNLIMITED, service);
 
@@ -856,6 +905,9 @@ COMMAND_HANDLER(handle_rbb_start_command)
 		free(service);
 		return ERROR_FAIL;
 	}
+
+	service->regions = NULL;
+	service->region_capacity = 0;
 
 	return ERROR_OK;
 }

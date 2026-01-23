@@ -167,24 +167,15 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 		}
 		if (buf_cnt < s.image.sections[i].size)
 			memset(s.block + total_write_size + buf_cnt, 0xff, write_size - buf_cnt);
-		LOG_INFO("section %x write_size %"PRIx64, i, write_size);
 		total_write_size += write_size;
 	}
 
-	LOG_INFO("num_sections %d", s.image.num_sections);
 	unsigned int mb_count = s.image.num_sections;
-	LOG_INFO("config mailbox sections count %u", mb_count);
-	{
-		int ms_ret = target_set_mailbox_sections(s.section_offsets_blocks, s.section_block_addrs, s.section_sizes_blocks, mb_count);
-		LOG_INFO("target_set_mailbox_sections returned %d", ms_ret);
-	}
+	target_set_mailbox_sections(s.section_offsets_blocks, s.section_block_addrs, s.section_sizes_blocks, mb_count);
 
 	retval = emmc_write_image(emmc, s.block, s.image.sections[0].base_address, (int)total_write_size);
 
-	{
-		int ms_ret2 = target_set_mailbox_sections(NULL, NULL, NULL, 0);
-		LOG_INFO("target_set_mailbox_sections(clear) returned %d", ms_ret2);
-	}
+	target_set_mailbox_sections(NULL, NULL, NULL, 0);
 
 	free(s.block);
 	free(s.section_block_addrs);
