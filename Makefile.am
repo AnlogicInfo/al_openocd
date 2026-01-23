@@ -101,8 +101,9 @@ $(THE_MANUAL): %.pdf: %.tex
 
 TCL_PATH = tcl
 # command to find paths of script files, relative to TCL_PATH
-TCL_FILES = find $(srcdir)/$(TCL_PATH) -name '*.cfg' -o -name '*.tcl' -o -name '*.txt' | \
+TCL_FILES = find $(srcdir)/$(TCL_PATH) -name '*.cfg' -o -name '*.tcl' -o -name '*.txt'  -o -name '*.yaml'| \
 		sed -e 's,^$(srcdir)/$(TCL_PATH),,'
+
 
 dist-hook:
 	if test -d $(srcdir)/.git -a \( ! -e $(distdir)/ChangeLog -o -w $(distdir)/ChangeLog \) ; then \
