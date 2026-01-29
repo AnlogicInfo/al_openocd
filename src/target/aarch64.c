@@ -3364,6 +3364,9 @@ COMMAND_HANDLER(aarch64_instr_rd)
 	uint64_t value_64;
 	int retval = ERROR_OK;
 
+	if (CMD_ARGC != 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], offset);
 	LOG_INFO("offset %"PRIx32, offset);
 	instr = ARMV8_MRS(offset & 0xFFFF, 0);
@@ -3373,6 +3376,31 @@ COMMAND_HANDLER(aarch64_instr_rd)
 	if(retval == ERROR_OK)
 		LOG_INFO("result %"PRIx64, value_64);
 	else
+		retval = ERROR_FAIL;
+
+	return retval;
+}
+
+COMMAND_HANDLER(aarch64_instr_wr)
+{
+	struct target *target = get_current_target(CMD_CTX);
+	struct armv8_common *armv8 = target_to_armv8(target);
+	struct arm_dpm *dpm = &armv8->dpm;
+	uint32_t instr, offset;
+	uint64_t value;
+	int retval = ERROR_OK;
+
+	if (CMD_ARGC != 2)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[0], offset);
+	COMMAND_PARSE_NUMBER(u64, CMD_ARGV[1], value);
+	LOG_INFO("offset %"PRIx32", value %"PRIx64, offset, value);
+	instr = ARMV8_MSR_GP(offset & 0xFFFF, 0);
+	LOG_INFO("instr wr %"PRIx32, instr);
+
+	retval = dpm->instr_write_data_r0_64(dpm, instr, value);
+	if (retval != ERROR_OK)
 		retval = ERROR_FAIL;
 
 	return retval;
@@ -3607,6 +3635,13 @@ static const struct command_registration aarch64_command_handlers[] = {
 		.mode = COMMAND_ANY,
 		.help = "aarch64 instr read reg",
 		.usage = "offset",
+	},
+	{
+		.name = "instr_wr",
+		.handler = aarch64_instr_wr,
+		.mode = COMMAND_ANY,
+		.help = "aarch64 instr write reg",
+		.usage = "offset value",
 	},
 
 	COMMAND_REGISTRATION_DONE
