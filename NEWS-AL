@@ -11,6 +11,8 @@ v0.1122
 6. add speed setting in rbb server
 7. fix rbb pvt sensor read issue
 8. update rbb debug print
+9. add instr_wr command for aarch64 
+
 
 v0.1121
 1. add support for dr1m35
