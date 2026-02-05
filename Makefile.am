@@ -104,6 +104,7 @@ TCL_PATH = tcl
 TCL_FILES = find $(srcdir)/$(TCL_PATH) -name '*.cfg' -o -name '*.tcl' -o -name '*.txt'  -o -name '*.yaml'| \
 		sed -e 's,^$(srcdir)/$(TCL_PATH),,'
 
+
 dist-hook:
 	if test -d $(srcdir)/.git -a \( ! -e $(distdir)/ChangeLog -o -w $(distdir)/ChangeLog \) ; then \
 		git --git-dir $(srcdir)/.git log | $(srcdir)/tools/git2cl/git2cl > $(distdir)/ChangeLog ; \
