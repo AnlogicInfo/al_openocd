@@ -792,12 +792,6 @@ static struct code_src async_srcs[3] =
 static int dwcmshc_try_load_elf_code_src(struct dwcmshc_emmc_controller *ctrl, enum work_mode mode, int arch_index, struct code_src *srcs)
 {
     char path[256];
-    struct image img;
-    int retval;
-    uint64_t min_base = (uint64_t)(~0ULL);
-    uint64_t max_end = 0;
-    uint8_t *buf;
-    size_t read_sz;
     const char *prefix;
     const char *arch;
 
@@ -823,48 +817,8 @@ static int dwcmshc_try_load_elf_code_src(struct dwcmshc_emmc_controller *ctrl, e
     } else {
         snprintf(path, sizeof(path), "contrib/loaders/flash/emmc/dwcmshc/build/%s%s.elf", prefix, arch);
     }
-	LOG_INFO("load elf from %s", path);
-    memset(&img, 0, sizeof(img));
-    retval = image_open(&img, path, "elf");
-    if (retval != ERROR_OK)
-        return ERROR_FAIL;
 
-    for (unsigned int i = 0; i < img.num_sections; i++) {
-        uint64_t base = img.sections[i].base_address;
-        uint64_t end = base + img.sections[i].size;
-        if (base < min_base)
-            min_base = base;
-        if (end > max_end)
-            max_end = end;
-    }
-
-    if (min_base == (uint64_t)(~0ULL) || max_end <= min_base) {
-        image_close(&img);
-        return ERROR_FAIL;
-    }
-
-    buf = malloc((size_t)(max_end - min_base));
-    if (!buf) {
-        image_close(&img);
-        return ERROR_FAIL;
-    }
-
-    for (unsigned int i = 0; i < img.num_sections; i++) {
-        uint64_t base = img.sections[i].base_address;
-        uint32_t size = img.sections[i].size;
-        retval = image_read_section(&img, i, 0, size, buf + (size_t)(base - min_base), &read_sz);
-        if (retval != ERROR_OK) {
-            free(buf);
-            image_close(&img);
-            return ERROR_FAIL;
-        }
-    }
-
-    srcs[arch_index].bin = buf;
-    srcs[arch_index].size = (int)(max_end - min_base);
-
-    image_close(&img);
-    return ERROR_OK;
+    return loader_load_elf(&srcs[arch_index], path);
 }
 
 

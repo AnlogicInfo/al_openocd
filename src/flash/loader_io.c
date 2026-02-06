@@ -9,6 +9,9 @@
 
 
 #include "loader_io.h"
+#include <target/image.h>
+#include <string.h>
+#include <stdlib.h>
 
 char *rv_reg_params[] = {"a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"};
 char *aarch_reg_params[] = {"x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7"};
@@ -118,6 +121,60 @@ static int loader_init_code(struct flash_loader *loader, struct code_src *srcs)
 
 	loader->code_area = DIV_ROUND_UP(loader->code_src->size, loader->block_size) * loader->block_size;
 
+	return ERROR_OK;
+}
+
+int loader_load_elf(struct code_src *src, const char *filename)
+{
+	struct image img;
+	int retval;
+	uint64_t min_base = (uint64_t)(~0ULL);
+	uint64_t max_end = 0;
+	uint8_t *buf;
+	size_t read_sz;
+
+	LOG_INFO("load elf from %s", filename);
+	memset(&img, 0, sizeof(img));
+	retval = image_open(&img, filename, "elf");
+	if (retval != ERROR_OK)
+		return retval;
+
+	for (unsigned int i = 0; i < img.num_sections; i++) {
+		uint64_t base = img.sections[i].base_address;
+		uint64_t end = base + img.sections[i].size;
+		if (base < min_base)
+			min_base = base;
+		if (end > max_end)
+			max_end = end;
+	}
+
+	if (min_base == (uint64_t)(~0ULL) || max_end <= min_base) {
+		image_close(&img);
+		return ERROR_FAIL;
+	}
+
+	buf = malloc((size_t)(max_end - min_base));
+	if (!buf) {
+		image_close(&img);
+		return ERROR_FAIL;
+	}
+	memset(buf, 0, (size_t)(max_end - min_base));
+
+	for (unsigned int i = 0; i < img.num_sections; i++) {
+		uint64_t base = img.sections[i].base_address;
+		uint32_t size = img.sections[i].size;
+		retval = image_read_section(&img, i, 0, size, buf + (size_t)(base - min_base), &read_sz);
+		if (retval != ERROR_OK) {
+			free(buf);
+			image_close(&img);
+			return ERROR_FAIL;
+		}
+	}
+
+	src->bin = buf;
+	src->size = (int)(max_end - min_base);
+
+	image_close(&img);
 	return ERROR_OK;
 }
 
