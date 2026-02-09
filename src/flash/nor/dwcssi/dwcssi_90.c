@@ -31,6 +31,12 @@ FLASH_BANK_COMMAND_HANDLER(dr90_flash_bank_command)
 	driver_priv->loader.exec_target = bank->target;
 	driver_priv->loader.copy_area  = NULL;
 	driver_priv->loader.ctrl_base = base;
+	driver_priv->elf_dir = NULL;
+	if (CMD_ARGC >= 8) {
+		LOG_INFO("elf_dir %s", CMD_ARGV[7]);
+		driver_priv->elf_dir = strdup(CMD_ARGV[7]);		
+	}
+
 	return ERROR_OK;
 }
 

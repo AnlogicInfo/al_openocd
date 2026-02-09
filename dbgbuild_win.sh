@@ -22,3 +22,6 @@ make install
 mkdir -p ${PWD}/../binary-win64/share/openocd/loader/emmc
 cp -f ../contrib/loaders/flash/emmc/dwcmshc/build/*.elf ${PWD}/../binary-win64/share/openocd/loader/emmc/
 
+mkdir -p ${PWD}/../binary-win64/share/openocd/loader/qspi
+cp -f ../contrib/loaders/flash/qspi/dwcssi/build/*.elf ${PWD}/../binary-win64/share/openocd/loader/qspi/
+

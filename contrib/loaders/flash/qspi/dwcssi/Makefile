@@ -96,7 +96,6 @@ $(IMAGE).txt: $(IMAGE).elf
 
 image: $(IMAGE).inc
 	rm -rf $(DST_DIR)
-	rm $(WORK_DIR)/build/*.elf
 	rm $(WORK_DIR)/build/*.bin
 
 dump: $(IMAGE).txt

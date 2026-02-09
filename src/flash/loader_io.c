@@ -124,6 +124,19 @@ static int loader_init_code(struct flash_loader *loader, struct code_src *srcs)
 	return ERROR_OK;
 }
 
+static int loader_init_code_area(struct flash_loader *loader, struct code_src *srcs)
+{
+	struct target *exec_target = loader->exec_target;
+
+	if (strcmp(target_type_name(exec_target), "riscv") == 0) {
+		loader_init_rv_code(loader, srcs);
+	} else {
+		loader_init_aarch64_code(loader, srcs);
+	}
+	loader->code_area = DIV_ROUND_UP(loader->code_src->size, loader->block_size) * loader->block_size;
+	return ERROR_OK;
+}
+
 int loader_load_elf(struct code_src *src, const char *filename)
 {
 	struct image img;
@@ -136,8 +149,10 @@ int loader_load_elf(struct code_src *src, const char *filename)
 	LOG_INFO("load elf from %s", filename);
 	memset(&img, 0, sizeof(img));
 	retval = image_open(&img, filename, "elf");
-	if (retval != ERROR_OK)
+	if (retval != ERROR_OK) {
+		LOG_ERROR("fail to open image");
 		return retval;
+	}
 
 	for (unsigned int i = 0; i < img.num_sections; i++) {
 		uint64_t base = img.sections[i].base_address;
@@ -149,12 +164,14 @@ int loader_load_elf(struct code_src *src, const char *filename)
 	}
 
 	if (min_base == (uint64_t)(~0ULL) || max_end <= min_base) {
+		LOG_ERROR("loader_load_elf: invalid min_base %" PRIx64 " or max_end %" PRIx64, min_base, max_end);
 		image_close(&img);
 		return ERROR_FAIL;
 	}
 
 	buf = malloc((size_t)(max_end - min_base));
 	if (!buf) {
+		LOG_ERROR("loader_load_elf: malloc failed, size %zu", (size_t)(max_end - min_base));
 		image_close(&img);
 		return ERROR_FAIL;
 	}
@@ -165,6 +182,7 @@ int loader_load_elf(struct code_src *src, const char *filename)
 		uint32_t size = img.sections[i].size;
 		retval = image_read_section(&img, i, 0, size, buf + (size_t)(base - min_base), &read_sz);
 		if (retval != ERROR_OK) {
+			LOG_ERROR("loader_load_elf: read section %u failed, retval %d", i, retval);
 			free(buf);
 			image_close(&img);
 			return ERROR_FAIL;
@@ -173,7 +191,7 @@ int loader_load_elf(struct code_src *src, const char *filename)
 
 	src->bin = buf;
 	src->size = (int)(max_end - min_base);
-
+	LOG_INFO("loader_load_elf: code size %d", src->size);
 	image_close(&img);
 	return ERROR_OK;
 }
@@ -193,7 +211,7 @@ static int loader_init(struct flash_loader *loader, struct code_src *srcs)
 static int loader_code_to_wa(struct flash_loader *loader)
 {
 	int retval;
-	unsigned wa_size;
+	int wa_size;
 	struct working_area **area = &(loader->copy_area);
 	struct target *target = loader->exec_target;
 
@@ -202,17 +220,31 @@ static int loader_code_to_wa(struct flash_loader *loader)
 	 * both large and small page chips, where it won't be...
 	 */
 	wa_size = target_get_working_area_avail(target);
+	LOG_INFO("loader_code_to_wa: available working area size %d", wa_size);
+
+	if (wa_size < loader->code_src->size) {
+		LOG_ERROR("working area size %d is smaller than code size %d", wa_size, loader->code_src->size);
+		return ERROR_BUF_TOO_SMALL;
+	}
 
 	/* make sure we have a working area */
 	if (!*area) {
 		retval = target_alloc_working_area(target, wa_size, area);
 		if (retval != ERROR_OK) {
-			LOG_INFO("%s: no %d byte buffer", __func__, (int) wa_size);
+			LOG_INFO("%s: no %d byte buffer", __func__, wa_size);
 			return ERROR_BUF_TOO_SMALL;
 		}
 	}
-	target_write_buffer(target, (*area)->address, loader->code_src->size, loader->code_src->bin);
-	return wa_size;
+
+	LOG_INFO("loader_code_to_wa: code size %d", loader->code_src->size);
+
+	retval = target_write_buffer(target, (*area)->address, loader->code_src->size, loader->code_src->bin);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("loader_code_to_wa: write code to working area failed");
+		return retval;
+	}
+
+	return ERROR_OK;
 }
 
 static int loader_data_to_wa(struct flash_loader *loader, const uint8_t *data)
@@ -274,6 +306,15 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 	*/
 
 	return ERROR_OK;
+}
+
+static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr, int image_size)
+{
+	target_write_u32(loader->exec_target, loader->exec_target->loader_buf_start, addr);
+	target_write_u32(loader->exec_target, loader->exec_target->loader_buf_start + 0x40, image_size);
+	LOG_INFO("loader set mem parms " TARGET_ADDR_FMT " addr " TARGET_ADDR_FMT, loader->exec_target->loader_buf_start, addr);
+	LOG_INFO("loader set mem parms " TARGET_ADDR_FMT " size %x", loader->exec_target->loader_buf_start + 0x40, image_size);
+
 }
 
 
@@ -381,6 +422,35 @@ int loader_flash_write_async_pp(struct flash_loader *loader, struct code_src *sr
 	loader_exit(loader, RESTORE);
 	return retval;
 };
+
+int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size)
+{
+	uint32_t image_block_cnt; 
+	int retval;
+	LOG_INFO("start loader flash write");
+	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
+
+	loader_init_arch(loader);
+	loader_init_code_area(loader, srcs);
+
+	retval = loader_code_to_wa(loader);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("loader code to wa failed");
+		return ERROR_FAIL;
+	}
+	
+	loader_set_mem_parms(loader, addr, image_size);
+
+	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target, 
+	data, image_block_cnt, loader->block_size,
+	0, NULL, 0, NULL,
+	loader->exec_target->loader_buf_start, loader->exec_target->loader_buf_size,
+	loader->copy_area->address, 0, loader->arch_info);
+
+	loader_exit(loader, RESTORE);
+	return retval;
+}
+
 
 int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 		const uint8_t *data, target_addr_t addr, int image_size)

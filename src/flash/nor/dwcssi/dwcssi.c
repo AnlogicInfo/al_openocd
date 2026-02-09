@@ -9,6 +9,10 @@ The AL9000 QSPI controller is based on DWC_ssi 1.02a
 */
 #include "dwcssi.h"
 #include "dwcssi_flash.h"
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
 static const struct dwcssi_target target_devices[] = {
 /*	name, tap_idcode, ctrl_base */
 	{ "AL9000 RPU", 0x1c900a6d, 0xF804E000 },
@@ -54,6 +58,12 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 	driver_priv->loader.exec_target = bank->target;
 	driver_priv->loader.copy_area  = NULL;
 	driver_priv->loader.ctrl_base = base;
+	driver_priv->elf_dir = NULL;
+	if (CMD_ARGC >= 8) {
+		LOG_INFO("elf_dir %s", CMD_ARGV[7]);
+		driver_priv->elf_dir = strdup(CMD_ARGV[7]);		
+	}
+
 	return ERROR_OK;
 }
 
@@ -431,14 +441,6 @@ int dwcssi_tx(struct flash_bank *bank, uint32_t in)
 	return ERROR_OK;
 }
 
-
-static int dwcssi_tx_buf(struct flash_bank * bank, const uint8_t* in_buf, uint32_t in_cnt)
-{
-	uint32_t i;
-	for (i = 0; i < in_cnt; i++)
-		dwcssi_tx(bank, *(in_buf+i));
-	return (dwcssi_txwm_wait(bank));
-}
 
 static int dwcssi_rx(struct flash_bank *bank, uint8_t *out)
 {
@@ -1559,79 +1561,7 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 	return retval;
 }
 
-static int dwcssi_write_partial_page(struct flash_bank *bank,
-		const uint8_t *buffer, uint32_t offset, uint32_t len, uint8_t wr_cmd)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	uint8_t addr_size = driver_priv->addr_len >> 1;
-	uint8_t flash_sr;
-	int retval = ERROR_FAIL;
 
-	LOG_INFO("slow write cnt %d start val %x", len, *buffer);
-	LOG_INFO("cmd %x addr size %d", driver_priv->dev->pprog_cmd, addr_size);
-
-	dwcssi_flash_wr_en(bank, SPI_FRF_X1_MODE);
-
-	dwcssi_disable(bank);
-	dwcssi_config_CTRLR0(bank, DFS_BYTE, SPI_FRF_X1_MODE, TX_ONLY);
-	dwcssi_config_TXFTLR(bank, 0, len + addr_size);
-	dwcssi_enable(bank);
-
-	dwcssi_tx(bank, wr_cmd);
-	if (wr_cmd != 0x02)
-		dwcssi_tx(bank, offset >> 24);
-	dwcssi_tx(bank, offset >> 16);
-	dwcssi_tx(bank, offset >> 8);
-	dwcssi_tx(bank, offset);
-
-	dwcssi_tx_buf(bank, buffer, len);
-
-	retval = dwcssi_wait_flash_idle(bank, DWCSSI_MAX_TIMEOUT, &flash_sr);
-
-	if (retval != ERROR_OK)
-		LOG_ERROR("slow write sr %x", flash_sr);
-	return retval;
-}
-
-
-static int slow_dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
-{
-	uint32_t page_offset, page_size, cur_count;
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	int retval = ERROR_FAIL;
-
-	page_size = X1_PAGE_SIZE;
-	while (count > 0) {
-		if (page_offset + count > page_size)
-			cur_count = page_size - page_offset;
-		else
-			cur_count = count;
-
-		retval = dwcssi_write_partial_page(bank, buffer, offset, cur_count, driver_priv->dev->pprog_cmd);
-		if (retval != ERROR_OK) {
-			LOG_ERROR("slow write fail");
-			return ERROR_FAIL;
-		}
-		page_offset = 0;
-		buffer += cur_count;
-		offset += cur_count;
-		count -= cur_count;
-	}
-	 return retval;
-}
-
-
-static const uint8_t riscv32_async_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x4_riscv_32.inc"
-};
-
-static const uint8_t riscv64_async_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x4_riscv_64.inc"
-};
-
-static const uint8_t aarch64_async_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x4_aarch_64.inc"
-};
 
 static const uint8_t riscv32_async_x1_bin[] = {
 #include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x1_riscv_32.inc"
@@ -1645,10 +1575,11 @@ static const uint8_t aarch64_async_x1_bin[] = {
 #include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x1_aarch_64.inc"
 };
 
-static struct code_src async_srcs[3] = {
-	[RV64_SRC] = {riscv64_async_bin, sizeof(riscv64_async_bin)},
-	[RV32_SRC] = {riscv32_async_bin, sizeof(riscv32_async_bin)},
-	[AARCH64_SRC] = {aarch64_async_bin, sizeof(aarch64_async_bin)},
+static struct code_src async_srcs[3] = 
+{
+    [RV64_SRC] = {NULL, 0},
+    [RV32_SRC] = {NULL, 0},
+    [AARCH64_SRC] = {NULL, 0},
 };
 
 static struct code_src async_x1_srcs[3] = {
@@ -1699,6 +1630,63 @@ static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, ui
 	return retval;
 }
 
+static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, int arch_index, struct code_src *srcs)
+{
+    char path[256];
+    const char *prefix = "flash_async_x1_";
+    const char *arch;
+
+    if (arch_index == RV64_SRC)
+        arch = "riscv_64";
+    else if (arch_index == RV32_SRC)
+        arch = "riscv_32";
+    else
+        arch = "aarch_64";
+
+    if (driver_priv && driver_priv->elf_dir && driver_priv->elf_dir[0] != '\0') {
+        size_t len = strlen(driver_priv->elf_dir);
+        bool need_sep = len > 0 && driver_priv->elf_dir[len - 1] != '/' && driver_priv->elf_dir[len - 1] != '\\';
+        snprintf(path, sizeof(path), "%s%s%s%s.elf",
+                 driver_priv->elf_dir,
+                 need_sep ? "/" : "",
+                 prefix,
+                 arch);
+    } else {
+        snprintf(path, sizeof(path), "contrib/loaders/flash/qspi/dwcssi/build/%s%s.elf", prefix, arch);
+    }
+
+    return loader_load_elf(&srcs[arch_index], path);
+}
+
+static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	struct flash_loader *loader = &driver_priv->loader;
+	int retval;
+    int arch_index;
+
+	if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
+        arch_index = RV64_SRC;
+    } else {
+        arch_index = AARCH64_SRC;
+    }
+
+	loader->block_size = driver_priv->dev->pagesize;
+	loader->image_size = count;
+
+	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_srcs);
+	if(retval != ERROR_OK) {
+		LOG_ERROR("failed to load elf code src");
+		return ERROR_FAIL;
+	}
+
+	retval = loader_flash_write(loader, async_srcs,
+		buffer, offset, count);
+
+	return retval;
+
+}
+
 static void dwcssi_write_async_x1_params_priv(struct flash_loader *loader)
 {
 	struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
@@ -1709,7 +1697,6 @@ static void dwcssi_write_async_x1_params_priv(struct flash_loader *loader)
 	buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, driver_priv->dev->pprog_cmd);
 	buf_set_u64(loader->reg_params[7].value, 0, loader->xlen, addr_size);
 }
-
 
 static int dwcssi_write_async_x1(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
@@ -1724,8 +1711,31 @@ static int dwcssi_write_async_x1(struct flash_bank *bank, const uint8_t *buffer,
 	loader->param_cnt = 8;
 	loader->set_params_priv = dwcssi_write_async_x1_params_priv;
 	/*LOG_INFO("x1 write count %x block size %x image size %x", count, loader->block_size, loader->image_size);*/
-	retval = loader_flash_write_async(loader, async_x1_srcs,
+
+	int arch_index;
+	if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
+		if (riscv_xlen(loader->exec_target) == 32)
+			arch_index = RV32_SRC;
+		else
+			arch_index = RV64_SRC;
+	} else {
+		arch_index = AARCH64_SRC;
+	}
+
+	struct code_src local_srcs[3] = {
+		async_x1_srcs[0], async_x1_srcs[1], async_x1_srcs[2]
+	};
+
+	bool elf_loaded = (dwcssi_try_load_elf_code_src(driver_priv, arch_index, local_srcs) == ERROR_OK);
+	if (!elf_loaded)
+		return ERROR_FAIL;
+
+	retval = loader_flash_write_async(loader, local_srcs,
 		buffer, offset, count);
+
+	if (elf_loaded)
+		free((void *)local_srcs[arch_index].bin);
+
 	return retval;
 }
 
@@ -1793,7 +1803,7 @@ int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset
 			LOG_ERROR("address should be page aligned");
 			return ERROR_FAIL;
 		} else {
-			retval = dwcssi_write_async(bank, buffer, offset, count);
+			retval = dwcssi_write_loader(bank, buffer, offset, count);
 			if(retval != ERROR_OK)
 				LOG_INFO("X4 write fail");
 		}
@@ -1803,7 +1813,7 @@ x1_write:
 	if (retval != ERROR_OK) {
 		LOG_INFO("use X1 mode");
 		if (0)
-			retval = slow_dwcssi_write(bank, buffer, offset, count);
+			retval = dwcssi_write_async(bank, buffer, offset, count);
 		qspi_mio5_pull(bank, HIGH);
 		retval = dwcssi_write_async_x1(bank, buffer, offset, count);
 		qspi_mio5_pull(bank, LOW);

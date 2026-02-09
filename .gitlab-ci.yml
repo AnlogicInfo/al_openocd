@@ -39,6 +39,8 @@ buildlin-job:       # This job runs in the build stage, which runs first.
     - make install
     - mkdir -p ${PWD}/../binary-linux64/share/openocd/loader/emmc
     - cp -f ../contrib/loaders/flash/emmc/dwcmshc/build/*.elf ${PWD}/../binary-linux64/share/openocd/loader/emmc/
+    - mkdir -p ${PWD}/../binary-linux64/share/openocd/loader/qspi
+    - cp -f ../contrib/loaders/flash/qspi/dwcssi/build/*.elf ${PWD}/../binary-linux64/share/openocd/loader/qspi/
     - cd ../binary-linux64
     - tar -jcf openocd_linux64.tar.bz2 *
     - echo ${CI_JOB_ID} | tee lin64_jobid.log
@@ -75,6 +77,8 @@ buildwin-job:
     - make install
     - mkdir -p ${PWD}/../binary-win64/share/openocd/loader/emmc
     - cp -f ../contrib/loaders/flash/emmc/dwcmshc/build/*.elf ${PWD}/../binary-win64/share/openocd/loader/emmc/
+    - mkdir -p ${PWD}/../binary-win64/share/openocd/loader/qspi
+    - cp -f ../contrib/loaders/flash/qspi/dwcssi/build/*.elf ${PWD}/../binary-win64/share/openocd/loader/qspi/
     - cd ../binary-win64
     - echo 'Copying dynamic libraries'
     - find $OCDLIB_DIR/libyaml_0_2_2/bin -name '*.dll' -exec cp -v {} ${PWD}/bin \;
