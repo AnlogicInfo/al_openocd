@@ -161,6 +161,12 @@ struct target {
 	bool ddr_en;                              /* ddr enable for flash loader */
 	/* Optional override for flash loader data buffer location/size */
 	bool loader_buf_cfg;                       /* true if buf is set via config */
+	
+	/* 
+	 * Start address for loader data buffer.
+	 * NOTE: This buffer follows a specific layout protocol (Page 0: Params, Page 1: FIFO).
+	 * Please refer to loader_io.h "Loader Buffer Memory Layout Protocol" for details.
+	 */
 	target_addr_t loader_buf_start;           /* start address for loader data buffer */
 	uint32_t loader_buf_size;                 /* size of data chunk to use when overriding */
 	target_addr_t working_area;			/* working area (initialised RAM). Evaluated
@@ -363,6 +369,23 @@ struct target_memory_check_block {
 	uint32_t result;
 };
 
+#include <stddef.h>
+
+/* 
+ * Async FIFO Control Block Layout (Page 1)
+ * 0x00: Write Pointer
+ * 0x40: Read Pointer
+ * 0x80: Data Buffer Start
+ */
+struct async_fifo_control {
+    uint32_t wp;                // Offset: 0x00
+    uint8_t  _pad0[60];         // Padding to 0x40
+    
+    uint32_t rp;                // Offset: 0x40
+    uint8_t  _pad1[60];         // Padding to 0x80
+    
+    uint8_t  buffer[];          // Offset: 0x80
+};
 
 struct async_fifo {
 	uint32_t wp_addr;
