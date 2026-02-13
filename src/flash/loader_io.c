@@ -308,12 +308,24 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 	return ERROR_OK;
 }
 
-static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr, int image_size)
+static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr, int image_size, int bank_number)
 {
-	target_write_u32(loader->exec_target, loader->exec_target->loader_buf_start, addr);
-	target_write_u32(loader->exec_target, loader->exec_target->loader_buf_start + 0x40, image_size);
-	LOG_INFO("loader set mem parms " TARGET_ADDR_FMT " addr " TARGET_ADDR_FMT, loader->exec_target->loader_buf_start, addr);
-	LOG_INFO("loader set mem parms " TARGET_ADDR_FMT " size %x", loader->exec_target->loader_buf_start + 0x40, image_size);
+	target_addr_t base = loader->exec_target->loader_buf_start;
+
+	target_write_u32(loader->exec_target, 
+			base + offsetof(struct loader_shmem_map, params.flash_addr), 
+			addr);
+	target_write_u32(loader->exec_target, 
+			base + offsetof(struct loader_shmem_map, params.image_size), 
+			image_size);
+	target_write_u32(loader->exec_target, 
+			base + offsetof(struct loader_shmem_map, params.bank_id), 
+			bank_number);
+	
+	LOG_INFO("loader set mem parms " TARGET_ADDR_FMT " offsets: addr=+%zu, size=+%zu", 
+			base,
+			offsetof(struct loader_shmem_map, params.flash_addr),
+			offsetof(struct loader_shmem_map, params.image_size));
 
 }
 
@@ -423,7 +435,7 @@ int loader_flash_write_async_pp(struct flash_loader *loader, struct code_src *sr
 	return retval;
 };
 
-int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size)
+int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number)
 {
 	uint32_t image_block_cnt; 
 	int retval;
@@ -439,12 +451,15 @@ int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const
 		return ERROR_FAIL;
 	}
 	
-	loader_set_mem_parms(loader, addr, image_size);
+	loader_set_mem_parms(loader, addr, image_size, bank_number);
+	
+	target_addr_t fifo_start = loader->exec_target->loader_buf_start + offsetof(struct loader_shmem_map, fifo_buffer);
+	uint32_t fifo_size = loader->exec_target->loader_buf_size - offsetof(struct loader_shmem_map, fifo_buffer);
 
 	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target, 
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,
-	loader->exec_target->loader_buf_start, loader->exec_target->loader_buf_size,
+	fifo_start, fifo_size,
 	loader->copy_area->address, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);

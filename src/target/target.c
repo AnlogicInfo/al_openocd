@@ -995,9 +995,9 @@ static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32
 {
 	int retval;
 	uint32_t wp_result = 0, rp_result = 0;
-	fifo->wp_addr = buffer_start + 0x80;
-	fifo->rp_addr = buffer_start + 0xc0;
-	fifo->fifo_start_addr = buffer_start + block_size;
+	fifo->wp_addr = buffer_start + offsetof(struct async_fifo_control, wp);
+	fifo->rp_addr = buffer_start + offsetof(struct async_fifo_control, rp);
+	fifo->fifo_start_addr = fifo->wp_addr + block_size;
 	fifo->fifo_end_addr = buffer_start + buffer_size - block_size;
 	fifo->wp = fifo->fifo_start_addr;
 	fifo->rp = fifo->fifo_start_addr;
@@ -1137,6 +1137,7 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		else
 			thisrun_bytes = fifo->fifo_end_addr - fifo->wp - block_size;
 
+
 		if (thisrun_bytes == 0) {
 			/* Throttle polling a bit if transfer is (much) faster than flash
 			 * programming. The exact delay shouldn't matter as long as it's
@@ -1188,7 +1189,6 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 		if (retval != ERROR_OK)
 			break;
-		// LOG_INFO("transdata wp %x block cnt %x bytes %x remain block %x", fifo->wp, thisrun_block_cnt, thisrun_bytes, count);
 		/* Avoid GDB timeouts */
 		keep_alive();
 

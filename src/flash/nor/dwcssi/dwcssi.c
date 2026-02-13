@@ -1681,7 +1681,7 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
 	}
 
 	retval = loader_flash_write(loader, async_srcs,
-		buffer, offset, count);
+		buffer, offset, count, bank->bank_number);
 
 	return retval;
 
