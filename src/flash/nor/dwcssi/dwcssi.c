@@ -1537,6 +1537,7 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 		retval = dwcssi_checksum_x4(bank, offset, count, &target_crc);
 
 	if (retval != ERROR_OK) {
+		LOG_INFO("Run X1 verify");
 		qspi_mio5_pull(bank, HIGH);
 		retval = dwcssi_checksum_x1(bank, offset, count, &target_crc);
 		qspi_mio5_pull(bank, LOW);
@@ -1561,74 +1562,12 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 	return retval;
 }
 
-
-
-static const uint8_t riscv32_async_x1_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x1_riscv_32.inc"
-};
-
-static const uint8_t riscv64_async_x1_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x1_riscv_64.inc"
-};
-
-static const uint8_t aarch64_async_x1_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_async_x1_aarch_64.inc"
-};
-
 static struct code_src async_srcs[3] = 
 {
     [RV64_SRC] = {NULL, 0},
     [RV32_SRC] = {NULL, 0},
     [AARCH64_SRC] = {NULL, 0},
 };
-
-static struct code_src async_x1_srcs[3] = {
-	[RV64_SRC] = {riscv64_async_x1_bin, sizeof(riscv64_async_x1_bin)},
-	[RV32_SRC] = {riscv32_async_x1_bin, sizeof(riscv32_async_x1_bin)},
-	[AARCH64_SRC] = {aarch64_async_x1_bin, sizeof(aarch64_async_x1_bin)},
-};
-
-
-
-static void dwcssi_write_async_params_priv(struct flash_loader *loader)
-{
-	struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-	uint32_t spictrl;
-
-/*	LOG_INFO("write async cmd %x addr_len %x transtype %x",
-flash_ops->qprog_cmd, driver_priv->addr_len, flash_ops->wr_trans_type); */
-	spictrl = dwcssi_set_SPICTRLR0(flash_ops->wr_trans_type, driver_priv->addr_len, ENABLE, 0);
-
-	buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, flash_ops->qprog_cmd);
-	buf_set_u64(loader->reg_params[7].value, 0, loader->xlen, spictrl);
-}
-
-
-
-static int dwcssi_write_async(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-	struct flash_loader *loader = &driver_priv->loader;
-
-	int retval;
-
-	loader->work_mode = ASYNC_TRANS;
-	loader->block_size = driver_priv->dev->pagesize;
-	loader->image_size = count;
-	loader->param_cnt = 8;
-	loader->set_params_priv = dwcssi_write_async_params_priv;
-	LOG_DEBUG("count %x block size %x image size %x", count, loader->block_size, loader->image_size);
-	dwcssi_config_clk(bank, flash_ops->clk_div);
-	retval = dwcssi_wr_qe(bank, ENABLE);
-	if (retval != ERROR_OK)
-		return ERROR_FAIL;
-	retval = loader_flash_write_async(loader, async_srcs,
-		buffer, offset, count);
-	dwcssi_wr_qe(bank, DISABLE);
-	return retval;
-}
 
 static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, int arch_index, struct code_src *srcs)
 {
@@ -1687,99 +1626,10 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
 
 }
 
-static void dwcssi_write_async_x1_params_priv(struct flash_loader *loader)
-{
-	struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-	int addr_size = driver_priv->addr_len >> 1;
-
-	LOG_INFO("x1 parm cmd %x size %x", driver_priv->dev->pprog_cmd, addr_size);
-
-	buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, driver_priv->dev->pprog_cmd);
-	buf_set_u64(loader->reg_params[7].value, 0, loader->xlen, addr_size);
-}
-
-static int dwcssi_write_async_x1(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	struct flash_loader *loader = &driver_priv->loader;
-
-	int retval;
-
-	loader->work_mode = ASYNC_TRANS;
-	loader->block_size = X1_PAGE_SIZE;
-	loader->image_size = count;
-	loader->param_cnt = 8;
-	loader->set_params_priv = dwcssi_write_async_x1_params_priv;
-	/*LOG_INFO("x1 write count %x block size %x image size %x", count, loader->block_size, loader->image_size);*/
-
-	int arch_index;
-	if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
-		if (riscv_xlen(loader->exec_target) == 32)
-			arch_index = RV32_SRC;
-		else
-			arch_index = RV64_SRC;
-	} else {
-		arch_index = AARCH64_SRC;
-	}
-
-	struct code_src local_srcs[3] = {
-		async_x1_srcs[0], async_x1_srcs[1], async_x1_srcs[2]
-	};
-
-	bool elf_loaded = (dwcssi_try_load_elf_code_src(driver_priv, arch_index, local_srcs) == ERROR_OK);
-	if (!elf_loaded)
-		return ERROR_FAIL;
-
-	retval = loader_flash_write_async(loader, local_srcs,
-		buffer, offset, count);
-
-	if (elf_loaded)
-		free((void *)local_srcs[arch_index].bin);
-
-	return retval;
-}
-
-
-
-/* static void dwcssi_write_sync_params_priv(struct flash_loader *loader)
-{
-	 struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-	 const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-	 uint32_t spictrl;
-
-	 spictrl = dwcssi_set_SPICTRLR0(TRANS_TYPE_TT0, driver_priv->addr_len, ENABLE, 0);
-	 buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, flash_ops->qprog_cmd);
-	 buf_set_u64(loader->reg_params[6].value, 0, loader->xlen, spictrl);
-}
-
-static int dwcssi_write_sync(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
-{
-	 struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	 const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-	 struct flash_loader *loader = &driver_priv->loader;
-	 int retval;
-
-	 loader->work_mode = SYNC_TRANS;
-	 loader->block_size = driver_priv->dev->pagesize;
-	 loader->image_size = count;
-	 loader->param_cnt = 7;
-	 loader->set_params_priv = dwcssi_write_sync_params_priv;
-
-	 flash_ops->quad_en(bank);
-
-	 retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset, count);
-
-	 if (retval != ERROR_OK)
-		 LOG_ERROR("dwcssi write sync error");
-
-	 return retval;
-} */
-
 int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	int retval = ERROR_FAIL;
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 	uint32_t page_size, page_offset;
 	uint8_t addr_size = driver_priv->addr_len >> 1;
 	page_size = driver_priv->dev->pagesize ?
@@ -1792,31 +1642,14 @@ int dwcssi_write(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset
 	page_offset = offset % page_size;
 	if(!bank->hw_protected)
 		dwcssi_unset_protect(bank);
-	if ((bank->x4_mode) && (bank->x4_en)) {
-		if (flash_ops == NULL) {
-			LOG_ERROR("x4 write not supported for %s", driver_priv->dev->name);
-			retval = ERROR_FAIL;
-			goto x1_write;
-		}
 
-		if (page_offset != 0) {
-			LOG_ERROR("address should be page aligned");
-			return ERROR_FAIL;
-		} else {
-			retval = dwcssi_write_loader(bank, buffer, offset, count);
-			if(retval != ERROR_OK)
-				LOG_INFO("X4 write fail");
-		}
-	}
-
-x1_write:
-	if (retval != ERROR_OK) {
-		LOG_INFO("use X1 mode");
-		if (0)
-			retval = dwcssi_write_async(bank, buffer, offset, count);
-		qspi_mio5_pull(bank, HIGH);
-		retval = dwcssi_write_async_x1(bank, buffer, offset, count);
-		qspi_mio5_pull(bank, LOW);
+	if (page_offset != 0) {
+		LOG_ERROR("address should be page aligned");
+		return ERROR_FAIL;
+	} else {
+		retval = dwcssi_write_loader(bank, buffer, offset, count);
+		if(retval != ERROR_OK)
+			LOG_INFO("flash write fail");
 	}
 
 	return retval;
