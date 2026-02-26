@@ -22,7 +22,7 @@ export CFLAGS="$CFLAGS -I$OCDLIB_DIR/libyaml_0_2_2/include \
 export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  \
     -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 \
     -L$OCDLIB_DIR/libftdi1-$VER_LIBFTDI1/lib64 \
-    -L$OCDLIB_DIR/libwdi_$VER_LIBWDI/.libs"
+    -L$OCDLIB_DIR/libwdi_$VER_LIBWDI/bin"
 
 mkdir build-win64
 cd build-win64
