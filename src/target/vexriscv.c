@@ -56,6 +56,12 @@
 #define M_WIDTH(x) ((x >> 0) & 0xff)
 #define INST_ID(x) ((x >> 0) & 0xff)
 
+enum vexFpuProp {
+	FpuNone = 0x00,
+	FpuSingle = 0x01,
+	FpuDouble = 0x02
+};
+
 struct BusInfo {
 	uint32_t flushInstructionsSize;
 	uint32_t *flushInstructions;
@@ -64,13 +70,14 @@ struct vexriscv_common {
 	struct jtag_tap *tap;
 	struct reg_cache *core_cache;
 	struct vexriscv_reg_mapping *regs;
+	enum vexFpuProp fpu_property;
+	uint32_t fpregs_work_ram_addr;
 	uint32_t nb_regs;
 	uint32_t largest_csr;
 	struct vexriscv_core_reg *arch_info;
 	uint32_t dbgBase;
 	uint32_t readWaitCycles;
 	char *cpuConfigFile;
-	char *targetAddress;
 	struct BusInfo *iBus, *dBus;
 	int hardwareBreakpointsCount;
 	bool *hardwareBreakpointUsed;
@@ -136,7 +143,40 @@ struct vexriscv_reg_mapping {
 	struct reg x30;
 	struct reg x31;
 	struct reg pc;
+	struct reg fp0;
+	struct reg fp1;
+	struct reg fp2;
+	struct reg fp3;
+	struct reg fp4;
+	struct reg fp5;
+	struct reg fp6;
+	struct reg fp7;
+	struct reg fp8;
+	struct reg fp9;
+	struct reg fp10;
+	struct reg fp11;
+	struct reg fp12;
+	struct reg fp13;
+	struct reg fp14;
+	struct reg fp15;
+	struct reg fp16;
+	struct reg fp17;
+	struct reg fp18;
+	struct reg fp19;
+	struct reg fp20;
+	struct reg fp21;
+	struct reg fp22;
+	struct reg fp23;
+	struct reg fp24;
+	struct reg fp25;
+	struct reg fp26;
+	struct reg fp27;
+	struct reg fp28;
+	struct reg fp29;
+	struct reg fp30;
+	struct reg fp31;
 };
+
 
 #include "vexriscv-csrs.h"
 
@@ -330,7 +370,6 @@ static int vexriscv_set_core_reg(struct reg *reg, uint8_t *buf)
 		/* Perform a CSRRW which does a Read/Write.  If rd is $x0, then the read */
 		/* is ignored and side-effect free.  Set rs1 to $x1 to make the write */
 		/* not side-effect free. */
-		// 
 		/* cccc cccc cccc ssss s fff ddddd ooooooo */
 		/* c: CSR number */
 		/* s: rs1 (source register) */
@@ -354,7 +393,6 @@ static int vexriscv_set_core_reg(struct reg *reg, uint8_t *buf)
 		reg->dirty = 0;
 		reg->valid = 1;
 	} else {
-		/* TODO: why do nothing but dirty flag? */
 		LOG_DEBUG("Ignore setting reg %s? ", reg->name);
 		reg->dirty = 1;
 		reg->valid = 1;
@@ -365,6 +403,102 @@ static int vexriscv_set_core_reg(struct reg *reg, uint8_t *buf)
 static const struct reg_arch_type vexriscv_reg_type = {
 	.get = vexriscv_get_core_reg,
 	.set = vexriscv_set_core_reg,
+};
+
+static int vexriscv_get_fp_reg(struct reg *reg)
+{
+	struct vexriscv_core_reg *vexriscv_reg = reg->arch_info;
+	struct target *target = vexriscv_reg->target;
+	struct vexriscv_common *vexriscv = target_to_vexriscv(target);\
+	uint8_t fpregs_work_ram_shadow[8]; /* 1 x double size */
+	if (!reg->valid) {
+		/* read fpu register from FPU to work ram */
+		/* then read data from work ram */
+		uint32_t reg_id = reg->number - 33;
+		uint32_t addr = vexriscv->fpregs_work_ram_addr;
+		/* save content in work ram */
+		if (vexriscv->fpu_property == FpuDouble)
+			vexriscv_read_memory(target, addr, 8, 1, fpregs_work_ram_shadow);
+		else
+			vexriscv_read_memory(target, addr, 4, 1, fpregs_work_ram_shadow);
+		/* construct fsw: fsw fs0, 0(x1) */
+		/* instr format: offset[11:5] rs2[4:0] rs1[4:0] 010 offset[4:0] 0100111 */
+		/* rs1: memory ptr */
+		/* rs2: target FPU reg index */
+		uint32_t fsw_instr = 0x00000027 | (1 << 15) | (0x02 << 12) | (reg_id << 20);
+
+		vexriscv_write_regfile(target, false, 1, addr);
+		vexriscv_pushInstruction(target, false, fsw_instr);
+		vexriscv_execute_jtag_queue(target);
+
+		/* read data from work ram */
+		if (vexriscv->fpu_property == FpuDouble)
+			vexriscv_read_memory(target, addr, 8, 1, (uint8_t *)reg->value);
+		else
+			vexriscv_read_memory(target, addr, 4, 1, (uint8_t *)reg->value);
+
+		/* write back content of work ram */
+		if (vexriscv->fpu_property == FpuDouble)
+			vexriscv_write_memory(target, addr, 8, 1, fpregs_work_ram_shadow);
+		else
+			vexriscv_write_memory(target, addr, 4, 1, fpregs_work_ram_shadow);
+
+		reg->valid = true;
+		reg->dirty = false;
+
+		LOG_DEBUG("Reading FPR %d", reg_id);
+	}
+
+	return ERROR_OK;
+}
+
+static int vexriscv_set_fp_reg(struct reg *reg, uint8_t *buf)
+{
+	struct vexriscv_core_reg *vexriscv_reg = reg->arch_info;
+	struct target *target = vexriscv_reg->target;
+	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
+
+	uint32_t reg_id = reg->number - 33; /* FPU register ID start from 33*/
+	uint32_t addr = vexriscv->fpregs_work_ram_addr;
+	uint8_t fpregs_work_ram_shadow[8]; /* 1 x double size */
+
+	if (vexriscv->fpu_property == FpuDouble) {
+		buf_set_u64(reg->value, 0, 64, buf_get_u64(buf, 0, 64));
+		vexriscv_read_memory(target, addr, 8, 1, fpregs_work_ram_shadow);
+		vexriscv_write_memory(target, addr, 8, 1, buf);
+	} else {
+		buf_set_u32(reg->value, 0, 32, buf_get_u32(buf, 0, 32));
+		vexriscv_read_memory(target, addr, 4, 1, fpregs_work_ram_shadow);
+		vexriscv_write_memory(target, addr, 4, 1, buf);
+	}
+
+	/* offset[11:0] rs1[4:0] 010 rd[4:0] 0000111 */
+	/* construct flw instr: flw fs0, 0(x1)*/
+	/* address is directly wrote into rs1 (x1)*/
+
+	uint32_t flw_instr = 0x00000007 | (1 << 15) | (0x02 << 12) | (reg_id << 7);
+
+	vexriscv_write_regfile(target, false, 1, addr);
+	vexriscv_pushInstruction(target, false, flw_instr);
+	vexriscv_execute_jtag_queue(target);
+
+	/* write back content of work ram */
+	if (vexriscv->fpu_property == FpuDouble)
+		vexriscv_write_memory(target, addr, 8, 1, fpregs_work_ram_shadow);
+	else
+		vexriscv_write_memory(target, addr, 4, 1, fpregs_work_ram_shadow);
+
+	reg->valid = true;
+	reg->dirty = false;
+
+	LOG_DEBUG("Writing FPR %d", reg_id);
+
+	return ERROR_OK;
+}
+
+static const struct reg_arch_type vexriscv_fpu_type = {
+	.get = vexriscv_get_fp_reg,
+	.set = vexriscv_set_fp_reg,
 };
 
 static struct reg_cache *vexriscv_build_reg_cache(struct target *target)
@@ -398,6 +532,10 @@ static struct reg_cache *vexriscv_build_reg_cache(struct target *target)
 		.name = "org.gnu.gdb.riscv.csr"
 	};
 
+	static struct reg_feature feature_fpu = {
+		.name = "org.gnu.gdb.riscv.fpu"
+	};
+
 	for (uint32_t i = 0; i < vexriscv->nb_regs; i++) {
 		arch_info[i] = vexriscv_core_reg_list_arch_info[i];
 		arch_info[i].target = target;
@@ -405,8 +543,13 @@ static struct reg_cache *vexriscv_build_reg_cache(struct target *target)
 		reg_list[i].name = vexriscv_core_reg_list_arch_info[i].name;
 		reg_list[i].feature = &feature_cpu;
 		reg_list[i].group = "general";
-		reg_list[i].size = 32;
-		reg_list[i].value = calloc(1, 4);
+		if (((i > 32) && (i <= 64) && (vexriscv->fpu_property == FpuDouble))) {
+			reg_list[i].size = 64;
+			reg_list[i].value = calloc(1, 8);
+		} else {
+			reg_list[i].size = 32;
+			reg_list[i].value = calloc(1, 4);
+		}
 		reg_list[i].dirty = 0;
 		reg_list[i].valid = 0;
 		reg_list[i].type = &vexriscv_reg_type;
@@ -418,8 +561,17 @@ static struct reg_cache *vexriscv_build_reg_cache(struct target *target)
 			reg_list[i].feature = &feature_csr;
 		}
 
-		if ((i <= 32) || (vexriscv_core_reg_list_arch_info[i].is_csr))
-			reg_list[i].exist = true;
+		if ((i <= 32)
+		|| (vexriscv_core_reg_list_arch_info[i].is_csr)
+		|| (i <= 64 && (vexriscv->fpu_property != FpuNone))) {
+				if ((i > 32) && (i <= 64) &&
+					(vexriscv->fpu_property != FpuNone) &&
+					(!vexriscv_core_reg_list_arch_info[i].is_csr)) {
+					reg_list[i].feature = &feature_fpu;
+					reg_list[i].type = &vexriscv_fpu_type;
+				}
+				reg_list[i].exist = true;
+			}
 		else
 			reg_list[i].exist = false;
 	}
@@ -2130,13 +2282,39 @@ COMMAND_HANDLER(vexriscv_handle_cpuConfigFile_command)
 	return ERROR_OK;
 }
 
-COMMAND_HANDLER(vexriscv_handle_targetAddress_command)
+COMMAND_HANDLER(vexriscv_handle_setFpuStat_command)
 {
-	if (CMD_ARGC != 1)
+	if (((CMD_ARGC == 1) && (*CMD_ARGV[0] != 'N')))
 		return ERROR_COMMAND_ARGUMENT_INVALID;
 	struct target *target = get_current_target(CMD_CTX);
 	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
-	vexriscv->targetAddress = strdup(CMD_ARGV[0]);
+	uint32_t work_ram_addr;
+	char *endptr = NULL;
+	switch (*CMD_ARGV[0]) {
+		case 'F':
+			if (CMD_ARGC != 2)
+				return ERROR_COMMAND_ARGUMENT_INVALID;
+			vexriscv->fpu_property = FpuSingle;
+			work_ram_addr = strtoul(CMD_ARGV[1], &endptr, 0);
+			if (*endptr != '\0')
+				return ERROR_COMMAND_ARGUMENT_INVALID;
+			vexriscv->fpregs_work_ram_addr = work_ram_addr;
+			break;
+		case 'D':
+			if (CMD_ARGC != 2)
+				return ERROR_COMMAND_ARGUMENT_INVALID;
+			vexriscv->fpu_property = FpuDouble;
+			work_ram_addr = strtoul(CMD_ARGV[1], &endptr, 0);
+			if (*endptr != '\0')
+				return ERROR_COMMAND_ARGUMENT_INVALID;
+			vexriscv->fpregs_work_ram_addr = work_ram_addr;
+			break;
+		default:
+			vexriscv->fpu_property = FpuNone;
+			vexriscv->fpregs_work_ram_addr = 0;
+			break;
+	}
+
 	return ERROR_OK;
 }
 
@@ -2157,19 +2335,21 @@ static const struct command_registration vexriscv_exec_command_handlers[] = {
 	 .help =
 	 "Number of JTAG cycle to wait before getting jtag read responses",
 	 .usage = "value",
-	 }, {
-	     .name = "cpuConfigFile",
-	     .handler = vexriscv_handle_cpuConfigFile_command,
-	     .mode = COMMAND_CONFIG,
-	     .help = "Path to the autogenerated configuration file",
-	     .usage = "filePath",
-	     }, {
-		 .name = "targetAddress",
-		 .handler = vexriscv_handle_targetAddress_command,
-		 .mode = COMMAND_CONFIG,
-		 .help = "Target address to connect to",
-		 .usage = "network-address",
-		 },
+	 },
+	 {
+		.name = "cpuConfigFile",
+		.handler = vexriscv_handle_cpuConfigFile_command,
+		.mode = COMMAND_CONFIG,
+		.help = "Path to the autogenerated configuration file",
+		.usage = "filePath",
+	},
+	{
+		.name = "setFpuStat",
+		.handler = vexriscv_handle_setFpuStat_command,
+		.mode = COMMAND_CONFIG,
+		.help = "Setup FPU property",
+		.usage = "[F/D/N] work_ram_addr",
+	},
 	COMMAND_REGISTRATION_DONE
 };
 
