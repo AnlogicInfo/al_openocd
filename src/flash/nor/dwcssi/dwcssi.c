@@ -1408,24 +1408,33 @@ int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint3
 	return ERROR_OK;
 }
 
-static const uint8_t riscv32_crc_x1_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_x1_riscv_32.inc"
-};
 
-static const uint8_t riscv64_crc_x1_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_x1_riscv_64.inc"
-};
+static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, int arch_index, struct code_src *srcs, const char *prefix)
+{
+    char path[256];
+    const char *arch;
 
-static const uint8_t aarch64_crc_x1_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_x1_aarch_64.inc"
-};
+    if (arch_index == RV64_SRC)
+        arch = "riscv_64";
+    else if (arch_index == RV32_SRC)
+        arch = "riscv_32";
+    else
+        arch = "aarch_64";
 
+    if (driver_priv && driver_priv->elf_dir && driver_priv->elf_dir[0] != '\0') {
+        size_t len = strlen(driver_priv->elf_dir);
+        bool need_sep = len > 0 && driver_priv->elf_dir[len - 1] != '/' && driver_priv->elf_dir[len - 1] != '\\';
+        snprintf(path, sizeof(path), "%s%s%s%s.elf",
+                 driver_priv->elf_dir,
+                 need_sep ? "/" : "",
+                 prefix,
+                 arch);
+    } else {
+        snprintf(path, sizeof(path), "contrib/loaders/flash/qspi/dwcssi/build/%s%s.elf", prefix, arch);
+    }
 
-static struct code_src crc_x1_srcs[3] = {
-	[RV64_SRC] = {riscv64_crc_x1_bin, sizeof(riscv64_crc_x1_bin)},
-	[RV32_SRC] = {riscv32_crc_x1_bin, sizeof(riscv32_crc_x1_bin)},
-	[AARCH64_SRC] = {aarch64_crc_x1_bin, sizeof(aarch64_crc_x1_bin)},
-};
+    return loader_load_elf(&srcs[arch_index], path);
+}
 
 
 static void dwcssi_checksum_params_priv_x1(struct flash_loader *loader)
@@ -1439,19 +1448,40 @@ static void dwcssi_checksum_params_priv_x1(struct flash_loader *loader)
 }
 
 
+
+static struct code_src crc_x1_elf_srcs[3] = 
+{
+    [RV64_SRC] = {NULL, 0},
+    [RV32_SRC] = {NULL, 0},
+    [AARCH64_SRC] = {NULL, 0},
+};
+
 static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, uint32_t count, uint32_t *crc)
 {
 	int retval = ERROR_OK;
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	struct flash_loader *loader = &driver_priv->loader;
+    int arch_index;
+
+    if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
+        arch_index = RV64_SRC;
+    } else {
+        arch_index = AARCH64_SRC;
+    }
 
 	loader->work_mode = CRC_CHECK;
 	loader->block_size = driver_priv->dev->pagesize;
 	loader->image_size = count;
 	loader->param_cnt = 6;
 
+    retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, crc_x1_elf_srcs, "flash_crc_x1_");
+    if(retval != ERROR_OK) {
+        LOG_ERROR("failed to load elf code src");
+        return ERROR_FAIL;
+    }
+
 	loader->set_params_priv = dwcssi_checksum_params_priv_x1;
-	retval = loader_flash_crc(loader, crc_x1_srcs, address, crc);
+	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, address, bank->bank_number, crc);
 	return retval;
 }
 
@@ -1550,14 +1580,16 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 	if (retval != ERROR_OK)
 		return retval;
 
-	if (~image_crc != ~target_crc) {
-		LOG_DEBUG("X4 verify fail, try X1 verify");
+	if (0) {
 		if (~image_crc != ~target_crc) {
-			fail_location = find_difference(bank, buffer, count, offset);
-			LOG_ERROR("write failed at location %x", fail_location);
-			retval = ERROR_FAIL;
-		}
-	}
+			LOG_DEBUG("X4 verify fail, try X1 verify");
+			if (~image_crc != ~target_crc) {
+				fail_location = find_difference(bank, buffer, count, offset);
+				LOG_ERROR("write failed at location %x", fail_location);
+				retval = ERROR_FAIL;
+			}
+		}		
+	}	
 
 	return retval;
 }
@@ -1569,33 +1601,6 @@ static struct code_src async_srcs[3] =
     [AARCH64_SRC] = {NULL, 0},
 };
 
-static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, int arch_index, struct code_src *srcs)
-{
-    char path[256];
-    const char *prefix = "flash_async_x1_";
-    const char *arch;
-
-    if (arch_index == RV64_SRC)
-        arch = "riscv_64";
-    else if (arch_index == RV32_SRC)
-        arch = "riscv_32";
-    else
-        arch = "aarch_64";
-
-    if (driver_priv && driver_priv->elf_dir && driver_priv->elf_dir[0] != '\0') {
-        size_t len = strlen(driver_priv->elf_dir);
-        bool need_sep = len > 0 && driver_priv->elf_dir[len - 1] != '/' && driver_priv->elf_dir[len - 1] != '\\';
-        snprintf(path, sizeof(path), "%s%s%s%s.elf",
-                 driver_priv->elf_dir,
-                 need_sep ? "/" : "",
-                 prefix,
-                 arch);
-    } else {
-        snprintf(path, sizeof(path), "contrib/loaders/flash/qspi/dwcssi/build/%s%s.elf", prefix, arch);
-    }
-
-    return loader_load_elf(&srcs[arch_index], path);
-}
 
 static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, uint32_t offset, uint32_t count)
 {
@@ -1613,7 +1618,7 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
 	loader->block_size = driver_priv->dev->pagesize;
 	loader->image_size = count;
 
-	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_srcs);
+	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_srcs, "flash_async_x1_");
 	if(retval != ERROR_OK) {
 		LOG_ERROR("failed to load elf code src");
 		return ERROR_FAIL;
