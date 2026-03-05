@@ -466,6 +466,47 @@ int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const
 	return retval;
 }
 
+int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int bank_number, uint32_t* target_crc)
+{
+	int retval = ERROR_OK;
+	struct target *exec_target = loader->exec_target;
+
+	retval = loader_init_arch(loader);
+	if (retval != ERROR_OK)
+		return ERROR_FAIL;
+
+	loader_init_code_area(loader, srcs);
+
+	loader->param_cnt = 1;
+	if (strcmp(target_type_name(exec_target), "riscv") == 0)
+		loader_init_reg_params(loader, rv_reg_params);
+	else
+		loader_init_reg_params(loader, aarch_reg_params);
+
+	retval = loader_code_to_wa(loader);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("loader code to wa failed");
+		loader_exit(loader, RESTORE);
+		return ERROR_FAIL;
+	}
+
+	loader_set_mem_parms(loader, addr, loader->image_size, bank_number);
+
+	retval = target_run_algorithm(loader->exec_target,
+		0, NULL, loader->param_cnt, loader->reg_params,
+		loader->copy_area->address,
+		0, 10000,
+		loader->arch_info);
+
+	if (retval == ERROR_OK)
+		*target_crc = buf_get_u32(loader->reg_params[0].value, 0, 32);
+
+	loader_exit(loader, RESTORE);
+	return retval;
+}
+
+
+
 
 int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 		const uint8_t *data, target_addr_t addr, int image_size)
@@ -511,3 +552,4 @@ int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_
 	loader_exit(loader, RESTORE);
 	return retval;
 }
+
