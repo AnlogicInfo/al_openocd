@@ -1594,7 +1594,7 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 	return retval;
 }
 
-static struct code_src async_srcs[3] = 
+static struct code_src async_pp_srcs[3] = 
 {
     [RV64_SRC] = {NULL, 0},
     [RV32_SRC] = {NULL, 0},
@@ -1615,17 +1615,38 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
         arch_index = AARCH64_SRC;
     }
 
-	loader->block_size = driver_priv->dev->pagesize;
+	uint32_t block_size = 512; /* block size must be >= 0x200 */
+	loader->block_size = block_size;
 	loader->image_size = count;
 
-	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_srcs, "flash_async_x1_");
+	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_pp_srcs, "flash_async_pp_x1_");
 	if(retval != ERROR_OK) {
 		LOG_ERROR("failed to load elf code src");
 		return ERROR_FAIL;
 	}
 
-	retval = loader_flash_write(loader, async_srcs,
-		buffer, offset, count, bank->bank_number);
+	uint32_t image_block_cnt = DIV_ROUND_UP(count, block_size);
+	uint32_t total_bytes = image_block_cnt * block_size;
+	
+	uint8_t *staging_buffer = malloc(total_bytes);
+	if (!staging_buffer)
+		return ERROR_FAIL;
+	
+	memset(staging_buffer, 0xFF, total_bytes);
+	memcpy(staging_buffer, buffer, count);
+
+	uint32_t section_start_addr = offset;
+	uint32_t size_blocks = image_block_cnt;
+	uint32_t buf_offset_blocks = 0;
+
+	target_set_mailbox_sections(&buf_offset_blocks, &section_start_addr, &size_blocks, 1);
+
+	retval = loader_flash_write_pp(loader, async_pp_srcs,
+		staging_buffer, offset, count, bank->bank_number);
+
+	target_set_mailbox_sections(NULL, NULL, NULL, 0);
+
+	free(staging_buffer);
 
 	return retval;
 
