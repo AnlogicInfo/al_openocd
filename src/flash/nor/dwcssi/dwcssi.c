@@ -1668,7 +1668,7 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
 	loader->block_size = block_size;
 	loader->image_size = count;
 
-	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_pp_srcs, "flash_async_pp_x1_");
+	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_pp_srcs, "flash_async_x1_");
 	if(retval != ERROR_OK) {
 		LOG_ERROR("failed to load elf code src");
 		return ERROR_FAIL;

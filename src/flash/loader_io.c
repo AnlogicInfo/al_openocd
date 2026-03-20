@@ -62,8 +62,6 @@ static int loader_init_arch(struct flash_loader *loader)
 		((struct aarch64_algorithm *) loader->arch_info)->core_mode = ARMV8_64_EL0T;
 	}
 
-	LOG_INFO("loader init arch %s xlen %x", target_type_name(target), loader->xlen);
-
 	return retval;
 
 }
@@ -220,7 +218,6 @@ static int loader_code_to_wa(struct flash_loader *loader)
 	 * both large and small page chips, where it won't be...
 	 */
 	wa_size = target_get_working_area_avail(target);
-	LOG_INFO("loader_code_to_wa: available working area size %d", wa_size);
 
 	if (wa_size < loader->code_src->size) {
 		LOG_ERROR("working area size %d is smaller than code size %d", wa_size, loader->code_src->size);
@@ -244,7 +241,7 @@ static int loader_code_to_wa(struct flash_loader *loader)
 		return retval;
 	}
 
-	return ERROR_OK;
+	return wa_size;
 }
 
 static int loader_data_to_wa(struct flash_loader *loader, const uint8_t *data)
@@ -378,7 +375,6 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 		const uint8_t *data, target_addr_t addr, int image_size)
 {
 	int retval = ERROR_OK;
-	LOG_INFO("loader write sync size %x", image_size);
 	retval = loader_init(loader, srcs);
 	if (retval != ERROR_OK)
 		return ERROR_FAIL;
@@ -411,7 +407,6 @@ int loader_flash_write_async_pp(struct flash_loader *loader, struct code_src *sr
 	int retval;
 
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
-	LOG_INFO("loader write async size %x, block cnt %x", loader->image_size, image_block_cnt);
 	retval = loader_init(loader, srcs);
 	if (retval != ERROR_OK)
 		return ERROR_FAIL;
@@ -439,14 +434,13 @@ int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const
 {
 	uint32_t image_block_cnt; 
 	int retval;
-	LOG_INFO("start loader flash write");
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
 
 	loader_init_arch(loader);
 	loader_init_code_area(loader, srcs);
 
 	retval = loader_code_to_wa(loader);
-	if (retval != ERROR_OK) {
+	if (retval < 0) {
 		LOG_ERROR("loader code to wa failed");
 		return ERROR_FAIL;
 	}
@@ -470,14 +464,13 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 {
 	uint32_t image_block_cnt; 
 	int retval;
-	LOG_INFO("start loader flash write pp");
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
 
 	loader_init_arch(loader);
 	loader_init_code_area(loader, srcs);
 
 	retval = loader_code_to_wa(loader);
-	if (retval != ERROR_OK) {
+	if (retval < 0) {
 		LOG_ERROR("loader code to wa failed");
 		return ERROR_FAIL;
 	}
@@ -500,13 +493,12 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size, int bank_number)
 {
 	int retval;
-	LOG_INFO("start loader flash read pp");
 
 	loader_init_arch(loader);
 	loader_init_code_area(loader, srcs);
 
 	retval = loader_code_to_wa(loader);
-	if (retval != ERROR_OK) {
+	if (retval < 0) {
 		LOG_ERROR("loader code to wa failed");
 		return ERROR_FAIL;
 	}
@@ -534,16 +526,6 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	target_write_u32(loader->trans_target, section_start_ptr, addr);
 	target_write_u32(loader->trans_target, section_size_ptr, DIV_ROUND_UP(image_size, loader->block_size));
 	target_write_u32(loader->trans_target, ctrl_flag_ptr, 1);
-
-	LOG_INFO("Read Loader Setup:");
-	LOG_INFO("  base              : " TARGET_ADDR_FMT, base);
-	LOG_INFO("  buf0_flag_ptr     : " TARGET_ADDR_FMT, buf0_flag_ptr);
-	LOG_INFO("  buf1_flag_ptr     : " TARGET_ADDR_FMT, buf1_flag_ptr);
-	LOG_INFO("  ctrl_flag_ptr     : " TARGET_ADDR_FMT " (set to 1)", ctrl_flag_ptr);
-	LOG_INFO("  section_start_ptr : " TARGET_ADDR_FMT " (val: " TARGET_ADDR_FMT ")", section_start_ptr, addr);
-	LOG_INFO("  section_size_ptr  : " TARGET_ADDR_FMT " (val: 0x%" PRIx32 ")", section_size_ptr, DIV_ROUND_UP(image_size, loader->block_size));
-	LOG_INFO("  buf0_start_addr   : " TARGET_ADDR_FMT " (val: 0x%" PRIx32 ")", buf0_start_addr_ptr, buf0_addr);
-	LOG_INFO("  buf1_start_addr   : " TARGET_ADDR_FMT " (val: 0x%" PRIx32 ")", buf1_start_addr_ptr, buf1_addr);
 
 	retval = target_start_algorithm(loader->exec_target,
 		0, NULL, 0, NULL,
@@ -631,7 +613,7 @@ int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs
 		loader_init_reg_params(loader, aarch_reg_params);
 
 	retval = loader_code_to_wa(loader);
-	if (retval != ERROR_OK) {
+	if (retval < 0) {
 		LOG_ERROR("loader code to wa failed");
 		loader_exit(loader, RESTORE);
 		return ERROR_FAIL;
@@ -662,7 +644,6 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 	int retval;
 
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
-	LOG_INFO("loader write async size %x, block cnt %x", loader->image_size, image_block_cnt);
 	retval = loader_init(loader, srcs);
 	if (retval != ERROR_OK)
 		return ERROR_FAIL;
