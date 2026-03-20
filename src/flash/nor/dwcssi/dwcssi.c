@@ -1390,25 +1390,6 @@ static void dwcssi_read_x4(struct flash_bank *bank, uint8_t *buffer, uint32_t of
 	dwcssi_wr_qe(bank, DISABLE);
 }
 
-int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-
-	LOG_INFO("read cmd %"PRIx32, driver_priv->dev->read_cmd);
-	LOG_INFO("dev id %"PRIx32, driver_priv->dev->device_id);
-	if ((flash_ops != NULL) && (bank->x4_mode) && (bank->x4_en))
-		dwcssi_read_x4(bank, buffer, offset, count);
-	else {
-		qspi_mio5_pull(bank, HIGH);
-		dwcssi_read_x1(bank, buffer, offset, count);
-		qspi_mio5_pull(bank, LOW);
-	}
-
-	return ERROR_OK;
-}
-
-
 static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, int arch_index, struct code_src *srcs, const char *prefix)
 {
     char path[256];
@@ -1435,6 +1416,74 @@ static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, i
 
     return loader_load_elf(&srcs[arch_index], path);
 }
+
+
+
+static struct code_src async_pp_read_srcs[3] = 
+{
+    [RV64_SRC] = {NULL, 0},
+    [RV32_SRC] = {NULL, 0},
+    [AARCH64_SRC] = {NULL, 0},
+};
+
+static int dwcssi_read_loader(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	struct flash_loader *loader = &driver_priv->loader;
+	int retval;
+    int arch_index;
+
+	if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
+        arch_index = RV64_SRC;
+    } else {
+        arch_index = AARCH64_SRC;
+    }
+
+	uint32_t block_size = 512;
+	loader->block_size = block_size;
+	loader->image_size = count;
+
+	retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, async_pp_read_srcs, "flash_read_x1_");
+	if(retval != ERROR_OK) {
+		LOG_ERROR("failed to load elf code src");
+		return ERROR_FAIL;
+	}
+
+	retval = loader_flash_read_pp(loader, async_pp_read_srcs,
+		buffer, offset, count, bank->bank_number);
+
+	return retval;
+}
+
+int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
+{
+	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
+	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
+	int retval = ERROR_OK;
+
+	LOG_INFO("read cmd %"PRIx32, driver_priv->dev->read_cmd);
+	LOG_INFO("dev id %"PRIx32, driver_priv->dev->device_id);
+
+	if (count >= 1024) {
+		retval = dwcssi_read_loader(bank, buffer, offset, count);
+		if (retval == ERROR_OK) {
+			return ERROR_OK;
+		}
+		LOG_INFO("loader read failed, fallback to direct read");
+	}
+
+	if ((flash_ops != NULL) && (bank->x4_mode) && (bank->x4_en))
+		dwcssi_read_x4(bank, buffer, offset, count);
+	else {
+		qspi_mio5_pull(bank, HIGH);
+		dwcssi_read_x1(bank, buffer, offset, count);
+		qspi_mio5_pull(bank, LOW);
+	}
+
+	return ERROR_OK;
+}
+
+
 
 
 static void dwcssi_checksum_params_priv_x1(struct flash_loader *loader)

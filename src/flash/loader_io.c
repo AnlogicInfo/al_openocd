@@ -497,6 +497,122 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 	return retval;
 }
 
+int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size, int bank_number)
+{
+	int retval;
+	LOG_INFO("start loader flash read pp");
+
+	loader_init_arch(loader);
+	loader_init_code_area(loader, srcs);
+
+	retval = loader_code_to_wa(loader);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("loader code to wa failed");
+		return ERROR_FAIL;
+	}
+
+	loader_set_mem_parms(loader, addr, image_size, bank_number);
+
+	target_addr_t base = loader->exec_target->loader_buf_start;
+	target_addr_t buf0_flag_ptr = base + 0x0100;
+	target_addr_t buf1_flag_ptr = base + 0x0140;
+	target_addr_t ctrl_flag_ptr = base + 0x0180;
+	target_addr_t section_start_ptr = base + 0x01C0;
+	target_addr_t section_size_ptr = base + 0x0200;
+	target_addr_t buf0_start_addr_ptr = base + 0x0240;
+	target_addr_t buf1_start_addr_ptr = base + 0x0280;
+
+	uint32_t buf_size = (loader->exec_target->loader_buf_size - 0x0300) / 2;
+	uint32_t buf0_addr = base + 0x0300;
+	uint32_t buf1_addr = base + 0x0300 + buf_size;
+
+	/* Initialize control block */
+	target_write_u32(loader->trans_target, buf0_flag_ptr, 0);
+	target_write_u32(loader->trans_target, buf1_flag_ptr, 0);
+	target_write_u32(loader->trans_target, buf0_start_addr_ptr, buf0_addr);
+	target_write_u32(loader->trans_target, buf1_start_addr_ptr, buf1_addr);
+	target_write_u32(loader->trans_target, section_start_ptr, addr);
+	target_write_u32(loader->trans_target, section_size_ptr, DIV_ROUND_UP(image_size, loader->block_size));
+	target_write_u32(loader->trans_target, ctrl_flag_ptr, 1);
+
+	LOG_INFO("Read Loader Setup:");
+	LOG_INFO("  base              : " TARGET_ADDR_FMT, base);
+	LOG_INFO("  buf0_flag_ptr     : " TARGET_ADDR_FMT, buf0_flag_ptr);
+	LOG_INFO("  buf1_flag_ptr     : " TARGET_ADDR_FMT, buf1_flag_ptr);
+	LOG_INFO("  ctrl_flag_ptr     : " TARGET_ADDR_FMT " (set to 1)", ctrl_flag_ptr);
+	LOG_INFO("  section_start_ptr : " TARGET_ADDR_FMT " (val: " TARGET_ADDR_FMT ")", section_start_ptr, addr);
+	LOG_INFO("  section_size_ptr  : " TARGET_ADDR_FMT " (val: 0x%" PRIx32 ")", section_size_ptr, DIV_ROUND_UP(image_size, loader->block_size));
+	LOG_INFO("  buf0_start_addr   : " TARGET_ADDR_FMT " (val: 0x%" PRIx32 ")", buf0_start_addr_ptr, buf0_addr);
+	LOG_INFO("  buf1_start_addr   : " TARGET_ADDR_FMT " (val: 0x%" PRIx32 ")", buf1_start_addr_ptr, buf1_addr);
+
+	retval = target_start_algorithm(loader->exec_target,
+		0, NULL, 0, NULL,
+		loader->copy_area->address, 0, loader->arch_info);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("failed to start algorithm");
+		loader_exit(loader, RESTORE);
+		return retval;
+	}
+
+	int prod_idx = 0;
+	int remaining = image_size;
+	uint8_t *data_ptr = data;
+
+	while (remaining > 0) {
+		target_addr_t flag_ptr = (prod_idx == 0) ? buf0_flag_ptr : buf1_flag_ptr;
+		target_addr_t buf_addr = (prod_idx == 0) ? buf0_addr : buf1_addr;
+		uint32_t flag_val = 0;
+
+		int64_t start_ms = timeval_ms();
+		while (1) {
+			retval = target_read_u32(loader->trans_target, flag_ptr, &flag_val);
+			if (retval != ERROR_OK) break;
+			if (flag_val != 0) break;
+			if (timeval_ms() - start_ms > 3000) {
+				LOG_ERROR("target timeout during read");
+				retval = ERROR_TARGET_TIMEOUT;
+				break;
+			}
+			alive_sleep(1);
+		}
+
+		if (retval != ERROR_OK) break;
+
+		if (flag_val == 0xFFFFFFFF) {
+			LOG_ERROR("target reported read error");
+			retval = ERROR_FAIL;
+			break;
+		}
+
+		uint32_t read_bytes = flag_val * loader->block_size;
+		if ((int)read_bytes > remaining) {
+			read_bytes = remaining;
+		}
+
+		retval = target_read_buffer(loader->trans_target, buf_addr, read_bytes, data_ptr);
+		if (retval != ERROR_OK) {
+			LOG_ERROR("failed to read buffer");
+			break;
+		}
+
+		target_write_u32(loader->trans_target, flag_ptr, 0);
+
+		data_ptr += read_bytes;
+		remaining -= read_bytes;
+		prod_idx ^= 1;
+	}
+
+	int wait_retval = target_wait_algorithm(loader->exec_target,
+		0, NULL, 0, NULL, 0, 3000, loader->arch_info);
+
+	if (retval == ERROR_OK) {
+		retval = wait_retval;
+	}
+
+	loader_exit(loader, RESTORE);
+	return retval;
+}
+
 int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int bank_number, uint32_t* target_crc)
 {
 	int retval = ERROR_OK;
