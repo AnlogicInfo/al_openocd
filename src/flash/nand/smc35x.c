@@ -65,9 +65,9 @@ static const uint8_t aarch64_crc_bin[] = {
 };
 static struct code_src async_srcs[3] = 
 {
-    [RV64_SRC] = {riscv64_async_bin, sizeof(riscv64_async_bin)},
-    [RV32_SRC] = {riscv32_async_bin, sizeof(riscv32_async_bin)},
-    [AARCH64_SRC] = {aarch64_async_bin, sizeof(aarch64_async_bin)},
+    [RV64_SRC] = {riscv64_async_bin, sizeof(riscv64_async_bin), 0},
+    [RV32_SRC] = {riscv32_async_bin, sizeof(riscv32_async_bin), 0},
+    [AARCH64_SRC] = {aarch64_async_bin, sizeof(aarch64_async_bin), 0},
 };
 
 static uint32_t __attribute__((aligned(4))) NandOob64[12] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};

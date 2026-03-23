@@ -896,6 +896,7 @@ int target_run_algorithm(struct target *target,
 	}
 
 	target->running_alg = true;
+	LOG_INFO("target_run_algorithm: entry_point=" TARGET_ADDR_FMT, entry_point);
 	retval = target->type->run_algorithm(target,
 			num_mem_params, mem_params,
 			num_reg_params, reg_param,
@@ -941,6 +942,7 @@ int target_start_algorithm(struct target *target,
 	}
 
 	target->running_alg = true;
+	LOG_INFO("target_start_algorithm: entry_point=" TARGET_ADDR_FMT, entry_point);
 	retval = target->type->start_algorithm(target,
 			num_mem_params, mem_params,
 			num_reg_params, reg_params,
