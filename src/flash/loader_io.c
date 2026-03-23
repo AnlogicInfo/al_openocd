@@ -190,6 +190,14 @@ int loader_load_elf(struct code_src *src, const char *filename)
 	src->bin = buf;
 	src->size = (int)(max_end - min_base);
 	LOG_INFO("loader_load_elf: code size %d", src->size);
+
+	if (img.start_address_set && img.start_address >= min_base) {
+		src->entry_offset = img.start_address - min_base;
+		LOG_DEBUG("loader_load_elf: entry offset %" PRIx32, src->entry_offset);
+	} else {
+		src->entry_offset = 0;
+	}
+
 	image_close(&img);
 	return ERROR_OK;
 }
@@ -385,7 +393,7 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 		loader_set_wa(loader, addr, data);
 		retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,
-		loader->copy_area->address,
+		loader->copy_area->address + loader->code_src->entry_offset,
 		0, (loader->data_size) * 2,
 		loader->arch_info);
 		data += loader->data_size;
@@ -424,7 +432,7 @@ int loader_flash_write_async_pp(struct flash_loader *loader, struct code_src *sr
 		data, image_block_cnt, loader->block_size,
 		0, NULL, loader->param_cnt, loader->reg_params,
 		loader->buf_start, loader->data_size, 
-		loader->copy_area->address, 0, loader->arch_info);
+		loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);
 	return retval;
@@ -454,7 +462,7 @@ int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,
 	fifo_start, fifo_size,
-	loader->copy_area->address, 0, loader->arch_info);
+	loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);
 	return retval;
@@ -484,7 +492,7 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,
 	fifo_start, fifo_size,
-	loader->copy_area->address, 0, loader->arch_info);
+	loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);
 	return retval;
@@ -529,7 +537,7 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 
 	retval = target_start_algorithm(loader->exec_target,
 		0, NULL, 0, NULL,
-		loader->copy_area->address, 0, loader->arch_info);
+		loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("failed to start algorithm");
 		loader_exit(loader, RESTORE);
@@ -623,7 +631,7 @@ int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs
 
 	retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,
-		loader->copy_area->address,
+		loader->copy_area->address + loader->code_src->entry_offset,
 		0, 10000,
 		loader->arch_info);
 
@@ -652,7 +660,7 @@ int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs,
 	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
 	data, image_block_cnt, loader->block_size,
 	0, NULL, loader->param_cnt, loader->reg_params,
-	loader->buf_start, loader->data_size, loader->copy_area->address, 0, loader->arch_info);
+	loader->buf_start, loader->data_size, loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
 
 	loader_exit(loader, RESTORE);
 	return retval;
@@ -670,7 +678,7 @@ int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_
 	loader_set_wa(loader, addr, NULL);
 	retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,
-		loader->copy_area->address,
+		loader->copy_area->address + loader->code_src->entry_offset,
 		0, (loader->data_size) * 2,
 		loader->arch_info);
 

@@ -783,9 +783,9 @@ int dwcmshc_erase_block_range(struct emmc_device *emmc, uint32_t start_block, ui
 
 static struct code_src async_srcs[3] = 
 {
-    [RV64_SRC] = {NULL, 0},
-    [RV32_SRC] = {NULL, 0},
-    [AARCH64_SRC] = {NULL, 0},
+    [RV64_SRC] = {NULL, 0, 0},
+    [RV32_SRC] = {NULL, 0, 0},
+    [AARCH64_SRC] = {NULL, 0, 0},
 };
 
 
@@ -875,9 +875,9 @@ int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uin
 
 static struct code_src crc_srcs[3] = 
 {
-    [RV64_SRC] = {NULL, 0},
-    [RV32_SRC] = {NULL, 0},
-    [AARCH64_SRC] = {NULL, 0},
+    [RV64_SRC] = {NULL, 0, 0},
+    [RV32_SRC] = {NULL, 0, 0},
+    [AARCH64_SRC] = {NULL, 0, 0},
 };
 
 

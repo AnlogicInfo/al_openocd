@@ -47,6 +47,7 @@ enum loader_op {
 struct code_src {
     const uint8_t *bin;
     int size;
+    uint32_t entry_offset;
 };
 
 /* 
