@@ -564,14 +564,14 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	int prod_idx = 0;
 	int remaining = image_size;
 	uint8_t *data_ptr = data;
+	int total = image_size;
+	int progressed = 0;
+	LOG_PROC(0, total);
 
 	while (remaining > 0) {
 		target_addr_t flag_ptr = (prod_idx == 0) ? buf0_flag_ptr : buf1_flag_ptr;
 		target_addr_t buf_addr = (prod_idx == 0) ? buf0_addr : buf1_addr;
 		uint32_t flag_val = 0;
-
-		LOG_INFO("loader_flash_read_pp: waiting flag on buf%d, flag_ptr=" TARGET_ADDR_FMT ", remaining=%d",
-			prod_idx, flag_ptr, remaining);
 
 		int64_t start_ms = timeval_ms();
 		while (1) {
@@ -579,8 +579,7 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 			if (retval != ERROR_OK) break;
 			if (flag_val != 0) break;
 			if (timeval_ms() - start_ms > 3000) {
-				LOG_ERROR("loader_flash_read_pp: timeout waiting flag on buf%d, flag_ptr=" TARGET_ADDR_FMT,
-					prod_idx, flag_ptr);
+				LOG_ERROR("target timeout during read");
 				retval = ERROR_TARGET_TIMEOUT;
 				break;
 			}
@@ -590,7 +589,7 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 		if (retval != ERROR_OK) break;
 
 		if (flag_val == 0xFFFFFFFF) {
-			LOG_ERROR("loader_flash_read_pp: target reported read error on buf%d", prod_idx);
+			LOG_ERROR("target reported read error");
 			retval = ERROR_FAIL;
 			break;
 		}
@@ -600,13 +599,9 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 			read_bytes = remaining;
 		}
 
-		LOG_INFO("loader_flash_read_pp: flag=%u blocks, read_bytes=%u from buf%d at " TARGET_ADDR_FMT,
-			flag_val, read_bytes, prod_idx, buf_addr);
-
 		retval = target_read_buffer(loader->trans_target, buf_addr, read_bytes, data_ptr);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("loader_flash_read_pp: failed to read buffer at " TARGET_ADDR_FMT ", bytes=%u",
-				buf_addr, read_bytes);
+			LOG_ERROR("failed to read buffer");
 			break;
 		}
 
@@ -614,18 +609,23 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 
 		data_ptr += read_bytes;
 		remaining -= read_bytes;
-		LOG_INFO("loader_flash_read_pp: chunk done, remaining=%d", remaining);
+		progressed = total - remaining;
+		if (progressed < 0)
+			progressed = 0;
+		if (progressed > total)
+			progressed = total;
+		LOG_PROC(progressed, total);
 		prod_idx ^= 1;
 	}
 
 	int wait_retval = target_wait_algorithm(loader->exec_target,
 		0, NULL, 0, NULL, 0, 3000, loader->arch_info);
 
-	LOG_INFO("loader_flash_read_pp: target_wait_algorithm returned %d, loop retval=%d", wait_retval, retval);
-
 	if (retval == ERROR_OK) {
 		retval = wait_retval;
 	}
+	if (retval == ERROR_OK)
+		LOG_PROC(total, total);
 
 	loader_exit(loader, RESTORE);
 	return retval;
