@@ -502,6 +502,9 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 {
 	int retval;
 
+	LOG_INFO("loader_flash_read_pp: addr=" TARGET_ADDR_FMT ", image_size=%d, bank=%d",
+		addr, image_size, bank_number);
+
 	loader_init_arch(loader);
 	loader_init_code_area(loader, srcs);
 
@@ -526,6 +529,15 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	uint32_t buf0_addr = base + 0x0300;
 	uint32_t buf1_addr = base + 0x0300 + buf_size;
 
+	LOG_INFO("loader_flash_read_pp: base=" TARGET_ADDR_FMT ", buf_size=%u, buf0=0x%08x, buf1=0x%08x",
+		base, buf_size, buf0_addr, buf1_addr);
+	LOG_INFO("loader_flash_read_pp: flags buf0=" TARGET_ADDR_FMT ", buf1=" TARGET_ADDR_FMT ", ctrl=" TARGET_ADDR_FMT,
+		buf0_flag_ptr, buf1_flag_ptr, ctrl_flag_ptr);
+	LOG_INFO("loader_flash_read_pp: section_start_ptr=" TARGET_ADDR_FMT ", section_size_ptr=" TARGET_ADDR_FMT,
+		section_start_ptr, section_size_ptr);
+	LOG_INFO("loader_flash_read_pp: buf0_start_addr_ptr=" TARGET_ADDR_FMT ", buf1_start_addr_ptr=" TARGET_ADDR_FMT,
+		buf0_start_addr_ptr, buf1_start_addr_ptr);
+
 	/* Initialize control block */
 	target_write_u32(loader->trans_target, buf0_flag_ptr, 0);
 	target_write_u32(loader->trans_target, buf1_flag_ptr, 0);
@@ -534,6 +546,11 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	target_write_u32(loader->trans_target, section_start_ptr, addr);
 	target_write_u32(loader->trans_target, section_size_ptr, DIV_ROUND_UP(image_size, loader->block_size));
 	target_write_u32(loader->trans_target, ctrl_flag_ptr, 1);
+
+	LOG_INFO("loader_flash_read_pp: control block initialized: section_offset=%" PRIu32 ", blocks=%" PRIu32,
+		(uint32_t)addr, (uint32_t)DIV_ROUND_UP(image_size, loader->block_size));
+	LOG_INFO("loader_flash_read_pp: starting algorithm at " TARGET_ADDR_FMT,
+		loader->copy_area->address + loader->code_src->entry_offset);
 
 	retval = target_start_algorithm(loader->exec_target,
 		0, NULL, 0, NULL,
@@ -553,13 +570,17 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 		target_addr_t buf_addr = (prod_idx == 0) ? buf0_addr : buf1_addr;
 		uint32_t flag_val = 0;
 
+		LOG_INFO("loader_flash_read_pp: waiting flag on buf%d, flag_ptr=" TARGET_ADDR_FMT ", remaining=%d",
+			prod_idx, flag_ptr, remaining);
+
 		int64_t start_ms = timeval_ms();
 		while (1) {
 			retval = target_read_u32(loader->trans_target, flag_ptr, &flag_val);
 			if (retval != ERROR_OK) break;
 			if (flag_val != 0) break;
 			if (timeval_ms() - start_ms > 3000) {
-				LOG_ERROR("target timeout during read");
+				LOG_ERROR("loader_flash_read_pp: timeout waiting flag on buf%d, flag_ptr=" TARGET_ADDR_FMT,
+					prod_idx, flag_ptr);
 				retval = ERROR_TARGET_TIMEOUT;
 				break;
 			}
@@ -569,7 +590,7 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 		if (retval != ERROR_OK) break;
 
 		if (flag_val == 0xFFFFFFFF) {
-			LOG_ERROR("target reported read error");
+			LOG_ERROR("loader_flash_read_pp: target reported read error on buf%d", prod_idx);
 			retval = ERROR_FAIL;
 			break;
 		}
@@ -579,9 +600,13 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 			read_bytes = remaining;
 		}
 
+		LOG_INFO("loader_flash_read_pp: flag=%u blocks, read_bytes=%u from buf%d at " TARGET_ADDR_FMT,
+			flag_val, read_bytes, prod_idx, buf_addr);
+
 		retval = target_read_buffer(loader->trans_target, buf_addr, read_bytes, data_ptr);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("failed to read buffer");
+			LOG_ERROR("loader_flash_read_pp: failed to read buffer at " TARGET_ADDR_FMT ", bytes=%u",
+				buf_addr, read_bytes);
 			break;
 		}
 
@@ -589,11 +614,14 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 
 		data_ptr += read_bytes;
 		remaining -= read_bytes;
+		LOG_INFO("loader_flash_read_pp: chunk done, remaining=%d", remaining);
 		prod_idx ^= 1;
 	}
 
 	int wait_retval = target_wait_algorithm(loader->exec_target,
 		0, NULL, 0, NULL, 0, 3000, loader->arch_info);
+
+	LOG_INFO("loader_flash_read_pp: target_wait_algorithm returned %d, loop retval=%d", wait_retval, retval);
 
 	if (retval == ERROR_OK) {
 		retval = wait_retval;
