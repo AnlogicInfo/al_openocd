@@ -10,6 +10,7 @@
 
 #include "loader_io.h"
 #include <target/image.h>
+#include <helper/align.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -327,10 +328,6 @@ static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr
 			base + offsetof(struct loader_shmem_map, params.bank_id), 
 			bank_number);
 	
-	LOG_INFO("loader set mem parms " TARGET_ADDR_FMT " offsets: addr=+%zu, size=+%zu", 
-			base,
-			offsetof(struct loader_shmem_map, params.flash_addr),
-			offsetof(struct loader_shmem_map, params.image_size));
 
 }
 
@@ -502,9 +499,6 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 {
 	int retval;
 
-	LOG_INFO("loader_flash_read_pp: addr=" TARGET_ADDR_FMT ", image_size=%d, bank=%d",
-		addr, image_size, bank_number);
-
 	loader_init_arch(loader);
 	loader_init_code_area(loader, srcs);
 
@@ -515,6 +509,8 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	}
 
 	loader_set_mem_parms(loader, addr, image_size, bank_number);
+	LOG_INFO("loader_flash_read_pp: addr=" TARGET_ADDR_FMT ", image_size=%d, bank=%d",
+		addr, image_size, bank_number);
 
 	target_addr_t base = loader->exec_target->loader_buf_start;
 	target_addr_t buf0_flag_ptr = base + 0x0100;
@@ -524,33 +520,22 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	target_addr_t section_size_ptr = base + 0x0200;
 	target_addr_t buf0_start_addr_ptr = base + 0x0240;
 	target_addr_t buf1_start_addr_ptr = base + 0x0280;
+	target_addr_t buf_size_ptr = base + 0x2C0;
 
 	uint32_t buf_size = (loader->exec_target->loader_buf_size - 0x0300) / 2;
+	buf_size = ALIGN_DOWN(buf_size, (uint32_t)loader->block_size);
 	uint32_t buf0_addr = base + 0x0300;
 	uint32_t buf1_addr = base + 0x0300 + buf_size;
-
-	LOG_INFO("loader_flash_read_pp: base=" TARGET_ADDR_FMT ", buf_size=%u, buf0=0x%08x, buf1=0x%08x",
-		base, buf_size, buf0_addr, buf1_addr);
-	LOG_INFO("loader_flash_read_pp: flags buf0=" TARGET_ADDR_FMT ", buf1=" TARGET_ADDR_FMT ", ctrl=" TARGET_ADDR_FMT,
-		buf0_flag_ptr, buf1_flag_ptr, ctrl_flag_ptr);
-	LOG_INFO("loader_flash_read_pp: section_start_ptr=" TARGET_ADDR_FMT ", section_size_ptr=" TARGET_ADDR_FMT,
-		section_start_ptr, section_size_ptr);
-	LOG_INFO("loader_flash_read_pp: buf0_start_addr_ptr=" TARGET_ADDR_FMT ", buf1_start_addr_ptr=" TARGET_ADDR_FMT,
-		buf0_start_addr_ptr, buf1_start_addr_ptr);
 
 	/* Initialize control block */
 	target_write_u32(loader->trans_target, buf0_flag_ptr, 0);
 	target_write_u32(loader->trans_target, buf1_flag_ptr, 0);
 	target_write_u32(loader->trans_target, buf0_start_addr_ptr, buf0_addr);
 	target_write_u32(loader->trans_target, buf1_start_addr_ptr, buf1_addr);
+	target_write_u32(loader->trans_target, buf_size_ptr, buf_size);
 	target_write_u32(loader->trans_target, section_start_ptr, addr);
 	target_write_u32(loader->trans_target, section_size_ptr, DIV_ROUND_UP(image_size, loader->block_size));
 	target_write_u32(loader->trans_target, ctrl_flag_ptr, 1);
-
-	LOG_INFO("loader_flash_read_pp: control block initialized: section_offset=%" PRIu32 ", blocks=%" PRIu32,
-		(uint32_t)addr, (uint32_t)DIV_ROUND_UP(image_size, loader->block_size));
-	LOG_INFO("loader_flash_read_pp: starting algorithm at " TARGET_ADDR_FMT,
-		loader->copy_area->address + loader->code_src->entry_offset);
 
 	retval = target_start_algorithm(loader->exec_target,
 		0, NULL, 0, NULL,
@@ -567,7 +552,6 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	int total = image_size;
 	int progressed = 0;
 	LOG_PROC(0, total);
-
 	while (remaining > 0) {
 		target_addr_t flag_ptr = (prod_idx == 0) ? buf0_flag_ptr : buf1_flag_ptr;
 		target_addr_t buf_addr = (prod_idx == 0) ? buf0_addr : buf1_addr;
@@ -593,6 +577,7 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 			retval = ERROR_FAIL;
 			break;
 		}
+
 
 		uint32_t read_bytes = flag_val * loader->block_size;
 		if ((int)read_bytes > remaining) {
@@ -627,7 +612,7 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	if (retval == ERROR_OK)
 		LOG_PROC(total, total);
 
-	loader_exit(loader, RESTORE);
+	loader_exit(loader, NO_RESTORE);
 	return retval;
 }
 
