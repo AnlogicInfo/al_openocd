@@ -279,13 +279,6 @@ static int dwcssi_config_SPICTRLR0(struct flash_bank *bank, uint8_t trans_type,
 	return ERROR_OK;
 }
 
-static void dwcssi_config_clk(struct flash_bank *bank, uint8_t sckdv)
-{
-	dwcssi_disable(bank);
-	dwcssi_config_BAUDR(bank, sckdv);
-	dwcssi_enable(bank);
-}
-
 void dwcssi_config_init(struct flash_bank *bank, uint8_t sckdv)
 {
 	dwcssi_disable(bank);
@@ -358,25 +351,6 @@ void dwcssi_config_trans(struct flash_bank *bank, struct dwcssi_trans_config *tr
 			LOG_ERROR("invald trans mode");
 			break;
 	}
-}
-
-static void dwcssi_config_quad_rd(struct flash_bank *bank)
-{
-	struct dwcssi_trans_config trans_config;
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-
-	trans_config.tmod = RX_ONLY;
-	trans_config.spi_frf = SPI_FRF_X4_MODE;
-	trans_config.ndf = 0;
-
-	trans_config.rx_ip_lv = 0x3F;
-	trans_config.wait_cycle = flash_ops->wait_cycle;
-
-	trans_config.trans_type = flash_ops->rd_trans_type;
-	trans_config.stretch_en = ENABLE;
-	trans_config.addr_len = driver_priv->addr_len;
-	dwcssi_config_trans(bank, &trans_config);
 }
 
 /*dwc base functions*/
@@ -1321,22 +1295,6 @@ static int dwcssi_read_page_x1(struct flash_bank *bank, uint8_t *buffer, uint32_
 	return ERROR_OK;
 }
 
-static int dwcssi_read_page_x4(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t len)
-{
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-
-	LOG_INFO("dwcssi x4 read page offset %x len %x cmd %x", offset, len, flash_ops->qread_cmd);
-	dwcssi_disable(bank);
-	dwcssi_config_CTRLR1(bank, len);
-	dwcssi_enable(bank);
-	dwcssi_tx(bank, flash_ops->qread_cmd);
-	dwcssi_tx(bank, offset);
-	dwcssi_wait_tx_empty(bank);
-	dwcssi_rx_buf(bank, buffer, len);
-	return ERROR_OK;
-}
-
 static void dwcssi_read_x1(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	uint32_t cur_count, page_size = X1_PAGE_SIZE;
@@ -1356,38 +1314,6 @@ static void dwcssi_read_x1(struct flash_bank *bank, uint8_t *buffer, uint32_t of
 		offset += cur_count;
 		count  -= cur_count;
 	}
-}
-
-static void dwcssi_read_x4(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
-{
-	uint32_t cur_count, page_size;
-	uint32_t page_offset;
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-
-	page_size = driver_priv->dev->pagesize ?
-				driver_priv->dev->pagesize : SPIFLASH_DEF_PAGESIZE;
-
-	page_offset = offset % page_size;
-
-	dwcssi_wr_qe(bank, ENABLE);
-	dwcssi_config_clk(bank, flash_ops->clk_div);
-	dwcssi_config_quad_rd(bank);
-
-	while (count > 0) {
-		if (page_offset + count > page_size)
-			cur_count = page_size - page_offset;
-		else
-			cur_count = count;
-		dwcssi_read_page_x4(bank, buffer, offset, cur_count);
-
-		page_offset = 0;
-		buffer		+= cur_count;
-		offset		+= cur_count;
-		count		 -= cur_count;
-	}
-
-	dwcssi_wr_qe(bank, DISABLE);
 }
 
 static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, int arch_index, struct code_src *srcs, const char *prefix)
@@ -1458,7 +1384,6 @@ static int dwcssi_read_loader(struct flash_bank *bank, uint8_t *buffer, uint32_t
 int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint32_t count)
 {
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 	int retval = ERROR_OK;
 
 	LOG_INFO("read cmd %"PRIx32, driver_priv->dev->read_cmd);
@@ -1472,13 +1397,9 @@ int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint3
 		LOG_INFO("loader read failed, fallback to direct read");
 	}
 
-	if ((flash_ops != NULL) && (bank->x4_mode) && (bank->x4_en))
-		dwcssi_read_x4(bank, buffer, offset, count);
-	else {
-		qspi_mio5_pull(bank, HIGH);
-		dwcssi_read_x1(bank, buffer, offset, count);
-		qspi_mio5_pull(bank, LOW);
-	}
+	qspi_mio5_pull(bank, HIGH);
+	dwcssi_read_x1(bank, buffer, offset, count);
+	qspi_mio5_pull(bank, LOW);
 
 	return ERROR_OK;
 }
@@ -1534,55 +1455,6 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
 	return retval;
 }
 
-static const uint8_t riscv32_crc_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_x4_riscv_32.inc"
-};
-
-static const uint8_t riscv64_crc_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_x4_riscv_64.inc"
-};
-
-static const uint8_t aarch64_crc_bin[] = {
-#include "../../../../contrib/loaders/flash/qspi/dwcssi/build/flash_crc_x4_aarch_64.inc"
-};
-
-static struct code_src crc_x4_srcs[3] = {
-	[RV64_SRC] = {riscv64_crc_bin, sizeof(riscv64_crc_bin), 0},
-	[RV32_SRC] = {riscv32_crc_bin, sizeof(riscv32_crc_bin), 0},
-	[AARCH64_SRC] = {aarch64_crc_bin, sizeof(aarch64_crc_bin), 0},
-};
-
-static void dwcssi_checksum_params_priv_x4(struct flash_loader *loader)
-{
-	struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-
-	buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, flash_ops->qread_cmd);
-/*	LOG_INFO("target set %s qread_cmd %x", loader->reg_params[4].reg_name, flash_ops->qread_cmd); */
-}
-
-static int dwcssi_checksum_x4(struct flash_bank *bank, target_addr_t address, uint32_t count, uint32_t *crc)
-{
-	int retval = ERROR_OK;
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
-	struct flash_loader *loader = &driver_priv->loader;
-
-	loader->work_mode = CRC_CHECK;
-	loader->block_size = driver_priv->dev->pagesize;
-	loader->image_size = count;
-	loader->param_cnt = 5;
-	loader->set_params_priv = dwcssi_checksum_params_priv_x4;
-	retval = dwcssi_wr_qe(bank, ENABLE);
-	if (retval != ERROR_OK)
-		return retval;
-	dwcssi_config_clk(bank, flash_ops->clk_div);
-	dwcssi_config_quad_rd(bank);
-	retval = loader_flash_crc(loader, crc_x4_srcs, address, crc);
-	dwcssi_wr_qe(bank, DISABLE);
-	return retval;
-}
-
 static int find_difference(struct flash_bank *bank, const uint8_t *buffer, uint32_t size, uint32_t offset) {
     if (size == 1) {
         return offset;
@@ -1609,18 +1481,11 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 	int retval = ERROR_FAIL;
 	uint32_t target_crc, image_crc;
 	uint32_t fail_location = 0;
-	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
-	const flash_ops_t *flash_ops = driver_priv->dev->flash_ops;
 
-	if ((flash_ops != NULL) && (bank->x4_mode) && (bank->x4_en))
-		retval = dwcssi_checksum_x4(bank, offset, count, &target_crc);
-
-	if (retval != ERROR_OK) {
-		LOG_INFO("Run X1 verify");
-		qspi_mio5_pull(bank, HIGH);
-		retval = dwcssi_checksum_x1(bank, offset, count, &target_crc);
-		qspi_mio5_pull(bank, LOW);
-	}
+	LOG_INFO("Run X1 verify");
+	qspi_mio5_pull(bank, HIGH);
+	retval = dwcssi_checksum_x1(bank, offset, count, &target_crc);
+	qspi_mio5_pull(bank, LOW);
 
 	if (retval != ERROR_OK)
 		return retval;
