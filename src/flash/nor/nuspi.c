@@ -754,8 +754,8 @@ static const uint8_t riscv64_bin[] = {
 };
 
 static struct code_src sync_srcs[2] = {
-	[RV64_SRC] = {riscv64_bin, sizeof(riscv64_bin)},
-	[RV32_SRC] = {riscv32_bin, sizeof(riscv32_bin)},
+	[RV64_SRC] = {riscv64_bin, sizeof(riscv64_bin), 0},
+	[RV32_SRC] = {riscv32_bin, sizeof(riscv32_bin), 0},
 };
 
 

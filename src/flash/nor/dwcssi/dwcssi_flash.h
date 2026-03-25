@@ -7,6 +7,7 @@ struct dwcssi_flash_bank {
     uint8_t       addr_len;
     const struct flash_device *dev;
     struct flash_loader loader;
+    char *elf_dir;
 };
 
 // #define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)

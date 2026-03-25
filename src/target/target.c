@@ -896,6 +896,7 @@ int target_run_algorithm(struct target *target,
 	}
 
 	target->running_alg = true;
+	LOG_INFO("target_run_algorithm: entry_point=" TARGET_ADDR_FMT, entry_point);
 	retval = target->type->run_algorithm(target,
 			num_mem_params, mem_params,
 			num_reg_params, reg_param,
@@ -941,6 +942,7 @@ int target_start_algorithm(struct target *target,
 	}
 
 	target->running_alg = true;
+	LOG_INFO("target_start_algorithm: entry_point=" TARGET_ADDR_FMT, entry_point);
 	retval = target->type->start_algorithm(target,
 			num_mem_params, mem_params,
 			num_reg_params, reg_params,
@@ -991,20 +993,20 @@ done:
 	return retval;
 }
 
-static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, struct async_fifo *fifo)
+static int target_async_algorithm_init_fifo(struct target *trans_target,  uint32_t buffer_start, uint32_t buffer_size, uint32_t block_size, struct async_fifo *fifo)
 {
 	int retval;
 	uint32_t wp_result = 0, rp_result = 0;
-	fifo->wp_addr = buffer_start;
-	fifo->rp_addr = buffer_start + 4;
-	fifo->fifo_start_addr = buffer_start + 8;
-	fifo->fifo_end_addr = buffer_start + buffer_size;
+	fifo->wp_addr = buffer_start + offsetof(struct async_fifo_control, wp);
+	fifo->rp_addr = buffer_start + offsetof(struct async_fifo_control, rp);
+	fifo->fifo_start_addr = fifo->wp_addr + block_size;
+	fifo->fifo_end_addr = buffer_start + buffer_size - block_size;
 	fifo->wp = fifo->fifo_start_addr;
 	fifo->rp = fifo->fifo_start_addr;
 
-	LOG_DEBUG("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
-	LOG_DEBUG("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
-
+	LOG_INFO("init wp addr %x value %x", fifo->wp_addr, fifo->wp);
+	LOG_INFO("init rp addr %x value %x", fifo->rp_addr, fifo->rp);
+	LOG_INFO("init fifo start addr %x end addr %x", fifo->fifo_start_addr, fifo->fifo_end_addr);
 	retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 	if(retval != ERROR_OK)
 		return retval;
@@ -1137,6 +1139,7 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		else
 			thisrun_bytes = fifo->fifo_end_addr - fifo->wp - block_size;
 
+
 		if (thisrun_bytes == 0) {
 			/* Throttle polling a bit if transfer is (much) faster than flash
 			 * programming. The exact delay shouldn't matter as long as it's
@@ -1188,7 +1191,6 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 		retval = target_write_u32(trans_target, fifo->wp_addr, fifo->wp);
 		if (retval != ERROR_OK)
 			break;
-		// LOG_INFO("transdata wp %x block cnt %x bytes %x remain block %x", fifo->wp, thisrun_block_cnt, thisrun_bytes, count);
 		/* Avoid GDB timeouts */
 		keep_alive();
 
@@ -1789,7 +1791,7 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 	struct async_fifo *fifo;
 
 	fifo = malloc(sizeof(struct async_fifo));
-	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, fifo);
+	retval = target_async_algorithm_init_fifo(trans_target, buffer_start, buffer_size, block_size, fifo);
 	if (retval != ERROR_OK)
 		return retval;
 
