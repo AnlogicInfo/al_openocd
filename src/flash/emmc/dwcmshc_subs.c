@@ -827,10 +827,17 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
 {
     struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
     struct flash_loader *loader = &driver_priv->flash_loader;
-    int block_addr = addr/emmc->device->block_size;
-    int retval;
+    uint32_t block_size = emmc->device->block_size;
+    uint32_t block_addr = (uint32_t)(addr / block_size);
+    uint32_t image_block_cnt = (uint32_t)((image_size + (int)block_size - 1) / (int)block_size);
+    uint32_t total_bytes = image_block_cnt * block_size;
+    uint8_t *staging_buffer = NULL;
+    bool mailbox_owned = false;
+    int retval = ERROR_OK;
+    if (image_size <= 0)
+        return ERROR_OK;
     loader->work_mode = ASYNC_TRANS;
-    loader->block_size = emmc->device->block_size;
+    loader->block_size = block_size;
     loader->image_size = image_size;
     loader->param_cnt = 6;
 
@@ -847,9 +854,32 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
     if (!elf_loaded)
         return ERROR_FAIL;
 
-    dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
+    staging_buffer = malloc(total_bytes);
+    if (!staging_buffer) {
+        retval = ERROR_FAIL;
+        goto out;
+    }
+    memset(staging_buffer, 0xFF, total_bytes);
+    memcpy(staging_buffer, buffer, image_size);
+
+    if (target_get_mailbox_section_count() == 0) {
+        uint32_t section_start_addr = block_addr;
+        uint32_t size_blocks = image_block_cnt;
+        uint32_t buf_offset_blocks = 0;
+        retval = target_set_mailbox_sections(&buf_offset_blocks, &section_start_addr, &size_blocks, 1);
+        if (retval != ERROR_OK)
+            goto out;
+        mailbox_owned = true;
+    }
+
+    dwcmshc_emmc_cmd_set_block_length(emmc, block_size);
     dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    retval = loader_flash_write_async_pp(loader, local_srcs, buffer, block_addr, image_size);
+    retval = loader_flash_write_pp(loader, local_srcs, staging_buffer, block_addr, image_size, driver_priv->io_location);
+
+out:
+    if (mailbox_owned)
+        target_set_mailbox_sections(NULL, NULL, NULL, 0);
+    free(staging_buffer);
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
     return retval;

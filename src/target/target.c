@@ -1100,6 +1100,11 @@ int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_
     return ERROR_OK;
 }
 
+unsigned int target_get_mailbox_section_count(void)
+{
+	return g_mailbox.count;
+}
+
 static int target_async_algorithm_trans_data(struct target *trans_target, const uint8_t *buffer, int count, uint32_t block_size, struct async_fifo *fifo)
 {
 	int retval = ERROR_OK;

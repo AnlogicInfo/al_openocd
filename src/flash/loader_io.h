@@ -122,7 +122,6 @@ struct flash_loader {
 
 int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size);
 int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size);
-int loader_flash_write_async_pp(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size);
 int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number);
 int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size, int bank_number);
 int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number);
