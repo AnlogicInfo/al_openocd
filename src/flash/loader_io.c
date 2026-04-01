@@ -440,6 +440,8 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 	uint32_t image_block_cnt; 
 	int retval;
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
+	LOG_INFO("loader_flash_write_pp: addr=" TARGET_ADDR_FMT " image_size=%d block_size=%d image_blocks=%u bank=%d",
+		addr, image_size, loader->block_size, image_block_cnt, bank_number);
 
 	loader_init_arch(loader);
 	loader_init_code_area(loader, srcs);
@@ -454,12 +456,24 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 	
 	target_addr_t fifo_start = loader->exec_target->loader_buf_start + offsetof(struct loader_shmem_map, fifo_buffer);
 	uint32_t fifo_size = loader->exec_target->loader_buf_size - offsetof(struct loader_shmem_map, fifo_buffer);
+	target_addr_t ctrl_flag_ptr = fifo_start + 0x80;
+	target_addr_t section_start_ptr = fifo_start + 0xC0;
+	target_addr_t section_size_ptr = fifo_start + 0x100;
+	uint32_t ctrl_before = 0;
+	uint32_t section_start_before = 0;
+	uint32_t section_size_before = 0;
+	target_read_u32(loader->trans_target, ctrl_flag_ptr, &ctrl_before);
+	target_read_u32(loader->trans_target, section_start_ptr, &section_start_before);
+	target_read_u32(loader->trans_target, section_size_ptr, &section_size_before);
+	LOG_INFO("loader_flash_write_pp: fifo_start=" TARGET_ADDR_FMT " fifo_size=0x%x ctrl_ptr=" TARGET_ADDR_FMT " ctrl_before=0x%x sec_start=0x%x sec_size=0x%x",
+		fifo_start, fifo_size, ctrl_flag_ptr, ctrl_before, section_start_before, section_size_before);
 
 	retval = target_run_async_algorithm_ping_pong(loader->trans_target, loader->exec_target, 
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,
 	fifo_start, fifo_size,
 	loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
+	LOG_INFO("loader_flash_write_pp: target_run_async_algorithm_ping_pong retval=%d", retval);
 
 	loader_exit(loader, RESTORE);
 	return retval;

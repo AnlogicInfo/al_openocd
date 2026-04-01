@@ -1225,6 +1225,12 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 
     while (count > 0) {			
 		if (remain_section_blks == 0) {
+			while (mb_index < g_mailbox.count && g_mailbox.list[mb_index].size_blocks == 0)
+				mb_index++;
+			if (mb_index >= g_mailbox.count) {
+				LOG_ERROR("mailbox sections exhausted: remain_count=%d mailbox_count=%u", count, g_mailbox.count);
+				return ERROR_FLASH_OPERATION_FAILED;
+			}
 			uint32_t ctrl = 1U;
             target_write_u32(trans_target, pp->section_start_ptr, g_mailbox.list[mb_index].section_start_addr);
 			target_write_u32(trans_target, pp->section_size_ptr, g_mailbox.list[mb_index].size_blocks);
