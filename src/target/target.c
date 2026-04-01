@@ -1419,18 +1419,14 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     duration_start(&dur_trans);
     retval = target_ping_pong_trans_data(trans_target, buffer, count, block_size, pp);
     duration_measure(&dur_trans);
-    LOG_INFO("ping-pong transfer finished: retval=%d count=%u block_size=%d state=%s",
-        retval, count, block_size, target_state_name(exec_target));
     if (retval == ERROR_OK) {
         LOG_DEBUG("Transfer completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
             duration_elapsed(&dur_trans), duration_kbps(&dur_trans, total_bytes), (unsigned int)total_bytes);
     }
 
-    LOG_INFO("waiting algorithm halt: timeout_ms=10000 state=%s", target_state_name(exec_target));
     int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
         num_reg_params, reg_params, exit_point, 10000, arch_info);
     duration_measure(&dur_prog);
-    LOG_INFO("wait algorithm done: retval=%d state=%s", retval2, target_state_name(exec_target));
     if (retval2 != ERROR_OK) retval = retval2;
     if (retval == ERROR_OK) {
         LOG_INFO("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",

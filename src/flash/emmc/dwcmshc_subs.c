@@ -796,7 +796,7 @@ static int dwcmshc_try_load_elf_code_src(struct dwcmshc_emmc_controller *ctrl, e
     const char *arch;
 
     if (mode == ASYNC_TRANS)
-        prefix = "emmc_async_";
+        prefix = "emmc_write_";
     /* sync write removed */
     else
         prefix = "emmc_crc_";
@@ -858,7 +858,6 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
         LOG_ERROR("dwcmshc async write: load elf failed");
         return ERROR_FAIL;
     }
-    LOG_INFO("dwcmshc async write: loader elf ready, arch_index=%d", arch_index);
 
     staging_buffer = malloc(total_bytes);
     if (!staging_buffer) {
@@ -875,38 +874,28 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
         uint32_t buf_offset_blocks = 0;
         retval = target_set_mailbox_sections(&buf_offset_blocks, &section_start_addr, &size_blocks, 1);
         if (retval != ERROR_OK) {
-            LOG_ERROR("dwcmshc async write: set mailbox failed, retval=%d", retval);
             goto out;
         }
         mailbox_owned = true;
-        LOG_INFO("dwcmshc async write: mailbox set by dwcmshc, start=%u size_blocks=%u", section_start_addr, size_blocks);
-    } else {
-        LOG_INFO("dwcmshc async write: mailbox provided by upper layer, count=%u", mailbox_count);
     }
 
     retval = dwcmshc_emmc_cmd_set_block_length(emmc, block_size);
     if (retval != ERROR_OK) {
-        LOG_ERROR("dwcmshc async write: set block length failed, retval=%d", retval);
         goto out;
     }
     retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
     if (retval != ERROR_OK) {
-        LOG_ERROR("dwcmshc async write: set block count failed, retval=%d", retval);
         goto out;
     }
-    LOG_INFO("dwcmshc async write: invoke loader_flash_write_pp");
     retval = loader_flash_write_pp(loader, local_srcs, staging_buffer, block_addr, image_size, driver_priv->io_location);
-    LOG_INFO("dwcmshc async write: loader_flash_write_pp done, retval=%d", retval);
 
 out:
     if (mailbox_owned) {
         target_set_mailbox_sections(NULL, NULL, NULL, 0);
-        LOG_INFO("dwcmshc async write: mailbox cleared by dwcmshc");
     }
     free(staging_buffer);
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
-    LOG_INFO("dwcmshc async write end: retval=%d", retval);
     return retval;
 }
 
