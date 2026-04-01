@@ -943,13 +943,9 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t a
     struct flash_loader *loader = &driver_priv->flash_loader;
     int block_addr = (int)(addr/emmc->device->block_size);
 
-	// dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-	// dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-
     loader->work_mode = CRC_CHECK;
     loader->block_size = emmc->device->block_size;
     loader->image_size = count;
-    loader->param_cnt = 4;
 
     int arch_index;
     if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
@@ -964,7 +960,7 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t a
     if (!elf_loaded)
         return ERROR_FAIL;
 
-    retval = loader_flash_crc(loader, local_srcs, block_addr, crc);
+    retval = loader_flash_crc_mem_parm(loader, local_srcs, block_addr, driver_priv->io_location, crc);
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
     return retval;
