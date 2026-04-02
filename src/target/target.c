@@ -1100,6 +1100,11 @@ int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_
     return ERROR_OK;
 }
 
+unsigned int target_get_mailbox_section_count(void)
+{
+	return g_mailbox.count;
+}
+
 static int target_async_algorithm_trans_data(struct target *trans_target, const uint8_t *buffer, int count, uint32_t block_size, struct async_fifo *fifo)
 {
 	int retval = ERROR_OK;
@@ -1424,10 +1429,9 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     duration_measure(&dur_prog);
     if (retval2 != ERROR_OK) retval = retval2;
     if (retval == ERROR_OK) {
-        LOG_DEBUG("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+        LOG_INFO("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
             duration_elapsed(&dur_prog), duration_kbps(&dur_prog, total_bytes), (unsigned int)total_bytes);
     }
-
     free(pp);
     return retval;
 }

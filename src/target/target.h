@@ -419,6 +419,7 @@ struct ping_pong_fifo {
 };
 
 int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_t *section_start_addrs, const uint32_t *size_blocks, unsigned int count);
+unsigned int target_get_mailbox_section_count(void);
 int target_register_commands(struct command_context *cmd_ctx);
 int target_examine(void);
 

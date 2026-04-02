@@ -1407,18 +1407,6 @@ int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint3
 
 
 
-static void dwcssi_checksum_params_priv_x1(struct flash_loader *loader)
-{
-	struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-	int addr_size = driver_priv->addr_len >> 1;
-
-	buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, driver_priv->dev->read_cmd);
-	buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, addr_size);
-/*	LOG_INFO("checksum x1 cmd %x addr size %x", driver_priv->dev->read_cmd, addr_size);*/
-}
-
-
-
 static struct code_src crc_x1_elf_srcs[3] = 
 {
     [RV64_SRC] = {NULL, 0, 0},
@@ -1442,7 +1430,6 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
 	loader->work_mode = CRC_CHECK;
 	loader->block_size = driver_priv->dev->pagesize;
 	loader->image_size = count;
-	loader->param_cnt = 6;
 
     retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, crc_x1_elf_srcs, "flash_crc_x1_");
     if(retval != ERROR_OK) {
@@ -1450,7 +1437,6 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
         return ERROR_FAIL;
     }
 
-	loader->set_params_priv = dwcssi_checksum_params_priv_x1;
 	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, address, bank->bank_number, crc);
 	return retval;
 }

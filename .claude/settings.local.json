@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node create_ppt.js)",
+      "Bash(npm install:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(where soffice:*)",
+      "Read(//c/Program Files/LibreOffice/program/**)",
+      "Read(//c/Program Files \\(x86\\)/LibreOffice/program/**)",
+      "Bash(ls:*)"
+    ]
+  }
+}
