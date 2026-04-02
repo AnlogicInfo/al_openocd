@@ -110,9 +110,6 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 	size_t buf_cnt = 0;
 	size_t write_size = 0;
 	size_t total_write_size = 0;
-	unsigned int mb_count = 0;
-	uint64_t first_section_base = 0;
-	bool have_first_section = false;
 	int retval;
 
 	retval= CALL_COMMAND_HANDLER(emmc_fileio_parse_args,
@@ -144,15 +141,9 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 			write_size = (sz / s.block_size + 1) * s.block_size;
 		else
 			write_size = sz;
-		if (write_size == 0)
-			continue;
-		if (!have_first_section) {
-			first_section_base = s.image.sections[i].base_address;
-			have_first_section = true;
-		}
-		s.section_block_addrs[mb_count] = (uint32_t)(s.image.sections[i].base_address / s.block_size);
-		s.section_offsets_blocks[mb_count] = (uint32_t)(total_write_size / s.block_size);
-		s.section_sizes_blocks[mb_count] = (uint32_t)(write_size / s.block_size);
+		s.section_block_addrs[i] = (uint32_t)(s.image.sections[i].base_address / s.block_size);
+		s.section_offsets_blocks[i] = (uint32_t)(total_write_size / s.block_size);
+		s.section_sizes_blocks[i] = (uint32_t)(write_size / s.block_size);
 
 		uint8_t *tmp = (uint8_t *)realloc(s.block, total_write_size + write_size);
 		if (!tmp) {
@@ -177,21 +168,12 @@ COMMAND_HANDLER(handle_emmc_write_image_command)
 		if (buf_cnt < s.image.sections[i].size)
 			memset(s.block + total_write_size + buf_cnt, 0xff, write_size - buf_cnt);
 		total_write_size += write_size;
-		mb_count++;
 	}
 
-	if (mb_count == 0 || !have_first_section) {
-		free(s.block);
-		free(s.section_block_addrs);
-		free(s.section_offsets_blocks);
-		free(s.section_sizes_blocks);
-		emmc_fileio_cleanup(&s);
-		return ERROR_OK;
-	}
-
+	unsigned int mb_count = s.image.num_sections;
 	target_set_mailbox_sections(s.section_offsets_blocks, s.section_block_addrs, s.section_sizes_blocks, mb_count);
 
-	retval = emmc_write_image(emmc, s.block, first_section_base, (int)total_write_size);
+	retval = emmc_write_image(emmc, s.block, s.image.sections[0].base_address, (int)total_write_size);
 
 	target_set_mailbox_sections(NULL, NULL, NULL, 0);
 
