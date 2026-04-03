@@ -1404,7 +1404,11 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     size_t total_bytes = (size_t)count * (size_t)block_size;
 
     retval = target_async_algorithm_init_ping_pong_fifo(exec_target, buffer_start, buffer_size, block_size, pp);
-    if (retval != ERROR_OK) { free(pp); return retval; }
+    if (retval != ERROR_OK) {
+		LOG_INFO("target_async_algorithm_init_ping_pong_fifo fail");
+		free(pp);
+		return retval;
+	}
 
     retval = target_start_algorithm(exec_target, num_mem_params, mem_params,
         num_reg_params, reg_params, entry_point, exit_point, arch_info);

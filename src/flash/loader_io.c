@@ -454,7 +454,8 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 	
 	target_addr_t fifo_start = loader->exec_target->loader_buf_start + offsetof(struct loader_shmem_map, fifo_buffer);
 	uint32_t fifo_size = loader->exec_target->loader_buf_size - offsetof(struct loader_shmem_map, fifo_buffer);
-
+	LOG_INFO("loader_flash_write_pp: addr=" TARGET_ADDR_FMT ", image_size=%d, bank=%d",
+		addr, image_size, bank_number);
 	retval = target_run_async_algorithm_ping_pong(loader->trans_target, loader->exec_target, 
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,

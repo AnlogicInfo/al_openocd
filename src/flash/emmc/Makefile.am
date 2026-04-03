@@ -11,8 +11,9 @@ EMMC_DRIVERS = \
 	%D%/dwcmshc.c \
 	%D%/dwcmshc_subs.c \
 	%D%/dwcmshc_90.c \
-	%D%/dwcmshc_91.c
-
+	%D%/dwcmshc_91.c \
+	%D%/dwcmshc_35.c
+	
 EMMCHEADERS = \
 	%D%/core.h \
 	%D%/driver.h \

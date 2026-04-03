@@ -874,20 +874,22 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
         uint32_t buf_offset_blocks = 0;
         retval = target_set_mailbox_sections(&buf_offset_blocks, &section_start_addr, &size_blocks, 1);
         if (retval != ERROR_OK) {
+			LOG_INFO("target_set_mailbox_sections fail");
             goto out;
         }
         mailbox_owned = true;
     }
 
-    retval = dwcmshc_emmc_cmd_set_block_length(emmc, block_size);
-    if (retval != ERROR_OK) {
-        goto out;
-    }
-    retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    if (retval != ERROR_OK) {
-        goto out;
-    }
-    retval = loader_flash_write_pp(loader, local_srcs, staging_buffer, block_addr, image_size, driver_priv->io_location);
+    // retval = dwcmshc_emmc_cmd_set_block_length(emmc, block_size);
+    // if (retval != ERROR_OK) {
+    //     goto out;
+    // }
+    // retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+    // if (retval != ERROR_OK) {
+    //     goto out;
+    // }
+
+	retval = loader_flash_write_pp(loader, local_srcs, staging_buffer, block_addr, image_size, driver_priv->io_location);
 
 out:
     if (mailbox_owned) {
