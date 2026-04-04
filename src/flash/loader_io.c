@@ -327,8 +327,6 @@ static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr
 	target_write_u32(loader->exec_target, 
 			base + offsetof(struct loader_shmem_map, params.bank_id), 
 			bank_number);
-	
-
 }
 
 
