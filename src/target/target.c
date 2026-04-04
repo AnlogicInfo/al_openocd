@@ -1307,13 +1307,13 @@ static int target_ping_pong_trans_data(struct target *trans_target,
             uint32_t verify_flag = 0;
             retval = target_read_u32(trans_target, flag_addr, &verify_flag);
             if (retval != ERROR_OK) break;
-            if (verify_flag != (uint32_t)this_blocks) {
+            if (verify_flag != (uint32_t)this_blocks && verify_flag != 0U) {
                 LOG_WARNING("flag write verify mismatch: wrote %x read %x at %x", this_blocks, verify_flag, flag_addr);
                 retval = target_write_u32(trans_target, flag_addr, this_blocks);
                 if (retval != ERROR_OK) break;
                 retval = target_read_u32(trans_target, flag_addr, &verify_flag);
                 if (retval != ERROR_OK) break;
-                if (verify_flag != (uint32_t)this_blocks) {
+                if (verify_flag != (uint32_t)this_blocks && verify_flag != 0U) {
                     LOG_ERROR("flag write verify failed: wrote %x read %x at %x", this_blocks, verify_flag, flag_addr);
                     return ERROR_FLASH_OPERATION_FAILED;
                 }
