@@ -38,6 +38,7 @@ NOR_DRIVERS = \
 	%D%/dwcssi/dwcssi.c \
 	%D%/dwcssi/dwcssi_90.c \
 	%D%/dwcssi/dwcssi_91.c \
+	%D%/dwcssi/dwcssi_35.c \
 	%D%/fm3.c \
 	%D%/fm4.c \
 	%D%/jtagspi.c \
