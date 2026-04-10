@@ -327,6 +327,8 @@ static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr
 	target_write_u32(loader->exec_target, 
 			base + offsetof(struct loader_shmem_map, params.bank_id), 
 			bank_number);
+	
+
 }
 
 
@@ -367,10 +369,13 @@ static int loader_set_wa(struct flash_loader *loader, target_addr_t addr, const 
 
 static void loader_exit(struct flash_loader *loader, int restore)
 {
+	LOG_INFO("LOADER_EXIT START PARAM_CNT %x", loader->param_cnt);
 	for (int i = 0; i < loader->param_cnt; i++)
 		destroy_reg_param(&loader->reg_params[i]);
+	LOG_INFO("restore working area start");
 	target_free_working_area_restore(loader->exec_target, loader->copy_area, restore);
-
+	LOG_INFO("restore working area done");
+	
 	free(loader->arch_info);
 }
 
@@ -452,15 +457,17 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 	
 	target_addr_t fifo_start = loader->exec_target->loader_buf_start + offsetof(struct loader_shmem_map, fifo_buffer);
 	uint32_t fifo_size = loader->exec_target->loader_buf_size - offsetof(struct loader_shmem_map, fifo_buffer);
-	LOG_INFO("loader_flash_write_pp: addr=" TARGET_ADDR_FMT ", image_size=%d, bank=%d",
-		addr, image_size, bank_number);
+
 	retval = target_run_async_algorithm_ping_pong(loader->trans_target, loader->exec_target, 
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,
 	fifo_start, fifo_size,
 	loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
-
-	loader_exit(loader, RESTORE);
+	LOG_INFO("LOADER WRITE PP DONE");
+	target_free_working_area_restore(loader->exec_target, loader->copy_area, RESTORE);
+	LOG_INFO("restore working area done");	
+	free(loader->arch_info);
+	LOG_INFO("LOADER_EXIT DONE");
 	return retval;
 }
 
@@ -581,7 +588,10 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 	if (retval == ERROR_OK)
 		LOG_PROC(total, total);
 
-	loader_exit(loader, NO_RESTORE);
+	target_free_working_area_restore(loader->exec_target, loader->copy_area, RESTORE);
+	LOG_INFO("restore working area done");	
+	free(loader->arch_info);
+	LOG_INFO("LOADER_EXIT DONE");
 	return retval;
 }
 
