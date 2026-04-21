@@ -1244,7 +1244,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 							return ERROR_FLASH_OPERATION_FAILED;
 						}
 						if ((timeout & 0x7F) == 0)
-							LOG_INFO("waiting ack ctrl_flag, read %x tries %d", ack, timeout);
+							LOG_INFO("waiting ack ctrl_flag addr 0x%" PRIx32 ", read %x tries %d", pp->ctrl_flag_addr, ack, timeout);
 						continue;
 					}
 					timeout = 0;
