@@ -25,7 +25,7 @@
 #define RESTORE        1
 #define NO_RESTORE     0
 
-enum work_mode 
+enum work_mode
 {
     SYNC_TRANS,
     ASYNC_TRANS,
@@ -50,7 +50,7 @@ struct code_src {
     uint32_t entry_offset;
 };
 
-/* 
+/*
  * Loader Shared Memory Layout
  * Explicitly defines the protocol between Host and Target.
  * Using explicit padding to maintain 0x40 (64-byte) alignment/spacing if required.
@@ -60,14 +60,17 @@ struct loader_shmem_map {
     struct {
         uint32_t flash_addr;           // Offset: 0x00
         uint8_t  _pad0[60];            // Padding to 0x40
-        
+
         uint32_t image_size;           // Offset: 0x40
         uint8_t  _pad1[60];            // Padding to 0x80
-        
+
         uint32_t bank_id;              // Offset: 0x80
         uint8_t  _pad2[60];            // Padding to 0xC0
+
+        uint32_t clk_param;             // Offset: 0xC0
+        uint8_t  _pad3[60];            // Padding to 0x100
     } params;
-    
+
     /* Explicitly define gap to match 256-byte (0x100) Page 0 size */
     uint8_t _reserved_gap[0x100 - sizeof(struct {
         uint32_t flash_addr;
@@ -76,10 +79,12 @@ struct loader_shmem_map {
         uint8_t  _pad1[60];
         uint32_t bank_id;
         uint8_t  _pad2[60];
+        uint32_t clk_param;
+        uint8_t  _pad3[60];
     })];
 
     /* Page 1: FIFO Data Buffer Starts Here */
-    uint8_t fifo_buffer[]; 
+    uint8_t fifo_buffer[];
 };
 
 struct flash_loader {
@@ -122,10 +127,10 @@ struct flash_loader {
 
 int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size);
 int loader_flash_write_async(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size);
-int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number);
-int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size, int bank_number);
-int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number);
+int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number, int clk_param);
+int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size, int bank_number, int clk_param);
+int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number, int clk_param);
 int loader_flash_crc(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, uint32_t* target_crc);
-int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int bank_number, uint32_t* target_crc);
+int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int bank_number, uint32_t* target_crc, int clk_param);
 int loader_load_elf(struct code_src *src, const char *filename);
 #endif

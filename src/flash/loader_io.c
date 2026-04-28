@@ -314,20 +314,23 @@ static int loader_set_params(struct flash_loader *loader, target_addr_t addr)
 	return ERROR_OK;
 }
 
-static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr, int image_size, int bank_number)
+static void loader_set_mem_parms(struct flash_loader *loader, target_addr_t addr, int image_size, int bank_number, int clk_param)
 {
 	target_addr_t base = loader->exec_target->loader_buf_start;
 
-	target_write_u32(loader->exec_target, 
-			base + offsetof(struct loader_shmem_map, params.flash_addr), 
+	target_write_u32(loader->exec_target,
+			base + offsetof(struct loader_shmem_map, params.flash_addr),
 			addr);
-	target_write_u32(loader->exec_target, 
-			base + offsetof(struct loader_shmem_map, params.image_size), 
+	target_write_u32(loader->exec_target,
+			base + offsetof(struct loader_shmem_map, params.image_size),
 			image_size);
-	target_write_u32(loader->exec_target, 
-			base + offsetof(struct loader_shmem_map, params.bank_id), 
+	target_write_u32(loader->exec_target,
+			base + offsetof(struct loader_shmem_map, params.bank_id),
 			bank_number);
-	
+	target_write_u32(loader->exec_target,
+			base + offsetof(struct loader_shmem_map, params.clk_param),
+			clk_param);
+
 
 }
 
@@ -375,7 +378,7 @@ static void loader_exit(struct flash_loader *loader, int restore)
 	LOG_INFO("restore working area start");
 	target_free_working_area_restore(loader->exec_target, loader->copy_area, restore);
 	LOG_INFO("restore working area done");
-	
+
 	free(loader->arch_info);
 }
 
@@ -408,9 +411,9 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 	return retval;
 }
 
-int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number)
+int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number, int clk_param)
 {
-	uint32_t image_block_cnt; 
+	uint32_t image_block_cnt;
 	int retval;
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
 
@@ -422,13 +425,13 @@ int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const
 		LOG_ERROR("loader code to wa failed");
 		return ERROR_FAIL;
 	}
-	
-	loader_set_mem_parms(loader, addr, image_size, bank_number);
-	
+
+	loader_set_mem_parms(loader, addr, image_size, bank_number, clk_param);
+
 	target_addr_t fifo_start = loader->exec_target->loader_buf_start + offsetof(struct loader_shmem_map, fifo_buffer);
 	uint32_t fifo_size = loader->exec_target->loader_buf_size - offsetof(struct loader_shmem_map, fifo_buffer);
 
-	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target, 
+	retval = target_run_async_algorithm(loader->trans_target, loader->exec_target,
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,
 	fifo_start, fifo_size,
@@ -438,9 +441,9 @@ int loader_flash_write(struct flash_loader *loader, struct code_src *srcs, const
 	return retval;
 }
 
-int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number)
+int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, const uint8_t *data, target_addr_t addr, int image_size, int bank_number, int clk_param)
 {
-	uint32_t image_block_cnt; 
+	uint32_t image_block_cnt;
 	int retval;
 	image_block_cnt = DIV_ROUND_UP(loader->image_size, loader->block_size);
 
@@ -452,26 +455,26 @@ int loader_flash_write_pp(struct flash_loader *loader, struct code_src *srcs, co
 		LOG_ERROR("loader code to wa failed");
 		return ERROR_FAIL;
 	}
-	
-	loader_set_mem_parms(loader, addr, image_size, bank_number);
-	
+
+	loader_set_mem_parms(loader, addr, image_size, bank_number, clk_param);
+
 	target_addr_t fifo_start = loader->exec_target->loader_buf_start + offsetof(struct loader_shmem_map, fifo_buffer);
 	uint32_t fifo_size = loader->exec_target->loader_buf_size - offsetof(struct loader_shmem_map, fifo_buffer);
 
-	retval = target_run_async_algorithm_ping_pong(loader->trans_target, loader->exec_target, 
+	retval = target_run_async_algorithm_ping_pong(loader->trans_target, loader->exec_target,
 	data, image_block_cnt, loader->block_size,
 	0, NULL, 0, NULL,
 	fifo_start, fifo_size,
 	loader->copy_area->address + loader->code_src->entry_offset, 0, loader->arch_info);
 	LOG_INFO("LOADER WRITE PP DONE");
 	target_free_working_area_restore(loader->exec_target, loader->copy_area, RESTORE);
-	LOG_INFO("restore working area done");	
+	LOG_INFO("restore working area done");
 	free(loader->arch_info);
 	LOG_INFO("LOADER_EXIT DONE");
 	return retval;
 }
 
-int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size, int bank_number)
+int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uint8_t *data, target_addr_t addr, int image_size, int bank_number, int clk_param)
 {
 	int retval;
 
@@ -484,9 +487,9 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 		return ERROR_FAIL;
 	}
 
-	loader_set_mem_parms(loader, addr, image_size, bank_number);
-	LOG_INFO("loader_flash_read_pp: addr=" TARGET_ADDR_FMT ", image_size=%d, bank=%d",
-		addr, image_size, bank_number);
+	loader_set_mem_parms(loader, addr, image_size, bank_number, clk_param);
+	LOG_INFO("loader_flash_read_pp: addr=" TARGET_ADDR_FMT ", image_size=%d, bank=%d, sample_delay=%d",
+		addr, image_size, bank_number, clk_param);
 
 	target_addr_t base = loader->exec_target->loader_buf_start;
 	target_addr_t buf0_flag_ptr = base + 0x0100;
@@ -589,13 +592,13 @@ int loader_flash_read_pp(struct flash_loader *loader, struct code_src *srcs, uin
 		LOG_PROC(total, total);
 
 	target_free_working_area_restore(loader->exec_target, loader->copy_area, RESTORE);
-	LOG_INFO("restore working area done");	
+	LOG_INFO("restore working area done");
 	free(loader->arch_info);
 	LOG_INFO("LOADER_EXIT DONE");
 	return retval;
 }
 
-int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int bank_number, uint32_t* target_crc)
+int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs, target_addr_t addr, int bank_number, uint32_t* target_crc, int clk_param)
 {
 	int retval = ERROR_OK;
 	struct target *exec_target = loader->exec_target;
@@ -619,7 +622,7 @@ int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs
 		return ERROR_FAIL;
 	}
 
-	loader_set_mem_parms(loader, addr, loader->image_size, bank_number);
+	loader_set_mem_parms(loader, addr, loader->image_size, bank_number, clk_param);
 
 	retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,

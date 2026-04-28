@@ -19,7 +19,7 @@
 #include <flash/loader_io.h>
 
 
-typedef struct dwcmshc_cmd_pkt_t 
+typedef struct dwcmshc_cmd_pkt_t
 {
 	uint8_t       argu_en;
 	uint32_t      argument;
@@ -70,6 +70,7 @@ typedef union
 
 struct dwcmshc_emmc_controller {
     uint8_t             io_location;
+	uint8_t				clk_phase;
     target_addr_t       ctrl_base;
     dwcmshc_cmd_pkt_t   ctrl_cmd;
     uint32_t            io_bank_pwr;

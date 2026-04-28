@@ -3,6 +3,7 @@
 
 struct dwcssi_flash_bank {
     bool probed;
+    uint8_t sample_delay;
     target_addr_t ctrl_base;
     uint8_t       addr_len;
     const struct flash_device *dev;
@@ -12,7 +13,7 @@ struct dwcssi_flash_bank {
 
 // #define   FLASH_STATUS_ERR(x)                  ((x >> 5) & 0x3)
 
-// flash model 
+// flash model
 int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t *id);
 int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_info);
 int flash_bank_init(struct flash_bank *bank,  struct dwcssi_flash_bank *dwcssi_info, uint32_t *id);
