@@ -951,7 +951,7 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t a
     if (!elf_loaded)
         return ERROR_FAIL;
 
-    retval = loader_flash_crc_mem_parm(loader, local_srcs, block_addr, driver_priv->io_location, crc);
+    retval = loader_flash_crc_mem_parm(loader, local_srcs, block_addr, driver_priv->io_location, crc, driver_priv->clk_phase);
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
     return retval;

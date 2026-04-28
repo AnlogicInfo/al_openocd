@@ -1437,7 +1437,7 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
         return ERROR_FAIL;
     }
 
-	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, address, bank->bank_number, crc);
+	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, address, bank->bank_number, crc, driver_priv->sample_delay);
 	return retval;
 }
 
