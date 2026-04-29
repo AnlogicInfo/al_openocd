@@ -56,6 +56,33 @@ static int dr35_mio_init(struct flash_bank *bank)
 			if (target_write_u32(target,  MIO_BASE + mio_num, 1) != ERROR_OK)
 				return ERROR_FAIL;
 		}
+		if (mio_num == 4) {
+			if (target_read_u32(target, MIO_PARA_BASE +  (mio_num << 1), &value) != ERROR_OK)
+				return ERROR_FAIL;
+			if (value != 0x4c000000)	{
+				if (target_write_u32(target,  MIO_PARA_BASE + (mio_num << 1), 0x4c000000) != ERROR_OK)
+					return ERROR_FAIL;
+			}
+			if (target_read_u32(target, MIO_PARA_BASE +  (mio_num << 1) + 4, &value) != ERROR_OK)
+				return ERROR_FAIL;
+			if (value != 0x1003)	{
+				if (target_write_u32(target,  MIO_PARA_BASE + (mio_num << 1) + 4, 0x1003) != ERROR_OK)
+					return ERROR_FAIL;
+			}
+		} else if (mio_num > 4) {
+			if (target_read_u32(target, MIO_PARA_BASE + (mio_num << 1), &value) != ERROR_OK)
+				return ERROR_FAIL;
+			if (value != 0xd000000)	{
+				if (target_write_u32(target,  MIO_PARA_BASE + (mio_num << 1), 0xd000000) != ERROR_OK)
+					return ERROR_FAIL;
+			}
+			if (target_read_u32(target, MIO_PARA_BASE + (mio_num << 1) + 4, &value) != ERROR_OK)
+				return ERROR_FAIL;
+			if (value != 0x3003)	{
+				if (target_write_u32(target,  MIO_PARA_BASE + (mio_num << 1) + 4, 0x3003) != ERROR_OK)
+					return ERROR_FAIL;
+			}
+		}
 
 	}
 
@@ -69,6 +96,7 @@ static int dr35_probe(struct flash_bank *bank)
 	LOG_INFO("probe bank %d name %s", bank->bank_number, bank->name);
 	driver_priv_init(bank, driver_priv);
 
+	/* check pinmux config right? */
 	if (dr35_mio_init(bank) != ERROR_OK) {
 		return ERROR_FAIL;
 	}
