@@ -50,8 +50,8 @@ static int loader_init_arch(struct flash_loader *loader)
 		loader->xlen = riscv_xlen(target);
 		loader->arch_info = (struct riscv_algorithm *)malloc(sizeof(struct riscv_algorithm));
 	} else {
-		// target = get_first_target("pstap");
-		// if(target == NULL)
+		target = get_first_target("pstap");
+		if(target == NULL)
 			target = get_first_target("aarch64");
 		if (target == NULL)
 			return ERROR_FAIL;
