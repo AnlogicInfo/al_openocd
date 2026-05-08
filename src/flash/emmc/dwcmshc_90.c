@@ -19,6 +19,7 @@ EMMC_DEVICE_COMMAND_HANDLER(dr90_dwcmshc_emmc_device_command)
 
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], base);
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], io_location);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[4], clk_phase);
 	emmc->controller_priv = dwcmshc_emmc;
 	dwcmshc_emmc->io_location = io_location;
 	dwcmshc_emmc->clk_phase = clk_phase;

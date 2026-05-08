@@ -23,6 +23,8 @@ FLASH_BANK_COMMAND_HANDLER(dr90_flash_bank_command)
 				base);
 	}
 
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[7], sample_delay);
+
 	bank->driver_priv = driver_priv;
 
 	driver_priv->probed = false;
