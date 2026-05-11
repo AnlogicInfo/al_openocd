@@ -467,7 +467,7 @@ int dwcssi_wait_flash_idle(struct flash_bank *bank, int timeout, uint8_t* sr)
 
 				retval = ERROR_OK;
 				LOG_DEBUG("flash status %x idle", rx);
-				LOG_INFO("Chip erase done, remain timeout val %ld", endtime - timeval_ms());
+				LOG_INFO("Chip erase done, remain timeout val %lld", endtime - timeval_ms());
 				break;
 			}
 		} else
