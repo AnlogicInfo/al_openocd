@@ -1247,7 +1247,7 @@ int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 		dwcssi_unset_protect(bank);
 	qspi_mio5_pull(bank, HIGH);
 	if ((first == 0) && (last == (bank->num_sectors - 1)))
-		dwcssi_erase_bulk(bank);
+		retval = dwcssi_erase_bulk(bank);
 	else {
 		for (sector = first; sector <= last; sector++) {
 			LOG_PROC((sector-first), (last-first));
