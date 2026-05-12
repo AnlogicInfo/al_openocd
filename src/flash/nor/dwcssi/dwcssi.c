@@ -560,6 +560,8 @@ static int dwcssi_flash_set_4bytes(struct flash_bank *bank, uint8_t enable)
 		case 0x001940ef:
 		case 0x001960ef:
 		case 0x001970ef:
+		/* set FM25Q256I3 4B mode */
+		case 0x001940a1:
 			cmd = enable ? WINBOND_EN4B : WINBOND_EX4B;
 			retval = dwcssi_flash_tx_cmd(bank, &cmd, 1, STANDARD_SPI_MODE);
 			break;
