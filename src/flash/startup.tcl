@@ -17,7 +17,7 @@ proc program_error {description exit} {
 }
 
 proc program {media filename args} {
-	set erase 0
+	set erase ""
 	set exit 0
 	set needsflash 1
 	set quad_en ""
@@ -28,7 +28,7 @@ proc program {media filename args} {
 		} elseif {[string equal $arg "verify"]} {
 			set verify 1
 		} elseif {[string equal $arg "erase"]} {
-			set erase 1
+			set erase $arg
 		} elseif {[string equal $arg "reset"]} {
 			set reset 1
 		} elseif {[string equal $arg "exit"]} {
