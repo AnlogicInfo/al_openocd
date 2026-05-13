@@ -627,7 +627,7 @@ int loader_flash_crc_mem_parm(struct flash_loader *loader, struct code_src *srcs
 	retval = target_run_algorithm(loader->exec_target,
 		0, NULL, loader->param_cnt, loader->reg_params,
 		loader->copy_area->address + loader->code_src->entry_offset,
-		0, 10000,
+		0, 100000,
 		loader->arch_info);
 
 	if (retval == ERROR_OK)
