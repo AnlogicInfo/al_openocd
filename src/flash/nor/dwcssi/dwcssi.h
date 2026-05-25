@@ -20,7 +20,7 @@
 
 typedef enum mio_speed_t
 {
-    MIO_SPEED_SLOW = 0x0, 
+    MIO_SPEED_SLOW = 0x0,
     MIO_SPEED_MEDI = 0x2,
     MIO_SPEED_FAST = 0x7
 } mio_speed_t;
@@ -50,6 +50,7 @@ typedef enum mio_pull_t
 #define     MIO_PARA_BASE                             0xF8803800
 #define     MIO_PARA1_BASE                            0xF8803804
 #define     IO1000_CNT_DIV                            0xF8801030
+#define     MIO_BANK200_REF                           0xF8803C00
 #define     MIO_BANK201_REF                           0xF8803C04
 #define     GPIO_CONFIG                               0xF8411004
 #define     GPIO_OUT                                  0xF8411000
@@ -267,21 +268,21 @@ typedef union dwcssi_xip_cnt_time_out_t
 } dwcssi_xip_cnt_time_out_t;
 
 /*Masks*/
-#define     DWCSSI_CTRLR0_DFS_MASK                     DWCSSI_CTRLR0_DFS(0xFFFFFFFF)     
-#define     DWCSSI_CTRLR0_TMOD_MASK                    DWCSSI_CTRLR0_TMOD(0xFFFFFFFF)    
-#define     DWCSSI_CTRLR0_SPI_FRF_MASK                 DWCSSI_CTRLR0_SPI_FRF(0xFFFFFFFF) 
-#define     DWCSSI_CTRLR1_NDF_MASK                     DWCSSI_CTRLR1_NDF(0xFFFFFFFF)     
-#define     DWCSSI_SSIC_EN_MASK                        DWCSSI_SSIC_EN(0xFFFFFFFF)        
-#define     DWCSSI_SER_MASK                            DWCSSI_SER(0xFFFFFFFF)            
-#define     DWCSSI_BAUDR_SCKDV_MASK                    DWCSSI_BAUDR_SCKDV(0xFFFFFFFF)    
+#define     DWCSSI_CTRLR0_DFS_MASK                     DWCSSI_CTRLR0_DFS(0xFFFFFFFF)
+#define     DWCSSI_CTRLR0_TMOD_MASK                    DWCSSI_CTRLR0_TMOD(0xFFFFFFFF)
+#define     DWCSSI_CTRLR0_SPI_FRF_MASK                 DWCSSI_CTRLR0_SPI_FRF(0xFFFFFFFF)
+#define     DWCSSI_CTRLR1_NDF_MASK                     DWCSSI_CTRLR1_NDF(0xFFFFFFFF)
+#define     DWCSSI_SSIC_EN_MASK                        DWCSSI_SSIC_EN(0xFFFFFFFF)
+#define     DWCSSI_SER_MASK                            DWCSSI_SER(0xFFFFFFFF)
+#define     DWCSSI_BAUDR_SCKDV_MASK                    DWCSSI_BAUDR_SCKDV(0xFFFFFFFF)
 #define     DWCSSI_TXFTLR_TFT_MASK                     DWCSSI_TXFTLR_TFT(0xFFFFFFFF)
-#define     DWCSSI_TXFTLR_TXFTHR_MASK                  DWCSSI_TXFTLR_TXFTHR(0xFFFFFFFF)  
+#define     DWCSSI_TXFTLR_TXFTHR_MASK                  DWCSSI_TXFTLR_TXFTHR(0xFFFFFFFF)
 #define     DWCSSI_RXFTLR_RFT_MASK                     DWCSSI_RXFTLR_RFT(0xFFFFFFFF)
-#define     DWCSSI_SR_BUSY_MASK                        DWCSSI_SR_BUSY(0xFFFFFFFF)        
+#define     DWCSSI_SR_BUSY_MASK                        DWCSSI_SR_BUSY(0xFFFFFFFF)
 #define     DWCSSI_SR_TFE_MASK                         DWCSSI_SR_TFE(0xFFFFFFFF)
 #define     DWCSSI_SR_TFTNF_MASK                       DWCSSI_SR_TFNF(0xFFFFFFFF)
 #define     DWCSSI_SR_RFNE_MASK                        DWCSSI_SR_RFNE(0xFFFFFFFF)
-#define     DWCSSI_ISR_TXEIS_MASK                      DWCSSI_ISR_TXEIS(0xFFFFFFFF)      
+#define     DWCSSI_ISR_TXEIS_MASK                      DWCSSI_ISR_TXEIS(0xFFFFFFFF)
 #define     DWCSSI_SAMPLE_DELAY_SE_MASK                DWCSSI_SAMPLE_DELAY_SE(0xFFFFFFFF)
 #define     DWCSSI_SAMPLE_DELAY_RSD_MASK               DWCSSI_SAMPLE_DELAY_RSD(0xFFFFFFFF)
 

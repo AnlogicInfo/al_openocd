@@ -152,7 +152,7 @@ static int dr90_mio_init(struct flash_bank *bank)
 {
 	uint32_t io_bank_ref;
 
-    target_read_u32(bank->target, MIO_BANK201_REF, &io_bank_ref);
+    target_read_u32(bank->target, MIO_BANK200_REF, &io_bank_ref);
 
 	if(io_bank_ref & 0x1) {
 		if (dr90_qspi_mio_init_1v8(bank) != ERROR_OK) {
