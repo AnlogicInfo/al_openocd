@@ -17,6 +17,7 @@ proc program_error {description exit} {
 }
 
 proc program {media filename args} {
+	set erase 0
 	set exit 0
 	set needsflash 1
 	set quad_en ""
@@ -26,6 +27,8 @@ proc program {media filename args} {
 			set preverify 1
 		} elseif {[string equal $arg "verify"]} {
 			set verify 1
+		} elseif {[string equal $arg "erase"]} {
+			set erase 1
 		} elseif {[string equal $arg "reset"]} {
 			set reset 1
 		} elseif {[string equal $arg "exit"]} {
@@ -76,7 +79,7 @@ proc program {media filename args} {
 	# start programming phase
 	if {$needsflash == 1} {
 		echo "** Programming Started **"
-		if {[catch {eval $media write_image erase $quad_en $flash_args}] == 0} {
+		if {[catch {eval $media write_image $erase $quad_en $flash_args}] == 0} {
 			echo "** Programming Finished **"
 			if {[info exists verify]} {
 				# verify phase
@@ -110,7 +113,7 @@ proc program {media filename args} {
 	return
 }
 
-# set qspi_usage 
+# set qspi_usage
 
 add_help_text program "write an image to flash, address is only required for binary images. verify, reset, exit are optional"
 add_usage_text program " qspi: flash <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n emmc: emmc <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n nand: "
