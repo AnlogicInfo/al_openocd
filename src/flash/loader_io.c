@@ -220,7 +220,7 @@ static int loader_code_to_wa(struct flash_loader *loader)
 	int retval;
 	int wa_size;
 	struct working_area **area = &(loader->copy_area);
-	struct target *target = loader->exec_target;
+	struct target *target = loader->trans_target;
 
 	/* REVISIT this assumes size doesn't ever change.
 	 * That's usually correct; but there are boards with
