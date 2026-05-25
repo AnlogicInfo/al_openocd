@@ -1197,7 +1197,7 @@ static int dwcssi_erase_bulk(struct flash_bank *bank)
 	dwcssi_disable(bank);
 	dwcssi_config_SER(bank, 1);
 	dwcssi_enable(bank);
-	retval = dwcssi_wait_flash_idle(bank, 200000, &flash_sr);
+	retval = dwcssi_wait_flash_idle(bank, 300000, &flash_sr);
 
 	return retval;
 }
