@@ -1057,12 +1057,17 @@ static int target_async_algorithm_init_ping_pong_fifo(
 			  pp->buf_size, pp->half_size,
 			  pp->buf0_start, pp->buf1_start);
     // 清零两个标志，表示两个缓冲都空闲
-    retval = target_write_u32(exec_target, pp->buf0_flag_addr, 0);
-	target_write_u32(exec_target, pp->buf0_start_addr, pp->buf0_start);
-    if (retval != ERROR_OK) return retval;
-    retval = target_write_u32(exec_target, pp->buf1_flag_addr, 0);
-	target_write_u32(exec_target, pp->buf1_start_addr, pp->buf1_start);
-	target_write_u32(exec_target, pp->buf2_start_addr, pp->buf2_start);
+    retval = target_write_u32(exec_target, pp->ctrl_flag_addr, 0);
+    retval |= target_write_u32(exec_target, pp->buf0_flag_addr, 0);
+	retval |= target_write_u32(exec_target, pp->buf0_start_addr, pp->buf0_start);
+    retval |= target_write_u32(exec_target, pp->buf1_flag_addr, 0);
+	retval |= target_write_u32(exec_target, pp->buf1_start_addr, pp->buf1_start);
+	retval |= target_write_u32(exec_target, pp->buf2_start_addr, pp->buf2_start);
+
+    if (retval != ERROR_OK) {
+		LOG_ERROR("clean pp buffer fail");
+	}
+
     return retval;
 }
 
