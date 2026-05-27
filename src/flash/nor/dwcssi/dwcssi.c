@@ -1483,6 +1483,7 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 		return retval;
 
 	if (~image_crc != ~target_crc) {
+		LOG_ERROR("write failed, find difference");
 		fail_location = find_difference(bank, buffer, count, offset);
 		LOG_ERROR("write failed at location %x", fail_location);
 		retval = ERROR_FAIL;
