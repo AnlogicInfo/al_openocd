@@ -186,12 +186,17 @@ endif
 if XDS110
 DRIVERFILES += %D%/xds110.c
 endif
+if AL_LINK
+DRIVERFILES += %D%/al_link.c %D%/al_link_cyusb.c
+%C%_libocdjtagdrivers_la_LIBADD += -lsetupapi
+endif
 
 DRIVERHEADERS = \
 	%D%/bitbang.h \
 	%D%/bitq.h \
 	%D%/libftdi_helper.h \
 	%D%/libusb_helper.h \
+	%D%/al_link_cyusb.h \
 	%D%/cmsis_dap.h \
 	%D%/minidriver_imp.h \
 	%D%/mpsse.h \

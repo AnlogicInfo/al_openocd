@@ -372,6 +372,20 @@ AC_ARG_ENABLE([remote-bitbang],
   AS_HELP_STRING([--enable-remote-bitbang], [Enable building support for the Remote Bitbang jtag driver]),
   [build_remote_bitbang=$enableval], [build_remote_bitbang=yes])
 
+AC_MSG_CHECKING([whether to enable AL-LINK adapter (CyUSB)])
+AS_CASE([$host_os],
+  [cygwin*|mingw*], [
+    AC_ARG_ENABLE([al_link],
+      AS_HELP_STRING([--enable-al-link], [Enable building the AL-LINK JTAG adapter driver (Windows/CyUSB only).]),
+        [build_al_link=$enableval], [build_al_link=yes])
+  ],
+  [
+    AS_IF([test "x$build_al_link" = "xyes"], [
+      AC_MSG_ERROR([al_link is only available on Windows])
+    ])
+])
+AC_MSG_RESULT([$build_al_link])
+
 AC_MSG_CHECKING([whether to enable ftd2xx driver])
 AS_CASE([$host_os],
   [cygwin*|mingw*], [
@@ -780,6 +794,13 @@ AM_CONDITIONAL([RSHIM], [test "x$build_rshim" = "xyes"])
 AM_CONDITIONAL([HAVE_CAPSTONE], [test "x$enable_capstone" != "xno"])
 AM_CONDITIONAL([USE_FTD2XX], [test "x$build_ftd2xx" = "xyes"])
 AM_CONDITIONAL([USE_LIBWDI], [test "x$build_libwdi" = "xyes"])
+AM_CONDITIONAL([AL_LINK], [test "x$build_al_link" = "xyes"])
+
+AS_IF([test "x$build_al_link" = "xyes"], [
+  AC_DEFINE([BUILD_AL_LINK], [1], [1 if you want the AL-LINK adapter driver.])
+], [
+  AC_DEFINE([BUILD_AL_LINK], [0], [0 if you do not want the AL-LINK adapter driver.])
+])
 
 AM_CONDITIONAL([INTERNAL_JIMTCL], [test "x$use_internal_jimtcl" = "xyes"])
 AM_CONDITIONAL([INTERNAL_LIBJAYLINK], [test "x$use_internal_libjaylink" = "xyes"])
