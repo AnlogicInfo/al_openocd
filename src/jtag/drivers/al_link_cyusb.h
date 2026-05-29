@@ -45,10 +45,10 @@ DEFINE_GUID(CYUSB_DRIVER_GUID,
  * IOCTL function index base.
  *
  * Older CyUSB.sys uses base 0x0000; CyUSB3.sys uses 0x0800.
- * We default to 0x0000 (FX2LP style) and allow compile-time override.
+ * We default to 0x0800 (CyUSB3 style) and allow compile-time override.
  */
 #ifndef AL_CYUSB_IOCTL_BASE
-#define AL_CYUSB_IOCTL_BASE  0x0000
+#define AL_CYUSB_IOCTL_BASE  0x0800
 #endif
 
 #define AL_CYUSB_IOCTL_EP0_TRANSFER \
