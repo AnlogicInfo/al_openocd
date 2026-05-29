@@ -28,7 +28,9 @@
  * For MSVC builds, pull in setupapi.lib for the SetupDi* APIs.
  * MinGW/autotools builds should add the library in the build system.
  */
+#ifdef _MSC_VER
 #pragma comment(lib, "setupapi.lib")
+#endif
 
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                   */
