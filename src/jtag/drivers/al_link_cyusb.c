@@ -161,14 +161,17 @@ int al_cyusb_open(const uint16_t vids[], const uint16_t pids[],
 			continue;
 		}
 
-		/* Found a matching device — open it */
+		/* Found a matching device — open it.
+		 * Use synchronous I/O: CyUSB.sys returns ERROR_INVALID_PARAMETER (87)
+		 * if the handle is opened with FILE_FLAG_OVERLAPPED but DeviceIoControl
+		 * is called with a NULL OVERLAPPED pointer. */
 		HANDLE hdev = CreateFileA(
 			detail->DevicePath,
 			GENERIC_READ | GENERIC_WRITE,
 			FILE_SHARE_READ | FILE_SHARE_WRITE,
 			NULL,
 			OPEN_EXISTING,
-			FILE_FLAG_OVERLAPPED,
+			0,
 			NULL);
 
 		if (hdev == INVALID_HANDLE_VALUE) {
