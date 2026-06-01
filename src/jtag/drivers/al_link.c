@@ -56,6 +56,9 @@
 /* Older AL-LINK endpoint descriptors use 512-byte bulk packets. */
 #define AL_LINK_DEFAULT_PACKET_SIZE 512
 
+/* IEEE 1149.1 requires at least five TMS=1 clocks to reach TLR. */
+#define AL_LINK_TLR_RESET_CYCLES 5
+
 /*
  * USB timeout in milliseconds.
  *
@@ -147,6 +150,7 @@ static int al_link_execute_scan(struct jtag_command *cmd);
 static int al_link_execute_pathmove(struct jtag_command *cmd);
 static int al_link_execute_tms(struct jtag_command *cmd);
 static int al_link_execute_statemove(size_t skip);
+static int al_link_execute_tlr_reset(void);
 static int al_link_execute_reset(struct jtag_command *cmd);
 
 static int al_link_end_state(tap_state_t state);
@@ -325,6 +329,37 @@ static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf, size_t num_cycl
 		return ERROR_OK;
 
 	return al_link_usb_xfer(tx_buf, num_cycles, rx_buf, num_cycles);
+}
+
+/*
+ * Force the hardware TAP into Test-Logic-Reset.
+ *
+ * The adapter does not yet expose dedicated TRST wiring, so when OpenOCD asks
+ * for a TAP-affecting reset we must drive the standard TMS reset sequence
+ * explicitly instead of only updating the software state tracker.
+ */
+static int al_link_execute_tlr_reset(void)
+{
+	uint8_t *tx_buf;
+	uint8_t *rx_buf;
+	int retval;
+
+	retval = al_link_alloc_cycles(AL_LINK_TLR_RESET_CYCLES, &tx_buf, &rx_buf);
+	if (retval != ERROR_OK)
+		return retval;
+
+	for (size_t index = 0; index < AL_LINK_TLR_RESET_CYCLES; index++)
+		tx_buf[index] = al_link_encode_cycle(1, 0);
+
+	retval = al_link_send_cycles(tx_buf, rx_buf, AL_LINK_TLR_RESET_CYCLES);
+	free(tx_buf);
+	free(rx_buf);
+	if (retval != ERROR_OK)
+		return retval;
+
+	tap_set_state(TAP_RESET);
+	tap_set_end_state(TAP_RESET);
+	return ERROR_OK;
 }
 
 /*
@@ -740,19 +775,25 @@ out:
 /*
  * Handle queue-level reset requests.
  *
- * For now the implementation only keeps the software TAP state coherent. The
- * protocol support for dedicated reset lines is intentionally deferred until
- * those electrical paths are confirmed on real hardware.
+ * Dedicated SRST/TRST wiring is still deferred until the electrical behavior
+ * is confirmed on hardware. When OpenOCD requests a TAP-affecting reset, we
+ * therefore emulate it with the standard TMS reset sequence so the hardware
+ * and software TAP states stay aligned.
  */
 static int al_link_execute_reset(struct jtag_command *cmd)
 {
-	if (cmd->cmd.reset->trst == 1 ||
+	bool tap_reset_requested = cmd->cmd.reset->trst == 1 ||
 		(cmd->cmd.reset->srst == 1 &&
-		(jtag_get_reset_config() & RESET_SRST_PULLS_TRST)))
-		tap_set_state(TAP_RESET);
+		(jtag_get_reset_config() & RESET_SRST_PULLS_TRST));
+	int retval = ERROR_OK;
+
+	if (tap_reset_requested)
+		retval = al_link_execute_tlr_reset();
+	if (retval != ERROR_OK)
+		return retval;
 
 	if (cmd->cmd.reset->trst != -1 || cmd->cmd.reset->srst != -1)
-		LOG_WARNING("AL-LINK: dedicated SRST/TRST lines are not implemented yet");
+		LOG_WARNING("AL-LINK: dedicated SRST/TRST lines are not implemented yet; TAP reset is emulated with TMS clocks when requested");
 
 	return ERROR_OK;
 }
