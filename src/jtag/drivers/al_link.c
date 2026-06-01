@@ -782,8 +782,10 @@ out:
  */
 static int al_link_execute_reset(struct jtag_command *cmd)
 {
-	bool tap_reset_requested = cmd->cmd.reset->trst == 1 ||
-		(cmd->cmd.reset->srst == 1 &&
+	bool srst_requested = cmd->cmd.reset->srst == 1;
+	bool trst_requested = cmd->cmd.reset->trst == 1;
+	bool tap_reset_requested = trst_requested ||
+		(srst_requested &&
 		(jtag_get_reset_config() & RESET_SRST_PULLS_TRST));
 	int retval = ERROR_OK;
 
@@ -792,8 +794,8 @@ static int al_link_execute_reset(struct jtag_command *cmd)
 	if (retval != ERROR_OK)
 		return retval;
 
-	if (cmd->cmd.reset->trst != -1 || cmd->cmd.reset->srst != -1)
-		LOG_WARNING("AL-LINK: dedicated SRST/TRST lines are not implemented yet; TAP reset is emulated with TMS clocks when requested");
+	if (srst_requested && !tap_reset_requested)
+		LOG_WARNING("AL-LINK: SRST was requested but the adapter has no dedicated SRST line; the system reset request was ignored");
 
 	return ERROR_OK;
 }
