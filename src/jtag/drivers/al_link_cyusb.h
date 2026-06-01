@@ -74,9 +74,13 @@ DEFINE_GUID(CYUSB_DRIVER_GUID,
 /*
  * Layout must match the driver's expectation.  The union covers either an
  * 8-byte EP0 setup packet + 4-byte timeout, or is zeroed for non-EP0.
- * With the packed layout below, sizeof(AL_SINGLE_TRANSFER) is 30 bytes.
+ * With the packed layout below, sizeof(AL_SINGLE_TRANSFER) is 38 bytes.
  * Keep this definition aligned with the Cypress SDK structure used by the
  * installed driver.
+ *
+ * IMPORTANT: This structure must include IsoPacketOffset and IsoPacketLength
+ * fields even for bulk transfers.  Omitting them causes DeviceIoControl to
+ * fail with ERROR_INVALID_PARAMETER (87).
  */
 #pragma pack(push, 1)
 typedef struct _AL_SINGLE_TRANSFER {
@@ -97,6 +101,8 @@ typedef struct _AL_SINGLE_TRANSFER {
 	uint8_t  ucEndpointAddress;  /* target endpoint */
 	uint32_t NtStatus;           /* filled by driver on return */
 	uint32_t UsbdStatus;         /* filled by driver on return */
+	uint32_t IsoPacketOffset;    /* for isochronous transfers (set to 0 for bulk) */
+	uint32_t IsoPacketLength;    /* for isochronous transfers (set to 0 for bulk) */
 	uint32_t BufferOffset;       /* offset from struct start to data */
 	uint32_t BufferLength;       /* data payload length */
 } AL_SINGLE_TRANSFER;
