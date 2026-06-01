@@ -358,7 +358,6 @@ static int al_link_execute_tlr_reset(void)
 		return retval;
 
 	tap_set_state(TAP_RESET);
-	tap_set_end_state(TAP_RESET);
 	return ERROR_OK;
 }
 
@@ -793,6 +792,8 @@ static int al_link_execute_reset(struct jtag_command *cmd)
 		retval = al_link_execute_tlr_reset();
 	if (retval != ERROR_OK)
 		return retval;
+	if (tap_reset_requested)
+		tap_set_end_state(TAP_RESET);
 
 	if (srst_requested && !tap_reset_requested)
 		LOG_WARNING("AL-LINK: SRST was requested but the adapter has no dedicated SRST line; the system reset request was ignored");
@@ -823,7 +824,14 @@ static int al_link_execute_queue(void)
 			break;
 		case JTAG_TLR_RESET:
 			retval = al_link_end_state(cmd->cmd.statemove->end_state);
-			if (retval == ERROR_OK)
+			if (retval != ERROR_OK)
+				break;
+
+			retval = al_link_execute_tlr_reset();
+			if (retval != ERROR_OK)
+				break;
+
+			if (tap_get_end_state() != TAP_RESET)
 				retval = al_link_execute_statemove(0);
 			break;
 		case JTAG_PATHMOVE:

@@ -1,35 +1,25 @@
 #
-# AL_Link JTAG Scan Script
+# AL-Link JTAG Scan Script
 #
 # Usage:
-#   openocd -f al_link_scan.tcl
-#   openocd -f al_link_scan.tcl -c "al_scan 2000"     # specify speed
+#   openocd -f al_link_scan.tcl -c "al_scan"
+#   openocd -f al_link_scan.tcl -c "al_scan 2000"
+#   openocd -f al_link_scan.tcl -c {scan_device 0x336C 0x1001 "1-3" 5000}
 #
 
-proc al_scan {{speed 2000}} {
+proc scan_device {vid pid {port ""} {speed 10000}} {
     adapter driver al_link
-    al_link_vid_pid 0x336C 0x1001
+    if {$port ne ""} {
+        puts "scan port $port"
+        adapter usb location $port
+    }
     adapter speed $speed
+    al_link_vid_pid $vid $pid
     transport select jtag
-    
-    # Create a dummy TAP with long IR to auto-detect chain
-    # OpenOCD will report the actual IDCODE values found
-    jtag newtap auto0 tap -irlen 8 -expected-id 0
-    
-    puts "=========================================="
-    puts "AL-LINK JTAG Scan"
-    puts "Speed: $speed kHz"
-    puts "=========================================="
-    
-    init
-    
-    puts ""
-    puts "JTAG chain detection complete."
-    puts "Check above for IDCODE values."
-    puts "=========================================="
-    
+    jtag init
     shutdown
 }
 
-# Default action: run scan at 2MHz
-al_scan
+proc al_scan {{speed 2000} {port ""}} {
+    scan_device 0x336C 0x1001 $port $speed
+}
