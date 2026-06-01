@@ -31,7 +31,5 @@ proc al_scan {{speed 2000}} {
     shutdown
 }
 
-# Default action: run scan at 2MHz (only when script is run directly, not sourced)
-if {[info exists ::argv0] && [info script] eq $::argv0} {
-    al_scan
-}
+# Default action: run scan at 2MHz
+al_scan

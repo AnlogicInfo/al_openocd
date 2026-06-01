@@ -42,29 +42,43 @@ DEFINE_GUID(CYUSB_DRIVER_GUID,
 /* ------------------------------------------------------------------ */
 
 /*
- * IOCTL function index base.
+ * IOCTL codes differ between the two Cypress drivers commonly bound to
+ * AL-LINK class devices:
  *
- * Older CyUSB.sys uses base 0x0000; CyUSB3.sys uses 0x0800.
- * We default to 0x0800 (CyUSB3 style) and allow compile-time override.
+ *   CyUSB3.sys (FX3 / SuperSpeed driver)  base 0x0800, EP0=+3 NON_EP0=+5 RESET=+8
+ *   CyUSB.sys  (FX2 / classic driver)     base 0x0000, EP0=+22 NON_EP0=+24 RESET=+27
+ *
+ * Default is FX2 (CyUSB.sys / Anlogic anlocyusb.sys — AL-LINK uses CY7C68013A).
+ * Define AL_CYUSB_USE_FX3 at build time to switch to CyUSB3.sys layout.
  */
-#ifndef AL_CYUSB_IOCTL_BASE
-#define AL_CYUSB_IOCTL_BASE  0x0800
+#if defined(AL_CYUSB_USE_FX3)
+#define AL_CYUSB_IOCTL_BASE          0x0800
+#define AL_CYUSB_IOCTL_OFF_EP0       3
+#define AL_CYUSB_IOCTL_OFF_NON_EP0   5
+#define AL_CYUSB_IOCTL_OFF_RESET     8
+#define AL_CYUSB_IOCTL_OFF_ABORT     15
+#else
+#define AL_CYUSB_IOCTL_BASE          0x0000
+#define AL_CYUSB_IOCTL_OFF_EP0       22
+#define AL_CYUSB_IOCTL_OFF_NON_EP0   24
+#define AL_CYUSB_IOCTL_OFF_RESET     27
+#define AL_CYUSB_IOCTL_OFF_ABORT     28
 #endif
 
 #define AL_CYUSB_IOCTL_EP0_TRANSFER \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + 3, \
+	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_EP0, \
 		METHOD_IN_DIRECT, FILE_ANY_ACCESS)
 
 #define AL_CYUSB_IOCTL_NON_EP0_TRANSFER \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + 5, \
+	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_NON_EP0, \
 		METHOD_IN_DIRECT, FILE_ANY_ACCESS)
 
 #define AL_CYUSB_IOCTL_RESET_PIPE \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + 8, \
+	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_RESET, \
 		METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 #define AL_CYUSB_IOCTL_ABORT_PIPE \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + 15, \
+	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_ABORT, \
 		METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 /* ------------------------------------------------------------------ */
@@ -72,41 +86,35 @@ DEFINE_GUID(CYUSB_DRIVER_GUID,
 /* ------------------------------------------------------------------ */
 
 /*
- * Layout must match the driver's expectation.  The union covers either an
- * 8-byte EP0 setup packet + 4-byte timeout, or is zeroed for non-EP0.
- * With the packed layout below, sizeof(AL_SINGLE_TRANSFER) is 38 bytes.
- * Keep this definition aligned with the Cypress SDK structure used by the
- * installed driver.
+ * Layout must exactly match Cypress SDK SINGLE_TRANSFER (cyioctl.h).
+ * Default (natural) alignment is used — the driver does NOT use pack(1);
+ * sizeof must be 40 bytes on Windows (3-byte tail padding after
+ * ucEndpointAddress so NtStatus is 4-byte aligned).
  *
- * IMPORTANT: This structure must include IsoPacketOffset and IsoPacketLength
- * fields even for bulk transfers.  Omitting them causes DeviceIoControl to
- * fail with ERROR_INVALID_PARAMETER (87).
+ * IMPORTANT: field order below is the canonical one. Reordering or
+ * repacking causes DeviceIoControl to return ERROR_INVALID_PARAMETER (87)
+ * because the driver reads BufferOffset/BufferLength from wrong offsets.
  */
-#pragma pack(push, 1)
 typedef struct _AL_SINGLE_TRANSFER {
-	/* Bytes 0-11: EP0 setup packet + timeout (zeroed for bulk) */
-	union {
-		struct {
-			uint8_t  bmRequestType;
-			uint8_t  bRequest;
-			uint16_t wValue;
-			uint16_t wIndex;
-			uint16_t wLength;
-			uint32_t ulTimeOut;
-		} setup;
-		uint8_t raw_setup[12];
-	};
+	/* EP0 setup packet (zeroed for bulk transfers) */
+	uint8_t  bmRequest;
+	uint8_t  bRequest;
+	uint16_t wValue;
+	uint16_t wIndex;
+	uint16_t wLength;
+	uint32_t ulTimeOut;
 
-	uint8_t  reserved;           /* padding byte */
-	uint8_t  ucEndpointAddress;  /* target endpoint */
-	uint32_t NtStatus;           /* filled by driver on return */
-	uint32_t UsbdStatus;         /* filled by driver on return */
-	uint32_t IsoPacketOffset;    /* for isochronous transfers (set to 0 for bulk) */
-	uint32_t IsoPacketLength;    /* for isochronous transfers (set to 0 for bulk) */
+	uint32_t IsoPacketOffset;    /* isochronous only (0 for bulk) */
+	uint32_t IsoPacketLength;    /* isochronous only (0 for bulk) */
 	uint32_t BufferOffset;       /* offset from struct start to data */
 	uint32_t BufferLength;       /* data payload length */
+
+	uint8_t  ucEndpointAddress;  /* target endpoint */
+	/* 3 bytes of implicit padding here (natural alignment) */
+
+	uint32_t NtStatus;           /* filled by driver on return */
+	uint32_t UsbdStatus;         /* filled by driver on return */
 } AL_SINGLE_TRANSFER;
-#pragma pack(pop)
 
 /* ------------------------------------------------------------------ */
 /*  Transport handle                                                   */
