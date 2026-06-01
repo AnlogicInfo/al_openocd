@@ -48,38 +48,28 @@ DEFINE_GUID(CYUSB_DRIVER_GUID,
  *   CyUSB3.sys (FX3 / SuperSpeed driver)  base 0x0800, EP0=+3 NON_EP0=+5 RESET=+8
  *   CyUSB.sys  (FX2 / classic driver)     base 0x0000, EP0=+22 NON_EP0=+24 RESET=+27
  *
- * Default is FX2 (CyUSB.sys / Anlogic anlocyusb.sys — AL-LINK uses CY7C68013A).
- * Define AL_CYUSB_USE_FX3 at build time to switch to CyUSB3.sys layout.
+ * Anlogic's anlocyusb.sys is a Cypress-derived driver whose version resource
+ * reports OriginalFilename=CyUsb3.sys, but older installations may still bind
+ * the classic CyUSB.sys layout. The transport therefore probes both layouts at
+ * runtime and caches the one that succeeds.
  */
-#if defined(AL_CYUSB_USE_FX3)
-#define AL_CYUSB_IOCTL_BASE          0x0800
-#define AL_CYUSB_IOCTL_OFF_EP0       3
-#define AL_CYUSB_IOCTL_OFF_NON_EP0   5
-#define AL_CYUSB_IOCTL_OFF_RESET     8
-#define AL_CYUSB_IOCTL_OFF_ABORT     15
-#else
-#define AL_CYUSB_IOCTL_BASE          0x0000
-#define AL_CYUSB_IOCTL_OFF_EP0       22
-#define AL_CYUSB_IOCTL_OFF_NON_EP0   24
-#define AL_CYUSB_IOCTL_OFF_RESET     27
-#define AL_CYUSB_IOCTL_OFF_ABORT     28
-#endif
+#define AL_CYUSB_IOCTL_BASE_FX3          0x0800
+#define AL_CYUSB_IOCTL_OFF_EP0_FX3       3
+#define AL_CYUSB_IOCTL_OFF_NON_EP0_FX3   5
+#define AL_CYUSB_IOCTL_OFF_RESET_FX3     8
+#define AL_CYUSB_IOCTL_OFF_ABORT_FX3     15
 
-#define AL_CYUSB_IOCTL_EP0_TRANSFER \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_EP0, \
-		METHOD_IN_DIRECT, FILE_ANY_ACCESS)
+#define AL_CYUSB_IOCTL_BASE_FX2          0x0000
+#define AL_CYUSB_IOCTL_OFF_EP0_FX2       22
+#define AL_CYUSB_IOCTL_OFF_NON_EP0_FX2   24
+#define AL_CYUSB_IOCTL_OFF_RESET_FX2     27
+#define AL_CYUSB_IOCTL_OFF_ABORT_FX2     28
 
-#define AL_CYUSB_IOCTL_NON_EP0_TRANSFER \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_NON_EP0, \
-		METHOD_IN_DIRECT, FILE_ANY_ACCESS)
-
-#define AL_CYUSB_IOCTL_RESET_PIPE \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_RESET, \
-		METHOD_BUFFERED, FILE_ANY_ACCESS)
-
-#define AL_CYUSB_IOCTL_ABORT_PIPE \
-	CTL_CODE(FILE_DEVICE_UNKNOWN, AL_CYUSB_IOCTL_BASE + AL_CYUSB_IOCTL_OFF_ABORT, \
-		METHOD_BUFFERED, FILE_ANY_ACCESS)
+enum al_cyusb_ioctl_layout {
+	AL_CYUSB_IOCTL_LAYOUT_UNKNOWN = 0,
+	AL_CYUSB_IOCTL_LAYOUT_FX2,
+	AL_CYUSB_IOCTL_LAYOUT_FX3,
+};
 
 /* ------------------------------------------------------------------ */
 /*  SINGLE_TRANSFER — the per-transfer header sent via DeviceIoControl */
@@ -123,6 +113,7 @@ typedef struct _AL_SINGLE_TRANSFER {
 typedef struct al_cyusb_handle {
 	HANDLE dev;               /* handle returned by CreateFile */
 	bool   is_open;
+	enum al_cyusb_ioctl_layout ioctl_layout;
 	char   dev_path[512];     /* device path for diagnostics */
 } al_cyusb_handle_t;
 
