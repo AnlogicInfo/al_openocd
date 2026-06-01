@@ -91,6 +91,96 @@ static bool match_vid_pid(uint16_t vid, uint16_t pid,
 	return false;
 }
 
+static enum al_cyusb_ioctl_layout al_cyusb_alternate_layout(
+		enum al_cyusb_ioctl_layout layout)
+{
+	return (layout == AL_CYUSB_IOCTL_LAYOUT_FX2) ?
+		AL_CYUSB_IOCTL_LAYOUT_FX3 : AL_CYUSB_IOCTL_LAYOUT_FX2;
+}
+
+static DWORD al_cyusb_ioctl_code(enum al_cyusb_ioctl_layout layout,
+		unsigned int fx2_base, unsigned int fx2_offset,
+		unsigned int fx3_base, unsigned int fx3_offset,
+		DWORD method)
+{
+	if (layout == AL_CYUSB_IOCTL_LAYOUT_FX2)
+		return CTL_CODE(FILE_DEVICE_UNKNOWN, fx2_base + fx2_offset,
+			method, FILE_ANY_ACCESS);
+
+	return CTL_CODE(FILE_DEVICE_UNKNOWN, fx3_base + fx3_offset,
+		method, FILE_ANY_ACCESS);
+}
+
+static DWORD al_cyusb_non_ep0_ioctl(enum al_cyusb_ioctl_layout layout)
+{
+	return al_cyusb_ioctl_code(layout,
+		AL_CYUSB_IOCTL_BASE_FX2, AL_CYUSB_IOCTL_OFF_NON_EP0_FX2,
+		AL_CYUSB_IOCTL_BASE_FX3, AL_CYUSB_IOCTL_OFF_NON_EP0_FX3,
+		METHOD_IN_DIRECT);
+}
+
+static DWORD al_cyusb_reset_pipe_ioctl(enum al_cyusb_ioctl_layout layout)
+{
+	return al_cyusb_ioctl_code(layout,
+		AL_CYUSB_IOCTL_BASE_FX2, AL_CYUSB_IOCTL_OFF_RESET_FX2,
+		AL_CYUSB_IOCTL_BASE_FX3, AL_CYUSB_IOCTL_OFF_RESET_FX3,
+		METHOD_BUFFERED);
+}
+
+static const char *al_cyusb_layout_name(enum al_cyusb_ioctl_layout layout)
+{
+	return (layout == AL_CYUSB_IOCTL_LAYOUT_FX2) ? "CyUSB" : "CyUSB3";
+}
+
+static int al_cyusb_device_ioctl(al_cyusb_handle_t *h,
+		DWORD (*ioctl_selector)(enum al_cyusb_ioctl_layout layout),
+		void *in_buf, DWORD in_size,
+		void *out_buf, DWORD out_size,
+		DWORD *bytes_returned, DWORD *last_error)
+{
+	enum al_cyusb_ioctl_layout preferred = h->ioctl_layout;
+	enum al_cyusb_ioctl_layout alternate;
+
+	if (preferred == AL_CYUSB_IOCTL_LAYOUT_UNKNOWN)
+		preferred = AL_CYUSB_IOCTL_LAYOUT_FX3;
+	alternate = al_cyusb_alternate_layout(preferred);
+
+	for (unsigned int attempt = 0; attempt < 2; attempt++) {
+		enum al_cyusb_ioctl_layout layout = (attempt == 0) ? preferred : alternate;
+		DWORD local_bytes_returned = 0;
+		BOOL ok;
+		DWORD error;
+
+		ok = DeviceIoControl(
+			h->dev,
+			ioctl_selector(layout),
+			in_buf, in_size,
+			out_buf, out_size,
+			&local_bytes_returned, NULL);
+
+		if (ok) {
+			if (bytes_returned)
+				*bytes_returned = local_bytes_returned;
+			if (h->ioctl_layout != layout) {
+				h->ioctl_layout = layout;
+				LOG_INFO("AL-LINK CyUSB: using %s IOCTL layout",
+					 al_cyusb_layout_name(layout));
+			}
+			return 0;
+		}
+
+		error = GetLastError();
+		if (last_error)
+			*last_error = error;
+		if (error != ERROR_INVALID_PARAMETER)
+			break;
+	}
+
+	if (bytes_returned)
+		*bytes_returned = 0;
+	return -1;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Device enumeration & open                                          */
 /* ------------------------------------------------------------------ */
@@ -107,6 +197,7 @@ int al_cyusb_open(const uint16_t vids[], const uint16_t pids[],
 
 	memset(h, 0, sizeof(*h));
 	h->dev = INVALID_HANDLE_VALUE;
+	h->ioctl_layout = AL_CYUSB_IOCTL_LAYOUT_UNKNOWN;
 
 	dev_info = SetupDiGetClassDevsA(
 		(const GUID *)&CYUSB_DRIVER_GUID,
@@ -223,6 +314,7 @@ int al_cyusb_reset_pipe(al_cyusb_handle_t *h, uint8_t ep_addr)
 {
 	AL_SINGLE_TRANSFER xfer;
 	DWORD bytes_returned = 0;
+	DWORD last_error = ERROR_SUCCESS;
 
 	if (!h || !h->is_open)
 		return -1;
@@ -230,16 +322,11 @@ int al_cyusb_reset_pipe(al_cyusb_handle_t *h, uint8_t ep_addr)
 	memset(&xfer, 0, sizeof(xfer));
 	xfer.ucEndpointAddress = ep_addr;
 
-	BOOL ok = DeviceIoControl(
-		h->dev,
-		AL_CYUSB_IOCTL_RESET_PIPE,
-		&xfer, sizeof(xfer),
-		&xfer, sizeof(xfer),
-		&bytes_returned, NULL);
-
-	if (!ok) {
+	if (al_cyusb_device_ioctl(h, al_cyusb_reset_pipe_ioctl,
+			&xfer, sizeof(xfer), &xfer, sizeof(xfer),
+			&bytes_returned, &last_error) != 0) {
 		LOG_WARNING("AL-LINK CyUSB: reset pipe 0x%02x failed (error %lu)",
-			    ep_addr, GetLastError());
+			    ep_addr, last_error);
 		return -1;
 	}
 
@@ -267,7 +354,7 @@ static int cyusb_bulk_xfer(al_cyusb_handle_t *h, uint8_t ep_addr,
 	uint8_t *xfer_buf = NULL;
 	AL_SINGLE_TRANSFER *hdr;
 	DWORD bytes_returned = 0;
-	BOOL ok;
+	DWORD last_error = ERROR_SUCCESS;
 
 	if (!h || !h->is_open)
 		return -1;
@@ -286,16 +373,11 @@ static int cyusb_bulk_xfer(al_cyusb_handle_t *h, uint8_t ep_addr,
 	if (!is_read && length > 0)
 		memcpy(xfer_buf + sizeof(AL_SINGLE_TRANSFER), data, length);
 
-	ok = DeviceIoControl(
-		h->dev,
-		AL_CYUSB_IOCTL_NON_EP0_TRANSFER,
-		xfer_buf, xfer_buf_size,
-		xfer_buf, xfer_buf_size,
-		&bytes_returned, NULL);
-
-	if (!ok) {
+	if (al_cyusb_device_ioctl(h, al_cyusb_non_ep0_ioctl,
+			xfer_buf, xfer_buf_size, xfer_buf, xfer_buf_size,
+			&bytes_returned, &last_error) != 0) {
 		LOG_ERROR("AL-LINK CyUSB: bulk %s on EP 0x%02x failed (error %lu)",
-			  is_read ? "read" : "write", ep_addr, GetLastError());
+			  is_read ? "read" : "write", ep_addr, last_error);
 		free(xfer_buf);
 		if (transferred)
 			*transferred = 0;
