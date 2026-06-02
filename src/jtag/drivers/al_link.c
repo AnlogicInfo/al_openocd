@@ -355,7 +355,26 @@ static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 	if (retval != ERROR_OK)
 		return retval;
 
+	if (!readback)
+		return al_link_usb_xfer(&idle_frame, 1, NULL, 0);
+
 	return ERROR_OK;
+}
+
+static int al_link_stable_idle_tms(tap_state_t state, int *tms)
+{
+	switch (state) {
+	case TAP_RESET:
+		*tms = 1;
+		return ERROR_OK;
+	case TAP_IDLE:
+	case TAP_DRPAUSE:
+	case TAP_IRPAUSE:
+		*tms = 0;
+		return ERROR_OK;
+	default:
+		return ERROR_FAIL;
+	}
 }
 
 /*
@@ -475,12 +494,11 @@ static int al_link_usb_mark_failed(const char *where)
 /*
  * Transfer a byte stream through the AL-LINK traditional-mode protocol.
  *
- * The reference firmware's traditional mode consumes EP6 as eight 64-byte OUT
- * packets and only then publishes eight 64-byte EP2 response packets.  It also
- * processes a full 64-byte packet in every OUT callback, so host-side short
- * writes are not safe.  Pad each logical JTAG transfer to a 512-byte batch with
- * a stable idle frame, then always drain the matching 512-byte EP2 response.
- * If the caller did not request readback, the response bytes are discarded.
+ * Non-readback commands behave like ordinary write-only bitbang traffic and
+ * must not force an EP2 read; doing so stalls transport init on small reset
+ * and statemove sequences. Readback scans are still handled separately using
+ * the traditional 8 x 64-byte response batching model inferred from the
+ * reference firmware.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_len)
 {
@@ -489,6 +507,7 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_
 	size_t total_len;
 	size_t tx_offset = 0;
 	size_t rx_offset = 0;
+	size_t offset = 0;
 	int retval;
 
 	if (!al_link.usb.is_open)
@@ -505,13 +524,43 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_
 		return ERROR_FAIL;
 	}
 
-	if ((rx_len != 0) && (rx_len != tx_len)) {
-		LOG_ERROR("AL-LINK: EP6/EP2 transfer expects symmetric tx/rx sizes");
+	if (rx_len > tx_len) {
+		LOG_ERROR("AL-LINK: EP2 readback length exceeds EP6 transfer length");
 		return ERROR_FAIL;
 	}
 
 	if (tx_len == 0)
 		return ERROR_OK;
+
+	if (rx_len == 0) {
+		while (offset < tx_len) {
+			size_t chunk = tx_len - offset;
+			int transferred = 0;
+
+			if (chunk > al_link.config.packet_size)
+				chunk = al_link.config.packet_size;
+
+			LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u packet_size=%u",
+				al_link.config.ep_out, (unsigned int)offset,
+				(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len,
+				(unsigned int)al_link.config.packet_size);
+			retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
+				tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
+				retval, transferred);
+			if (retval != 0)
+				return al_link_usb_mark_failed("EP6 write");
+			if (transferred != (int)chunk) {
+				LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
+					(unsigned int)chunk, transferred);
+				return al_link_usb_mark_failed("EP6 write");
+			}
+
+			offset += chunk;
+		}
+
+		return ERROR_OK;
+	}
 
 	total_len = ((tx_len + AL_LINK_TRADITIONAL_BATCH_SIZE - 1) /
 		AL_LINK_TRADITIONAL_BATCH_SIZE) * AL_LINK_TRADITIONAL_BATCH_SIZE;
@@ -834,6 +883,10 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	int last_tms = 0;
 	int last_tdi = 0;
 	int scan_size;
+	int path_len = 0;
+	uint8_t tms_path = 0;
+	size_t tx_cycles;
+	size_t tx_index;
 	int retval;
 
 	retval = al_link_end_state(saved_end_state);
@@ -849,22 +902,71 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	}
 
 	scan_size = jtag_build_buffer(cmd->cmd.scan, &buffer);
-	retval = al_link_alloc_cycles((size_t)scan_size, &tx_buf, &rx_buf);
+	tx_cycles = (size_t)scan_size;
+	if (readback && saved_end_state != shift_state) {
+		path_len = tap_get_tms_path_len(shift_state, saved_end_state);
+		if (path_len < 1) {
+			retval = ERROR_FAIL;
+			goto out;
+		}
+
+		tms_path = tap_get_tms_path(shift_state, saved_end_state);
+		tx_cycles += (size_t)path_len - 1;
+	}
+
+	retval = al_link_alloc_cycles(tx_cycles, &tx_buf, &rx_buf);
 	if (retval != ERROR_OK)
 		goto out;
 
+	tx_index = 0;
 	for (int bit = 0; bit < scan_size; bit++) {
 		int tms = (bit == scan_size - 1 && saved_end_state != shift_state) ? 1 : 0;
 		int tdi = type != SCAN_IN ? al_link_get_bit(buffer, (unsigned int)bit) : 0;
 		last_tms = tms;
 		last_tdi = tdi;
-		tx_buf[bit] = al_link_encode_cycle(tms, tdi);
+		tx_buf[tx_index++] = al_link_encode_cycle(tms, tdi);
 	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf,
-		(size_t)scan_size, readback, last_tms, last_tdi);
+	if (readback && saved_end_state != shift_state) {
+		for (int index = 1; index < path_len; index++) {
+			last_tms = (tms_path >> index) & 0x1;
+			tx_buf[tx_index++] = al_link_encode_cycle(last_tms, 0);
+		}
+	}
+
+	if (readback) {
+		int pad_tms;
+		bool needs_padding = (tx_cycles % AL_LINK_TRADITIONAL_BATCH_SIZE) != 0;
+
+		if (needs_padding && saved_end_state == shift_state) {
+			LOG_ERROR("AL-LINK: readback scan ending in %s cannot be padded safely to a traditional 512-byte batch",
+				tap_state_name(saved_end_state));
+			retval = ERROR_JTAG_QUEUE_FAILED;
+			goto out;
+		}
+
+		if (needs_padding) {
+			retval = al_link_stable_idle_tms(saved_end_state, &pad_tms);
+			if (retval != ERROR_OK) {
+				LOG_ERROR("AL-LINK: readback scan end state %s is not safe for traditional padding",
+					tap_state_name(saved_end_state));
+				retval = ERROR_JTAG_QUEUE_FAILED;
+				goto out;
+			}
+
+			al_link_pad_frame = al_link_encode_idle(pad_tms, 0);
+		}
+
+		retval = al_link_usb_xfer(tx_buf, tx_cycles, rx_buf, (size_t)scan_size);
+	} else {
+		retval = al_link_send_cycles(tx_buf, rx_buf,
+			(size_t)scan_size, false, last_tms, last_tdi);
+	}
 	if (retval != ERROR_OK)
 		goto out;
+
+	if (readback && saved_end_state != shift_state)
+		tap_set_state(saved_end_state);
 
 	if (readback) {
 		for (int bit = 0; bit < scan_size; bit++)
@@ -875,7 +977,7 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	if (retval != ERROR_OK)
 		goto out;
 
-	if (saved_end_state != shift_state)
+	if (!readback && saved_end_state != shift_state)
 		retval = al_link_execute_statemove(1);
 
 out:
