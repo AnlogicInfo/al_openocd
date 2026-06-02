@@ -221,6 +221,13 @@ static inline uint8_t al_link_encode_cycle(int tms, int tdi)
 		al_link_frame(true, tdi, tms));
 }
 
+static inline uint8_t al_link_encode_idle(int tms, int tdi)
+{
+	uint8_t frame = al_link_frame(false, tdi, tms);
+
+	return al_link_pack(frame, frame);
+}
+
 /*
  * Decode the effective TDO sample for one logical cycle.
  *
@@ -289,9 +296,9 @@ static int al_link_map_khz(uint8_t speed_byte)
 /*
  * Allocate parallel TX/RX buffers for a sequence of logical cycles.
  *
- * Each logical cycle maps to one outgoing byte and, in the current transport
- * model, one returned byte. Allocating both buffers together makes the later
- * queue execution code very straightforward.
+ * Each logical cycle maps to one outgoing byte. Allocating the optional RX
+ * buffer here keeps scan readback paths straightforward, while non-scan paths
+ * can pass readback=false and avoid waiting for EP2 data.
  */
 static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **rx_buf)
 {
@@ -323,12 +330,23 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
  * This helper exists mostly to keep the queue compiler focused on protocol
  * generation rather than on USB framing details.
  */
-static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf, size_t num_cycles)
+static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
+	size_t num_cycles, bool readback, int idle_tms, int idle_tdi)
 {
+	uint8_t idle_frame;
+	int retval;
+
 	if (num_cycles == 0)
 		return ERROR_OK;
 
-	return al_link_usb_xfer(tx_buf, num_cycles, rx_buf, num_cycles);
+	retval = al_link_usb_xfer(tx_buf, num_cycles,
+		readback ? rx_buf : NULL,
+		readback ? num_cycles : 0);
+	if (retval != ERROR_OK)
+		return retval;
+
+	idle_frame = al_link_encode_idle(idle_tms, idle_tdi);
+	return al_link_usb_xfer(&idle_frame, 1, NULL, 0);
 }
 
 /*
@@ -351,7 +369,8 @@ static int al_link_execute_tlr_reset(void)
 	for (size_t index = 0; index < AL_LINK_TLR_RESET_CYCLES; index++)
 		tx_buf[index] = al_link_encode_cycle(1, 0);
 
-	retval = al_link_send_cycles(tx_buf, rx_buf, AL_LINK_TLR_RESET_CYCLES);
+	retval = al_link_send_cycles(tx_buf, rx_buf,
+		AL_LINK_TLR_RESET_CYCLES, false, 1, 0);
 	free(tx_buf);
 	free(rx_buf);
 	if (retval != ERROR_OK)
@@ -461,8 +480,13 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_
 		if (chunk > al_link.config.packet_size)
 			chunk = al_link.config.packet_size;
 
+		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u",
+			al_link.config.ep_out, (unsigned int)offset,
+			(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len);
 		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
 			tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
+			retval, transferred);
 		if (retval != 0)
 			return ERROR_FAIL;
 		if (transferred != (int)chunk) {
@@ -473,8 +497,13 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_
 
 		if (rx_len != 0) {
 			transferred = 0;
+			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u",
+				al_link.config.ep_in, (unsigned int)offset,
+				(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len);
 			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
 				rx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+				retval, transferred);
 			if (retval != 0)
 				return ERROR_FAIL;
 			if (transferred != (int)chunk) {
@@ -519,6 +548,7 @@ static int al_link_execute_statemove(size_t skip)
 {
 	uint8_t tms_scan = tap_get_tms_path(tap_get_state(), tap_get_end_state());
 	int tms_count = tap_get_tms_path_len(tap_get_state(), tap_get_end_state());
+	int last_tms = 0;
 	uint8_t *tx_buf;
 	uint8_t *rx_buf;
 	int retval;
@@ -530,10 +560,13 @@ static int al_link_execute_statemove(size_t skip)
 	if (retval != ERROR_OK)
 		return retval;
 
-	for (int index = (int)skip; index < tms_count; index++)
-		tx_buf[index - (int)skip] = al_link_encode_cycle((tms_scan >> index) & 0x1, 0);
+	for (int index = (int)skip; index < tms_count; index++) {
+		last_tms = (tms_scan >> index) & 0x1;
+		tx_buf[index - (int)skip] = al_link_encode_cycle(last_tms, 0);
+	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf, (size_t)tms_count - skip);
+	retval = al_link_send_cycles(tx_buf, rx_buf,
+		(size_t)tms_count - skip, false, last_tms, 0);
 	free(tx_buf);
 	free(rx_buf);
 	if (retval != ERROR_OK)
@@ -554,6 +587,7 @@ static int al_link_execute_tms(struct jtag_command *cmd)
 {
 	unsigned int num_bits = cmd->cmd.tms->num_bits;
 	const uint8_t *bits = cmd->cmd.tms->bits;
+	int last_tms = 0;
 	uint8_t *tx_buf;
 	uint8_t *rx_buf;
 	int retval;
@@ -562,10 +596,12 @@ static int al_link_execute_tms(struct jtag_command *cmd)
 	if (retval != ERROR_OK)
 		return retval;
 
-	for (unsigned int bit = 0; bit < num_bits; bit++)
-		tx_buf[bit] = al_link_encode_cycle(al_link_get_bit(bits, bit), 0);
+	for (unsigned int bit = 0; bit < num_bits; bit++) {
+		last_tms = al_link_get_bit(bits, bit);
+		tx_buf[bit] = al_link_encode_cycle(last_tms, 0);
+	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf, num_bits);
+	retval = al_link_send_cycles(tx_buf, rx_buf, num_bits, false, last_tms, 0);
 	free(tx_buf);
 	free(rx_buf);
 	return retval;
@@ -609,7 +645,8 @@ static int al_link_execute_stableclocks(struct jtag_command *cmd)
 	for (int index = 0; index < num_cycles; index++)
 		tx_buf[index] = al_link_encode_cycle(tms, 0);
 
-	retval = al_link_send_cycles(tx_buf, rx_buf, (size_t)num_cycles);
+	retval = al_link_send_cycles(tx_buf, rx_buf,
+		(size_t)num_cycles, false, tms, 0);
 	free(tx_buf);
 	free(rx_buf);
 	return retval;
@@ -663,6 +700,7 @@ static int al_link_execute_pathmove(struct jtag_command *cmd)
 	int num_states = cmd->cmd.pathmove->num_states;
 	tap_state_t *path = cmd->cmd.pathmove->path;
 	tap_state_t current_state = tap_get_state();
+	int last_tms = 0;
 	uint8_t *tx_buf;
 	uint8_t *rx_buf;
 	int retval;
@@ -687,11 +725,13 @@ static int al_link_execute_pathmove(struct jtag_command *cmd)
 			return ERROR_JTAG_QUEUE_FAILED;
 		}
 
+		last_tms = tms;
 		tx_buf[index] = al_link_encode_cycle(tms, 0);
 		current_state = path[index];
 	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf, (size_t)num_states);
+	retval = al_link_send_cycles(tx_buf, rx_buf,
+		(size_t)num_states, false, last_tms, 0);
 	free(tx_buf);
 	free(rx_buf);
 	if (retval != ERROR_OK)
@@ -722,6 +762,9 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	uint8_t *buffer = NULL;
 	uint8_t *tx_buf = NULL;
 	uint8_t *rx_buf = NULL;
+	bool readback = type != SCAN_OUT;
+	int last_tms = 0;
+	int last_tdi = 0;
 	int scan_size;
 	int retval;
 
@@ -745,14 +788,17 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	for (int bit = 0; bit < scan_size; bit++) {
 		int tms = (bit == scan_size - 1 && saved_end_state != shift_state) ? 1 : 0;
 		int tdi = type != SCAN_IN ? al_link_get_bit(buffer, (unsigned int)bit) : 0;
+		last_tms = tms;
+		last_tdi = tdi;
 		tx_buf[bit] = al_link_encode_cycle(tms, tdi);
 	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf, (size_t)scan_size);
+	retval = al_link_send_cycles(tx_buf, rx_buf,
+		(size_t)scan_size, readback, last_tms, last_tdi);
 	if (retval != ERROR_OK)
 		goto out;
 
-	if (type != SCAN_OUT) {
+	if (readback) {
 		for (int bit = 0; bit < scan_size; bit++)
 			al_link_set_bit(buffer, (unsigned int)bit, al_link_decode_tdo(rx_buf[bit]));
 	}
