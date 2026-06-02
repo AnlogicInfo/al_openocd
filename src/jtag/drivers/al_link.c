@@ -453,75 +453,70 @@ static int al_link_usb_set_speed(uint8_t speed_byte)
  * Transfer a byte stream over EP6 and optionally read the matching response
  * back from EP2.
  *
- * We currently assume a strict 1:1 relationship between
- * transmitted bytes and returned bytes. The function also chunks transfers to
- * the configured packet size so protocol code never needs to care about USB
- * packet boundaries. The default packet size is 512 to match older AL-LINK
- * endpoint descriptors, while sample firmware with 64-byte endpoints can be
- * handled by overriding al_link_packet_size.
+ * We currently assume a strict 1:1 relationship between transmitted bytes and
+ * returned bytes.
+ *
+ * Important: the configured packet size describes the endpoint's max packet
+ * size, not an application-visible framing rule. CyUSB can submit one bulk
+ * transfer larger than that limit and let the USB stack split it into bus
+ * packets. Splitting one logical JTAG scan into multiple user-mode bulk reads
+ * proved unsafe on AL-LINK hardware because the device appears to produce the
+ * response as one contiguous transfer.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_len)
 {
-	size_t offset = 0;
+	int transferred = 0;
 	int retval;
 
 	if (!al_link.usb.is_open)
 		return ERROR_FAIL;
+
+	if (tx_len > (size_t)INT_MAX || rx_len > (size_t)INT_MAX) {
+		LOG_ERROR("AL-LINK: transfer too large for CyUSB API (tx=%u rx=%u)",
+			(unsigned int)tx_len, (unsigned int)rx_len);
+		return ERROR_FAIL;
+	}
 
 	if ((rx_len != 0) && (rx_len != tx_len)) {
 		LOG_ERROR("AL-LINK: EP6/EP2 transfer expects symmetric tx/rx sizes");
 		return ERROR_FAIL;
 	}
 
-	while (offset < tx_len) {
-		size_t chunk = tx_len - offset;
-		int transferred = 0;
-
-		if (chunk > al_link.config.packet_size)
-			chunk = al_link.config.packet_size;
-
-		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u",
-			al_link.config.ep_out, (unsigned int)offset,
-			(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len);
+	if (tx_len != 0) {
+		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x chunk=%u tx_len=%u rx_len=%u packet_size=%u",
+			al_link.config.ep_out, (unsigned int)tx_len,
+			(unsigned int)tx_len, (unsigned int)rx_len,
+			(unsigned int)al_link.config.packet_size);
 		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
-			tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			tx, (int)tx_len, &transferred, AL_LINK_USB_TIMEOUT_MS);
 		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
 			retval, transferred);
 		if (retval != 0)
 			return ERROR_FAIL;
-		if (transferred != (int)chunk) {
+		if (transferred != (int)tx_len) {
 			LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
-				(unsigned int)chunk, transferred);
+				(unsigned int)tx_len, transferred);
 			return ERROR_FAIL;
 		}
-
-		offset += chunk;
 	}
 
-	offset = 0;
-	while (offset < rx_len) {
-		size_t chunk = rx_len - offset;
-		int transferred = 0;
-
-		if (chunk > al_link.config.packet_size)
-			chunk = al_link.config.packet_size;
-
-		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u",
-			al_link.config.ep_in, (unsigned int)offset,
-			(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len);
+	if (rx_len != 0) {
+		transferred = 0;
+		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x chunk=%u tx_len=%u rx_len=%u packet_size=%u",
+			al_link.config.ep_in, (unsigned int)rx_len,
+			(unsigned int)tx_len, (unsigned int)rx_len,
+			(unsigned int)al_link.config.packet_size);
 		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-			rx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			rx, (int)rx_len, &transferred, AL_LINK_USB_TIMEOUT_MS);
 		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
 			retval, transferred);
 		if (retval != 0)
 			return ERROR_FAIL;
-		if (transferred != (int)chunk) {
+		if (transferred != (int)rx_len) {
 			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-				(unsigned int)chunk, transferred);
+				(unsigned int)rx_len, transferred);
 			return ERROR_FAIL;
 		}
-
-		offset += chunk;
 	}
 
 	return ERROR_OK;
