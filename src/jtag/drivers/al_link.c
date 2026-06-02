@@ -495,22 +495,30 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_
 			return ERROR_FAIL;
 		}
 
-		if (rx_len != 0) {
-			transferred = 0;
-			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u",
-				al_link.config.ep_in, (unsigned int)offset,
-				(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len);
-			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-				rx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
-			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-				retval, transferred);
-			if (retval != 0)
-				return ERROR_FAIL;
-			if (transferred != (int)chunk) {
-				LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-					(unsigned int)chunk, transferred);
-				return ERROR_FAIL;
-			}
+		offset += chunk;
+	}
+
+	offset = 0;
+	while (offset < rx_len) {
+		size_t chunk = rx_len - offset;
+		int transferred = 0;
+
+		if (chunk > al_link.config.packet_size)
+			chunk = al_link.config.packet_size;
+
+		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u",
+			al_link.config.ep_in, (unsigned int)offset,
+			(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len);
+		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
+			rx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+			retval, transferred);
+		if (retval != 0)
+			return ERROR_FAIL;
+		if (transferred != (int)chunk) {
+			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
+				(unsigned int)chunk, transferred);
+			return ERROR_FAIL;
 		}
 
 		offset += chunk;
