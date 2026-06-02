@@ -1,8 +1,8 @@
 /***************************************************************************
- *   AL-LINK CyUSB transport layer — pure C implementation                *
+ *   AL-LINK CyUSB transport layer — pure C implementation                 *
  *                                                                         *
- *   Talks to CyUSB.sys / CyUSB3.sys via Win32 SetupDi + DeviceIoControl. *
- *   No C++ code, no CyAPI.lib dependency.                                 *
+ *   Talks to CyUSB.sys / CyUSB3.sys via Win32 SetupDi + DeviceIoControl.  *
+ *                                                                         *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -33,7 +33,7 @@
 #endif
 
 /* ------------------------------------------------------------------ */
-/*  Internal helpers                                                   */
+/*  Internal helpers                                                  */
 /* ------------------------------------------------------------------ */
 
 /*
@@ -92,7 +92,7 @@ static bool match_vid_pid(uint16_t vid, uint16_t pid,
 }
 
 /* ------------------------------------------------------------------ */
-/*  Device enumeration & open                                          */
+/*  Device enumeration & open                                         */
 /* ------------------------------------------------------------------ */
 
 int al_cyusb_open(const uint16_t vids[], const uint16_t pids[],
@@ -213,7 +213,7 @@ void al_cyusb_close(al_cyusb_handle_t *h)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Pipe management                                                    */
+/*  Pipe management                                                   */
 /* ------------------------------------------------------------------ */
 
 int al_cyusb_reset_pipe(al_cyusb_handle_t *h, uint8_t ep_addr)
@@ -241,7 +241,7 @@ int al_cyusb_reset_pipe(al_cyusb_handle_t *h, uint8_t ep_addr)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Bulk transfers                                                     */
+/*  Bulk transfers                                                    */
 /* ------------------------------------------------------------------ */
 
 /*

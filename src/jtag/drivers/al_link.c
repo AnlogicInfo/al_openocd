@@ -53,8 +53,8 @@
 #define AL_LINK_SPEED_200K  0x80
 #define AL_LINK_SPEED_180K  0xff
 
-/* Older AL-LINK endpoint descriptors use 512-byte bulk packets. */
-#define AL_LINK_DEFAULT_PACKET_SIZE 512
+/* Older AL-LINK endpoint descriptors use 64-byte bulk packets. */
+#define AL_LINK_DEFAULT_PACKET_SIZE 64
 
 /* IEEE 1149.1 requires at least five TMS=1 clocks to reach TLR. */
 #define AL_LINK_TLR_RESET_CYCLES 5
@@ -92,6 +92,7 @@ struct al_link_config {
 struct al_link_usb {
 	al_cyusb_handle_t cyusb;
 	bool is_open;
+	bool io_failed;
 };
 
 /* Single global context, following the pattern used by many existing drivers. */
@@ -406,6 +407,7 @@ static int al_link_usb_open(void)
 	al_cyusb_reset_pipe(&al_link.usb.cyusb, al_link.config.ep_cfg);
 
 	al_link.usb.is_open = true;
+	al_link.usb.io_failed = false;
 	return ERROR_OK;
 }
 
@@ -417,6 +419,7 @@ static void al_link_usb_close(void)
 
 	al_cyusb_close(&al_link.usb.cyusb);
 	al_link.usb.is_open = false;
+	al_link.usb.io_failed = false;
 }
 
 /*
@@ -449,6 +452,18 @@ static int al_link_usb_set_speed(uint8_t speed_byte)
 	return ERROR_OK;
 }
 
+static int al_link_usb_mark_failed(const char *where)
+{
+	LOG_ERROR("AL-LINK: USB transfer failed during %s; resetting pipes and aborting remaining queued JTAG work",
+		where);
+	al_link.usb.io_failed = true;
+	al_cyusb_reset_pipe(&al_link.usb.cyusb, al_link.config.ep_in);
+	al_cyusb_reset_pipe(&al_link.usb.cyusb, al_link.config.ep_out);
+	al_cyusb_reset_pipe(&al_link.usb.cyusb, al_link.config.ep_cfg);
+	return ERROR_FAIL;
+}
+
+
 /*
  * Transfer a byte stream over EP6 and optionally read the matching response
  * back from EP2.
@@ -456,20 +471,25 @@ static int al_link_usb_set_speed(uint8_t speed_byte)
  * We currently assume a strict 1:1 relationship between transmitted bytes and
  * returned bytes.
  *
- * Important: the configured packet size describes the endpoint's max packet
- * size, not an application-visible framing rule. CyUSB can submit one bulk
- * transfer larger than that limit and let the USB stack split it into bus
- * packets. Splitting one logical JTAG scan into multiple user-mode bulk reads
- * proved unsafe on AL-LINK hardware because the device appears to produce the
- * response as one contiguous transfer.
+ * AL-LINK hardware appears to service readback in fixed-size EP2 packets.  A
+ * short read request for the tail of a scan can stall even after the matching
+ * EP6 write succeeds.  Treat packet_size as the adapter's readback buffer size:
+ * write at most that many cycle bytes, read one full EP2 packet, and keep only
+ * the response bytes that correspond to the logical scan chunk.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_len)
 {
-	int transferred = 0;
+	size_t offset = 0;
+	uint8_t *rx_packet = NULL;
 	int retval;
 
 	if (!al_link.usb.is_open)
 		return ERROR_FAIL;
+
+	if (al_link.usb.io_failed) {
+		LOG_ERROR("AL-LINK: previous USB transfer failed; re-run init to reopen the adapter");
+		return ERROR_FAIL;
+	}
 
 	if (tx_len > (size_t)INT_MAX || rx_len > (size_t)INT_MAX) {
 		LOG_ERROR("AL-LINK: transfer too large for CyUSB API (tx=%u rx=%u)",
@@ -482,43 +502,67 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_
 		return ERROR_FAIL;
 	}
 
-	if (tx_len != 0) {
-		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x chunk=%u tx_len=%u rx_len=%u packet_size=%u",
-			al_link.config.ep_out, (unsigned int)tx_len,
-			(unsigned int)tx_len, (unsigned int)rx_len,
+	if (rx_len != 0) {
+		rx_packet = malloc(al_link.config.packet_size);
+		if (!rx_packet)
+			return ERROR_FAIL;
+	}
+
+	while (offset < tx_len) {
+		size_t chunk = tx_len - offset;
+		int transferred = 0;
+
+		if (rx_len != 0 && chunk > al_link.config.packet_size)
+			chunk = al_link.config.packet_size;
+
+		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u packet_size=%u",
+			al_link.config.ep_out, (unsigned int)offset,
+			(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len,
 			(unsigned int)al_link.config.packet_size);
 		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
-			tx, (int)tx_len, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
 		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
 			retval, transferred);
-		if (retval != 0)
-			return ERROR_FAIL;
-		if (transferred != (int)tx_len) {
+		if (retval != 0) {
+			free(rx_packet);
+			return al_link_usb_mark_failed("EP6 write");
+		}
+		if (transferred != (int)chunk) {
 			LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
-				(unsigned int)tx_len, transferred);
-			return ERROR_FAIL;
+				(unsigned int)chunk, transferred);
+			free(rx_packet);
+			return al_link_usb_mark_failed("EP6 write");
 		}
+
+		if (rx_len != 0) {
+			transferred = 0;
+			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u request=%u keep=%u tx_len=%u rx_len=%u packet_size=%u",
+				al_link.config.ep_in, (unsigned int)offset,
+				(unsigned int)al_link.config.packet_size, (unsigned int)chunk,
+				(unsigned int)tx_len, (unsigned int)rx_len,
+				(unsigned int)al_link.config.packet_size);
+			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
+				rx_packet, al_link.config.packet_size, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+				retval, transferred);
+			if (retval != 0) {
+				free(rx_packet);
+				return al_link_usb_mark_failed("EP2 read");
+			}
+			if (transferred < (int)chunk) {
+				LOG_ERROR("AL-LINK: short EP2 read, expected at least %u bytes, got %d",
+					(unsigned int)chunk, transferred);
+				free(rx_packet);
+				return al_link_usb_mark_failed("EP2 read");
+			}
+
+			memcpy(rx + offset, rx_packet, chunk);
+		}
+
+		offset += chunk;
 	}
 
-	if (rx_len != 0) {
-		transferred = 0;
-		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x chunk=%u tx_len=%u rx_len=%u packet_size=%u",
-			al_link.config.ep_in, (unsigned int)rx_len,
-			(unsigned int)tx_len, (unsigned int)rx_len,
-			(unsigned int)al_link.config.packet_size);
-		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-			rx, (int)rx_len, &transferred, AL_LINK_USB_TIMEOUT_MS);
-		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-			retval, transferred);
-		if (retval != 0)
-			return ERROR_FAIL;
-		if (transferred != (int)rx_len) {
-			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-				(unsigned int)rx_len, transferred);
-			return ERROR_FAIL;
-		}
-	}
-
+	free(rx_packet);
 	return ERROR_OK;
 }
 
