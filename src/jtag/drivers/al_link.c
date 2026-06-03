@@ -41,7 +41,7 @@
 #define AL_LINK_EP_DATA_OUT 0x06
 #define AL_LINK_EP_CFG_OUT  0x08
 
-#define AL_LINK_MODE_TRADITIONAL 0x01
+#define AL_LINK_MODE_DIRECT 0x04
 
 #define AL_LINK_SPEED_12M   0x00
 #define AL_LINK_SPEED_6M    0x04
@@ -67,11 +67,6 @@
  * the bus to go unresponsive, so a generous timeout is required.
  */
 #define AL_LINK_USB_TIMEOUT_MS 6000
-
-#define AL_LINK_TRADITIONAL_PACKET_SIZE 64
-#define AL_LINK_TRADITIONAL_BATCH_PACKETS 8
-#define AL_LINK_TRADITIONAL_BATCH_SIZE \
-	(AL_LINK_TRADITIONAL_PACKET_SIZE * AL_LINK_TRADITIONAL_BATCH_PACKETS)
 
 /*
  * User-visible driver configuration.
@@ -119,8 +114,6 @@ static struct al_link_context al_link = {
 		.sample_high_nibble = true,
 	},
 };
-
-static uint8_t al_link_pad_frame;
 
 struct al_link_speed_entry {
 	int khz;
@@ -348,7 +341,6 @@ static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 		return ERROR_OK;
 
 	idle_frame = al_link_encode_idle(idle_tms, idle_tdi);
-	al_link_pad_frame = idle_frame;
 	retval = al_link_usb_xfer(tx_buf, num_cycles,
 		readback ? rx_buf : NULL,
 		readback ? num_cycles : 0);
@@ -359,22 +351,6 @@ static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 		return al_link_usb_xfer(&idle_frame, 1, NULL, 0);
 
 	return ERROR_OK;
-}
-
-static int al_link_stable_idle_tms(tap_state_t state, int *tms)
-{
-	switch (state) {
-	case TAP_RESET:
-		*tms = 1;
-		return ERROR_OK;
-	case TAP_IDLE:
-	case TAP_DRPAUSE:
-	case TAP_IRPAUSE:
-		*tms = 0;
-		return ERROR_OK;
-	default:
-		return ERROR_FAIL;
-	}
 }
 
 /*
@@ -450,18 +426,19 @@ static void al_link_usb_close(void)
 }
 
 /*
- * Send the 2-byte EP8 traditional-mode configuration packet.
+ * Send the 2-byte EP8 direct-mode configuration packet.
  *
  * Packet format:
  *   byte0 = mode selector
  *   byte1 = speed byte
  *
- * Based on the current hardware notes, old AL-LINK support should select the
- * traditional mode byte 0x01 rather than the newer direct-control mode.
+ * usbjtag.c uses mode byte 0x04 for direct I/O control. In that mode the
+ * device consumes the actual EP6 payload length and returns one EP2 byte per
+ * EP6 byte, which matches OpenOCD's immediate write/read transport model.
  */
 static int al_link_usb_set_speed(uint8_t speed_byte)
 {
-	uint8_t packet[2] = { AL_LINK_MODE_TRADITIONAL, speed_byte };
+	uint8_t packet[2] = { AL_LINK_MODE_DIRECT, speed_byte };
 	int transferred = 0;
 	int retval;
 
@@ -879,28 +856,6 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	}
 
 	if (readback) {
-		int pad_tms;
-		bool needs_padding = (tx_cycles % AL_LINK_TRADITIONAL_BATCH_SIZE) != 0;
-
-		if (needs_padding && saved_end_state == shift_state) {
-			LOG_ERROR("AL-LINK: readback scan ending in %s cannot be padded safely to a traditional 512-byte batch",
-				tap_state_name(saved_end_state));
-			retval = ERROR_JTAG_QUEUE_FAILED;
-			goto out;
-		}
-
-		if (needs_padding) {
-			retval = al_link_stable_idle_tms(saved_end_state, &pad_tms);
-			if (retval != ERROR_OK) {
-				LOG_ERROR("AL-LINK: readback scan end state %s is not safe for traditional padding",
-					tap_state_name(saved_end_state));
-				retval = ERROR_JTAG_QUEUE_FAILED;
-				goto out;
-			}
-
-			al_link_pad_frame = al_link_encode_idle(pad_tms, 0);
-		}
-
 		retval = al_link_usb_xfer(tx_buf, tx_cycles, rx_buf, (size_t)scan_size);
 	} else {
 		retval = al_link_send_cycles(tx_buf, rx_buf,
@@ -1031,7 +986,7 @@ static int al_link_execute_queue(void)
  * The minimal contract here is:
  * 1. open the USB device,
  * 2. reset/prepare the endpoint pipes,
- * 3. switch the adapter into traditional mode using EP8.
+ * 3. switch the adapter into direct mode using EP8.
  *
  * A future smoke-test step can be inserted here once the hardware is available,
  * for example a one-byte idle transfer over EP6/EP2.
@@ -1293,7 +1248,7 @@ static const struct command_registration al_link_command_handlers[] = {
 		.name = "al_link_speed_byte",
 		.handler = al_link_handle_speed_byte_command,
 		.mode = COMMAND_CONFIG,
-		.help = "override EP8 traditional-mode speed byte",
+		.help = "override EP8 direct-mode speed byte",
 		.usage = "speed_byte",
 	},
 	{
