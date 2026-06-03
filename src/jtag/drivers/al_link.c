@@ -329,26 +329,28 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
  * Ship an already-encoded sequence of cycles to the adapter.
  *
  * This helper exists mostly to keep the queue compiler focused on protocol
- * generation rather than on USB framing details.
+ * generation rather than on USB framing details. In AL-LINK direct mode every
+ * EP6 write produces a same-length EP2 reply, even for commands where OpenOCD
+ * does not care about TDO. Those reply bytes still need to be drained to keep
+ * later scan traffic aligned.
  */
 static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 	size_t num_cycles, bool readback, int idle_tms, int idle_tdi)
 {
 	uint8_t idle_frame;
+	uint8_t idle_rx;
 	int retval;
 
 	if (num_cycles == 0)
 		return ERROR_OK;
 
 	idle_frame = al_link_encode_idle(idle_tms, idle_tdi);
-	retval = al_link_usb_xfer(tx_buf, num_cycles,
-		readback ? rx_buf : NULL,
-		readback ? num_cycles : 0);
+	retval = al_link_usb_xfer(tx_buf, num_cycles, rx_buf, num_cycles);
 	if (retval != ERROR_OK)
 		return retval;
 
 	if (!readback)
-		return al_link_usb_xfer(&idle_frame, 1, NULL, 0);
+		return al_link_usb_xfer(&idle_frame, 1, &idle_rx, 1);
 
 	return ERROR_OK;
 }
@@ -469,12 +471,12 @@ static int al_link_usb_mark_failed(const char *where)
 
 
 /*
- * Transfer a byte stream over EP6 and optionally read back the matching bytes
- * from EP2.
+ * Transfer a byte stream over EP6 and read back the matching bytes from EP2.
  *
- * The current implementation uses the simplest host-side model: each EP6 write
- * chunk that expects TDO is followed immediately by one EP2 read for the same
- * chunk length. Non-readback commands remain write-only.
+ * In AL-LINK direct mode the device is effectively full-duplex at the USB
+ * transaction level: each EP6 write generates one same-length EP2 reply.
+ * Callers that do not care about the returned TDO bytes must still provide a
+ * scratch buffer so the response stream is drained and later scans stay aligned.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_len)
 {
@@ -856,7 +858,7 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	}
 
 	if (readback) {
-		retval = al_link_usb_xfer(tx_buf, tx_cycles, rx_buf, (size_t)scan_size);
+		retval = al_link_usb_xfer(tx_buf, tx_cycles, rx_buf, tx_cycles);
 	} else {
 		retval = al_link_send_cycles(tx_buf, rx_buf,
 			(size_t)scan_size, false, last_tms, last_tdi);
