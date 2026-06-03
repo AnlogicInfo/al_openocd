@@ -492,21 +492,15 @@ static int al_link_usb_mark_failed(const char *where)
 
 
 /*
- * Transfer a byte stream through the AL-LINK traditional-mode protocol.
+ * Transfer a byte stream over EP6 and optionally read back the matching bytes
+ * from EP2.
  *
- * Non-readback commands behave like ordinary write-only bitbang traffic and
- * must not force an EP2 read; doing so stalls transport init on small reset
- * and statemove sequences. Readback scans are still handled separately using
- * the traditional 8 x 64-byte response batching model inferred from the
- * reference firmware.
+ * The current implementation uses the simplest host-side model: each EP6 write
+ * chunk that expects TDO is followed immediately by one EP2 read for the same
+ * chunk length. Non-readback commands remain write-only.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_t rx_len)
 {
-	uint8_t tx_packet[AL_LINK_TRADITIONAL_PACKET_SIZE];
-	uint8_t rx_packet[AL_LINK_TRADITIONAL_PACKET_SIZE];
-	size_t total_len;
-	size_t tx_offset = 0;
-	size_t rx_offset = 0;
 	size_t offset = 0;
 	int retval;
 
@@ -532,105 +526,55 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t *rx, size_
 	if (tx_len == 0)
 		return ERROR_OK;
 
-	if (rx_len == 0) {
-		while (offset < tx_len) {
-			size_t chunk = tx_len - offset;
-			int transferred = 0;
+	while (offset < tx_len) {
+		size_t chunk = tx_len - offset;
+		int transferred = 0;
 
-			if (chunk > al_link.config.packet_size)
-				chunk = al_link.config.packet_size;
+		if (chunk > al_link.config.packet_size)
+			chunk = al_link.config.packet_size;
 
-			LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u packet_size=%u",
-				al_link.config.ep_out, (unsigned int)offset,
-				(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len,
+		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u tx_len=%u rx_len=%u packet_size=%u",
+			al_link.config.ep_out, (unsigned int)offset,
+			(unsigned int)chunk, (unsigned int)tx_len, (unsigned int)rx_len,
+			(unsigned int)al_link.config.packet_size);
+		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
+			tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
+			retval, transferred);
+		if (retval != 0)
+			return al_link_usb_mark_failed("EP6 write");
+		if (transferred != (int)chunk) {
+			LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
+				(unsigned int)chunk, transferred);
+			return al_link_usb_mark_failed("EP6 write");
+		}
+
+		if (rx && offset < rx_len) {
+			size_t keep = rx_len - offset;
+
+			if (keep > chunk)
+				keep = chunk;
+
+			transferred = 0;
+			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u request=%u keep=%u tx_len=%u rx_len=%u packet_size=%u",
+				al_link.config.ep_in, (unsigned int)offset,
+				(unsigned int)chunk, (unsigned int)keep,
+				(unsigned int)tx_len, (unsigned int)rx_len,
 				(unsigned int)al_link.config.packet_size);
-			retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
-				tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
-			LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
-				retval, transferred);
-			if (retval != 0)
-				return al_link_usb_mark_failed("EP6 write");
-			if (transferred != (int)chunk) {
-				LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
-					(unsigned int)chunk, transferred);
-				return al_link_usb_mark_failed("EP6 write");
-			}
-
-			offset += chunk;
-		}
-
-		return ERROR_OK;
-	}
-
-	total_len = ((tx_len + AL_LINK_TRADITIONAL_BATCH_SIZE - 1) /
-		AL_LINK_TRADITIONAL_BATCH_SIZE) * AL_LINK_TRADITIONAL_BATCH_SIZE;
-
-	while (tx_offset < total_len) {
-		for (unsigned int packet = 0; packet < AL_LINK_TRADITIONAL_BATCH_PACKETS; packet++) {
-			int transferred = 0;
-			size_t packet_offset = tx_offset;
-
-			for (unsigned int byte = 0; byte < AL_LINK_TRADITIONAL_PACKET_SIZE; byte++) {
-				if (tx_offset < tx_len)
-					tx_packet[byte] = tx[tx_offset];
-				else
-					tx_packet[byte] = al_link_pad_frame;
-
-				tx_offset++;
-			}
-
-			LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u request=%u tx_len=%u rx_len=%u batch=%u",
-				al_link.config.ep_out, (unsigned int)packet_offset,
-				AL_LINK_TRADITIONAL_PACKET_SIZE,
-				(unsigned int)tx_len, (unsigned int)rx_len,
-				AL_LINK_TRADITIONAL_BATCH_SIZE);
-			retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
-				tx_packet, AL_LINK_TRADITIONAL_PACKET_SIZE,
-				&transferred, AL_LINK_USB_TIMEOUT_MS);
-			LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
-				retval, transferred);
-			if (retval != 0)
-				return al_link_usb_mark_failed("EP6 write");
-			if (transferred != AL_LINK_TRADITIONAL_PACKET_SIZE) {
-				LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
-					AL_LINK_TRADITIONAL_PACKET_SIZE, transferred);
-				return al_link_usb_mark_failed("EP6 write");
-			}
-		}
-
-		for (unsigned int packet = 0; packet < AL_LINK_TRADITIONAL_BATCH_PACKETS; packet++) {
-			int transferred = 0;
-			size_t keep = 0;
-
-			if (rx && rx_offset < rx_len) {
-				keep = rx_len - rx_offset;
-				if (keep > AL_LINK_TRADITIONAL_PACKET_SIZE)
-					keep = AL_LINK_TRADITIONAL_PACKET_SIZE;
-			}
-
-			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u request=%u keep=%u tx_len=%u rx_len=%u batch=%u",
-				al_link.config.ep_in, (unsigned int)rx_offset,
-				AL_LINK_TRADITIONAL_PACKET_SIZE, (unsigned int)keep,
-				(unsigned int)tx_len, (unsigned int)rx_len,
-				AL_LINK_TRADITIONAL_BATCH_SIZE);
 			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-				rx_packet, AL_LINK_TRADITIONAL_PACKET_SIZE,
-				&transferred, AL_LINK_USB_TIMEOUT_MS);
+				rx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
 			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
 				retval, transferred);
 			if (retval != 0)
 				return al_link_usb_mark_failed("EP2 read");
-			if (transferred != AL_LINK_TRADITIONAL_PACKET_SIZE) {
-				LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-					AL_LINK_TRADITIONAL_PACKET_SIZE, transferred);
+			if (transferred < (int)keep) {
+				LOG_ERROR("AL-LINK: short EP2 read, expected at least %u bytes, got %d",
+					(unsigned int)keep, transferred);
 				return al_link_usb_mark_failed("EP2 read");
 			}
-
-			if (keep != 0) {
-				memcpy(rx + rx_offset, rx_packet, keep);
-				rx_offset += keep;
-			}
 		}
+
+		offset += chunk;
 	}
 
 	return ERROR_OK;
