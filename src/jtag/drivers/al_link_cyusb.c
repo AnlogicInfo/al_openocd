@@ -36,6 +36,21 @@
 /*  Internal helpers                                                  */
 /* ------------------------------------------------------------------ */
 
+static bool cyusb_transfer_status_ok(const AL_SINGLE_TRANSFER *hdr)
+{
+	return hdr->NtStatus == 0 && hdr->UsbdStatus == 0;
+}
+
+static void cyusb_log_transfer_status_failure(uint8_t ep_addr, bool is_read,
+		const AL_SINGLE_TRANSFER *hdr, DWORD bytes_returned, int length)
+{
+	LOG_ERROR("AL-LINK CyUSB: bulk %s on EP 0x%02x failed in driver status (NtStatus=0x%08lx, UsbdStatus=0x%08lx, bytes_returned=%lu, requested=%d, buffer_length=%lu)",
+		is_read ? "read" : "write", ep_addr,
+		(unsigned long)hdr->NtStatus, (unsigned long)hdr->UsbdStatus,
+		(unsigned long)bytes_returned, length,
+		(unsigned long)hdr->BufferLength);
+}
+
 /*
  * Parse VID and PID from a Windows device-interface path.
  *
@@ -292,6 +307,15 @@ static int cyusb_bulk_xfer(al_cyusb_handle_t *h, uint8_t ep_addr,
 	if (!ok) {
 		LOG_ERROR("AL-LINK CyUSB: bulk %s on EP 0x%02x failed (error %lu)",
 			  is_read ? "read" : "write", ep_addr, GetLastError());
+		free(xfer_buf);
+		if (transferred)
+			*transferred = 0;
+		return -1;
+	}
+
+	if (!cyusb_transfer_status_ok(hdr)) {
+		cyusb_log_transfer_status_failure(ep_addr, is_read, hdr,
+			bytes_returned, length);
 		free(xfer_buf);
 		if (transferred)
 			*transferred = 0;
