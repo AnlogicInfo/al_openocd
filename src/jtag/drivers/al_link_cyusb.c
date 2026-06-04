@@ -35,7 +35,6 @@
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                  */
 /* ------------------------------------------------------------------ */
-
 static bool cyusb_transfer_status_ok(const AL_SINGLE_TRANSFER *hdr)
 {
 	return hdr->NtStatus == 0 && hdr->UsbdStatus == 0;
