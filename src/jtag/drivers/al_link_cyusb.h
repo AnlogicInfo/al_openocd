@@ -151,13 +151,13 @@ void al_cyusb_close(al_cyusb_handle_t *h);
 int al_cyusb_reset_pipe(al_cyusb_handle_t *h, uint8_t ep_addr);
 
 /**
- * Synchronous bulk write.
+ * Blocking bulk write with a caller-controlled timeout.
  *
  * @param ep_addr  OUT endpoint address (e.g. 0x06).
  * @param data     Pointer to data to send.
  * @param length   Number of bytes to send.
  * @param transferred  Output: actual bytes sent.
- * @param timeout_ms   Timeout in milliseconds (currently advisory).
+ * @param timeout_ms   Timeout in milliseconds. Use 0 to wait indefinitely.
  * @return 0 on success, -1 on failure.
  */
 int al_cyusb_bulk_write(al_cyusb_handle_t *h, uint8_t ep_addr,
@@ -165,13 +165,13 @@ int al_cyusb_bulk_write(al_cyusb_handle_t *h, uint8_t ep_addr,
 			int *transferred, unsigned int timeout_ms);
 
 /**
- * Synchronous bulk read.
+ * Blocking bulk read with a caller-controlled timeout.
  *
  * @param ep_addr  IN endpoint address (e.g. 0x82).
  * @param data     Buffer to receive data.
  * @param length   Maximum number of bytes to read.
  * @param transferred  Output: actual bytes received.
- * @param timeout_ms   Timeout in milliseconds (currently advisory).
+ * @param timeout_ms   Timeout in milliseconds. Use 0 to wait indefinitely.
  * @return 0 on success, -1 on failure.
  */
 int al_cyusb_bulk_read(al_cyusb_handle_t *h, uint8_t ep_addr,

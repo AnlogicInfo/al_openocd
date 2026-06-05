@@ -32,6 +32,8 @@
 #pragma comment(lib, "setupapi.lib")
 #endif
 
+#define AL_CYUSB_PIPE_TIMEOUT_MS 1000u
+
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                  */
 /* ------------------------------------------------------------------ */
@@ -48,6 +50,121 @@ static void cyusb_log_transfer_status_failure(uint8_t ep_addr, bool is_read,
 		(unsigned long)hdr->NtStatus, (unsigned long)hdr->UsbdStatus,
 		(unsigned long)bytes_returned, length,
 		(unsigned long)hdr->BufferLength);
+}
+
+static bool cyusb_cancel_io(HANDLE dev, OVERLAPPED *ov)
+{
+	static BOOL (WINAPI *cancel_io_ex_fn)(HANDLE, LPOVERLAPPED);
+	static bool looked_up;
+
+	if (!looked_up) {
+		HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
+		if (kernel32) {
+			cancel_io_ex_fn = (BOOL (WINAPI *)(HANDLE, LPOVERLAPPED))
+				GetProcAddress(kernel32, "CancelIoEx");
+		}
+		looked_up = true;
+	}
+
+	if (cancel_io_ex_fn)
+		return cancel_io_ex_fn(dev, ov) != 0;
+
+	return CancelIo(dev) != 0;
+}
+
+static int cyusb_device_io_control(al_cyusb_handle_t *h, DWORD ioctl_code,
+		void *in_buf, DWORD in_size, void *out_buf, DWORD out_size,
+		DWORD *bytes_returned, unsigned int timeout_ms,
+		const char *operation, uint8_t ep_addr)
+{
+	OVERLAPPED ov;
+	HANDLE event_handle;
+	DWORD local_bytes = 0;
+	DWORD wait_ms = timeout_ms ? (DWORD)timeout_ms : INFINITE;
+	BOOL ok;
+	DWORD error;
+
+	if (!h || !h->is_open)
+		return -1;
+
+	memset(&ov, 0, sizeof(ov));
+	event_handle = CreateEventA(NULL, TRUE, FALSE, NULL);
+	if (!event_handle) {
+		LOG_ERROR("AL-LINK CyUSB: CreateEvent failed for %s on EP 0x%02x (error %lu)",
+			operation, ep_addr, GetLastError());
+		if (bytes_returned)
+			*bytes_returned = 0;
+		return -1;
+	}
+	ov.hEvent = event_handle;
+
+	ok = DeviceIoControl(h->dev, ioctl_code,
+		in_buf, in_size,
+		out_buf, out_size,
+		&local_bytes, &ov);
+	if (!ok) {
+		error = GetLastError();
+		if (error != ERROR_IO_PENDING) {
+			LOG_ERROR("AL-LINK CyUSB: %s on EP 0x%02x failed (error %lu)",
+				operation, ep_addr, error);
+			CloseHandle(event_handle);
+			if (bytes_returned)
+				*bytes_returned = 0;
+			return -1;
+		}
+
+		switch (WaitForSingleObject(event_handle, wait_ms)) {
+		case WAIT_OBJECT_0:
+			ok = GetOverlappedResult(h->dev, &ov, &local_bytes, FALSE);
+			if (!ok) {
+				LOG_ERROR("AL-LINK CyUSB: %s on EP 0x%02x completion failed (error %lu)",
+					operation, ep_addr, GetLastError());
+				CloseHandle(event_handle);
+				if (bytes_returned)
+					*bytes_returned = 0;
+				return -1;
+			}
+			break;
+
+		case WAIT_TIMEOUT:
+			LOG_ERROR("AL-LINK CyUSB: %s on EP 0x%02x timed out after %u ms",
+				operation, ep_addr, timeout_ms);
+			if (!cyusb_cancel_io(h->dev, &ov)) {
+				DWORD cancel_error = GetLastError();
+				if (cancel_error != ERROR_NOT_FOUND) {
+					LOG_WARNING("AL-LINK CyUSB: cancel failed for %s on EP 0x%02x (error %lu)",
+						operation, ep_addr, cancel_error);
+				}
+			}
+
+			ok = GetOverlappedResult(h->dev, &ov, &local_bytes, TRUE);
+			if (!ok) {
+				DWORD completion_error = GetLastError();
+				if (completion_error != ERROR_OPERATION_ABORTED) {
+					LOG_WARNING("AL-LINK CyUSB: timed-out %s on EP 0x%02x completed with error %lu",
+						operation, ep_addr, completion_error);
+				}
+			}
+
+			CloseHandle(event_handle);
+			if (bytes_returned)
+				*bytes_returned = 0;
+			return -1;
+
+		default:
+			LOG_ERROR("AL-LINK CyUSB: wait failed for %s on EP 0x%02x (error %lu)",
+				operation, ep_addr, GetLastError());
+			CloseHandle(event_handle);
+			if (bytes_returned)
+				*bytes_returned = 0;
+			return -1;
+		}
+	}
+
+	CloseHandle(event_handle);
+	if (bytes_returned)
+		*bytes_returned = local_bytes;
+	return 0;
 }
 
 /*
@@ -182,7 +299,7 @@ int al_cyusb_open(const uint16_t vids[], const uint16_t pids[],
 			FILE_SHARE_READ | FILE_SHARE_WRITE,
 			NULL,
 			OPEN_EXISTING,
-			0,
+			FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
 			NULL);
 
 		if (hdev == INVALID_HANDLE_VALUE) {
@@ -233,21 +350,15 @@ void al_cyusb_close(al_cyusb_handle_t *h)
 int al_cyusb_reset_pipe(al_cyusb_handle_t *h, uint8_t ep_addr)
 {
 	DWORD bytes_returned = 0;
-	BOOL ok;
 
 	if (!h || !h->is_open)
 		return -1;
 
-	ok = DeviceIoControl(
-		h->dev,
-		AL_CYUSB_IOCTL_RESET_PIPE,
-		&ep_addr, sizeof(ep_addr),
-		NULL, 0,
-		&bytes_returned, NULL);
-
-	if (!ok) {
-		LOG_WARNING("AL-LINK CyUSB: reset pipe 0x%02x failed (error %lu)",
-			    ep_addr, GetLastError());
+	if (cyusb_device_io_control(h, AL_CYUSB_IOCTL_RESET_PIPE,
+			&ep_addr, sizeof(ep_addr), NULL, 0,
+			&bytes_returned, AL_CYUSB_PIPE_TIMEOUT_MS,
+			"reset pipe", ep_addr) != 0) {
+		LOG_WARNING("AL-LINK CyUSB: reset pipe 0x%02x failed", ep_addr);
 		return -1;
 	}
 
@@ -269,13 +380,14 @@ int al_cyusb_reset_pipe(al_cyusb_handle_t *h, uint8_t ep_addr)
  */
 static int cyusb_bulk_xfer(al_cyusb_handle_t *h, uint8_t ep_addr,
 			   uint8_t *data, int length,
-			   int *transferred, bool is_read)
+			   int *transferred, bool is_read,
+			   unsigned int timeout_ms)
 {
 	DWORD xfer_buf_size;
 	uint8_t *xfer_buf = NULL;
 	AL_SINGLE_TRANSFER *hdr;
 	DWORD bytes_returned = 0;
-	BOOL ok;
+	const char *operation = is_read ? "bulk read" : "bulk write";
 
 	if (!h || !h->is_open)
 		return -1;
@@ -296,16 +408,11 @@ static int cyusb_bulk_xfer(al_cyusb_handle_t *h, uint8_t ep_addr,
 	if (!is_read && length > 0)
 		memcpy(xfer_buf + sizeof(AL_SINGLE_TRANSFER), data, length);
 
-	ok = DeviceIoControl(
-		h->dev,
-		AL_CYUSB_IOCTL_NON_EP0_TRANSFER,
-		xfer_buf, xfer_buf_size,
-		xfer_buf, xfer_buf_size,
-		&bytes_returned, NULL);
-
-	if (!ok) {
-		LOG_ERROR("AL-LINK CyUSB: bulk %s on EP 0x%02x failed (error %lu)",
-			  is_read ? "read" : "write", ep_addr, GetLastError());
+	if (cyusb_device_io_control(h, AL_CYUSB_IOCTL_NON_EP0_TRANSFER,
+			xfer_buf, xfer_buf_size,
+			xfer_buf, xfer_buf_size,
+			&bytes_returned, timeout_ms,
+			operation, ep_addr) != 0) {
 		free(xfer_buf);
 		if (transferred)
 			*transferred = 0;
@@ -350,18 +457,18 @@ int al_cyusb_bulk_write(al_cyusb_handle_t *h, uint8_t ep_addr,
 			const uint8_t *data, int length,
 			int *transferred, unsigned int timeout_ms)
 {
-	(void)timeout_ms; /* CyUSB DeviceIoControl timeout is driver-level */
 	return cyusb_bulk_xfer(h, ep_addr,
-			       (uint8_t *)data, length, transferred, false);
+			       (uint8_t *)data, length, transferred, false,
+			       timeout_ms);
 }
 
 int al_cyusb_bulk_read(al_cyusb_handle_t *h, uint8_t ep_addr,
 		       uint8_t *data, int length,
 		       int *transferred, unsigned int timeout_ms)
 {
-	(void)timeout_ms;
 	return cyusb_bulk_xfer(h, ep_addr,
-			       data, length, transferred, true);
+			       data, length, transferred, true,
+			       timeout_ms);
 }
 
 #endif /* _WIN32 */
