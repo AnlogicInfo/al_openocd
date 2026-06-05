@@ -52,16 +52,23 @@ static void cyusb_log_transfer_status_failure(uint8_t ep_addr, bool is_read,
 		(unsigned long)hdr->BufferLength);
 }
 
+typedef BOOL (WINAPI *cyusb_cancel_io_ex_fn_t)(HANDLE, LPOVERLAPPED);
+
 static bool cyusb_cancel_io(HANDLE dev, OVERLAPPED *ov)
 {
-	static BOOL (WINAPI *cancel_io_ex_fn)(HANDLE, LPOVERLAPPED);
+	static cyusb_cancel_io_ex_fn_t cancel_io_ex_fn;
 	static bool looked_up;
 
 	if (!looked_up) {
 		HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
 		if (kernel32) {
-			cancel_io_ex_fn = (BOOL (WINAPI *)(HANDLE, LPOVERLAPPED))
-				GetProcAddress(kernel32, "CancelIoEx");
+			union {
+				FARPROC raw;
+				cyusb_cancel_io_ex_fn_t typed;
+			} cancel_io_ex = {0};
+
+			cancel_io_ex.raw = GetProcAddress(kernel32, "CancelIoEx");
+			cancel_io_ex_fn = cancel_io_ex.typed;
 		}
 		looked_up = true;
 	}
