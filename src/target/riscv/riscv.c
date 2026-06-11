@@ -1853,8 +1853,7 @@ static int riscv_start_algorithm(struct target *target,
 
 	if(arch_info == NULL)
 	{
-		LOG_ERROR("Please allocate area for arch_info");
-		return ERROR_FAIL;
+		LOG_WARNING("arch_info is NULL");
 	}
 
 	if (num_mem_params > 0) {
@@ -1866,7 +1865,7 @@ static int riscv_start_algorithm(struct target *target,
 		LOG_WARNING("target not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
-	
+
 	for (int i = 0; i < num_mem_params; i++) {
 		if (mem_params[i].direction != PARAM_IN) {
 			int retval = target_write_buffer(target, mem_params[i].address, mem_params[i].size, mem_params[i].value);
@@ -2015,7 +2014,7 @@ static int riscv_wait_algorithm(struct target *target,
 			return ERROR_FAIL;
 		}
 	}
-	
+
 	for (int i = 0; i < num_mem_params; i++) {
 		if (mem_params[i].direction != PARAM_OUT) {
 			int retval = target_read_buffer(target, mem_params[i].address, mem_params[i].size,
@@ -2041,9 +2040,9 @@ static int riscv_run_algorithm(struct target *target, int num_mem_params,
 	retval = riscv_start_algorithm(target, num_mem_params, mem_params,
 	num_reg_params, reg_params, entry_point, exit_point, arch_info);
 	if(retval == ERROR_OK)
-		retval = riscv_wait_algorithm(target, num_mem_params, mem_params, 
+		retval = riscv_wait_algorithm(target, num_mem_params, mem_params,
 		num_reg_params, reg_params, exit_point, timeout_ms, arch_info);
-	
+
 	return retval;
 }
 
@@ -2217,6 +2216,7 @@ static int riscv_checksum_memory(struct target *target,
 	struct working_area *crc_algorithm;
 	struct reg_param reg_params[2];
 	int retval;
+	int wa_size;
 
 	LOG_DEBUG("address=0x%" TARGET_PRIxADDR "; count=0x%" PRIx32, address, count);
 

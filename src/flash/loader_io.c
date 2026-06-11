@@ -386,6 +386,7 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 		const uint8_t *data, target_addr_t addr, int image_size)
 {
 	int retval = ERROR_OK;
+	int total_image_size = image_size;
 	retval = loader_init(loader, srcs);
 	if (retval != ERROR_OK)
 		return ERROR_FAIL;
@@ -404,7 +405,10 @@ int loader_flash_write_sync(struct flash_loader *loader, struct code_src *srcs,
 		image_size -= loader->data_size;
 		if (retval != ERROR_OK)
 			break;
+		LOG_PROC(total_image_size - image_size, total_image_size);
 	}
+
+	LOG_PROC(total_image_size, total_image_size);
 
 	loader_exit(loader, NO_RESTORE);
 
