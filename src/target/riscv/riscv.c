@@ -2216,7 +2216,6 @@ static int riscv_checksum_memory(struct target *target,
 	struct working_area *crc_algorithm;
 	struct reg_param reg_params[2];
 	int retval;
-	int wa_size;
 
 	LOG_DEBUG("address=0x%" TARGET_PRIxADDR "; count=0x%" PRIx32, address, count);
 
