@@ -454,11 +454,8 @@ static int nuspi_set_xip_read_cmd(struct flash_bank *bank)
 	} else {
 		temp |= NUSPI_INSN_ADDR_LEN(3);
 	}
-	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
-		temp |= NUSPI_INSN_CMD_CODE(SPIFLASH_4BYTE_FAST_READ);
-	} else {
-		temp |= NUSPI_INSN_CMD_CODE(nuspi_info->dev->read_cmd);
-	}
+	temp |= NUSPI_INSN_CMD_CODE(nuspi_info->dev->read_cmd);
+
 	return nuspi_write_reg(bank, NUSPI_REG_FFMT, temp);
 }
 
@@ -671,7 +668,7 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 	if (retval != ERROR_OK)
 		goto done;
 
-	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+	if (bank->size  > 0x1000000) {
 		retval = nuspi_enter_4byte_address_mode(bank);
 		if (retval != ERROR_OK)
 			return retval;
@@ -794,7 +791,7 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 	}
 
 
-	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+	if (bank->size  > 0x1000000) {
 		if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
 			return ERROR_FAIL;
 	}
