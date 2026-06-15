@@ -142,6 +142,8 @@
 
 #define NUSPI_FLAGS_32B_DAT 		(1 << 0)
 
+#define NUSPI_XIP_BASE			(0x20000000)
+
 struct nuspi_flash_bank {
 	uint32_t version;
 	int nuspi_flags;
@@ -763,7 +765,7 @@ static void nuspi_write_sync_params_priv(struct flash_loader *loader)
 {
 	struct nuspi_flash_bank *nuspi_info = loader->dev_info;
 	buf_set_u64(loader->reg_params[5].value, 0, loader->xlen,
-					nuspi_info->dev->pprog_cmd | (nuspi_info->dev->size_in_bytes > 0x1000000 ? 0x100 : 0));	
+					nuspi_info->dev->pprog_cmd | (nuspi_info->dev->size_in_bytes > 0x1000000 ? 0x100 : 0));
 }
 
 static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
@@ -811,7 +813,57 @@ static int nuspi_read(struct flash_bank *bank, uint8_t *buffer,
 {
 	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
 		return ERROR_FAIL;
-	return default_flash_read(bank, buffer, offset, count);
+	return default_flash_read(bank, buffer, NUSPI_XIP_BASE + offset, count);
+}
+
+static int nuspi_verify(struct flash_bank *bank, const uint8_t *buffer,
+		uint32_t offset, uint32_t count)
+{
+	struct target *target = bank->target;
+	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
+	int retval = ERROR_OK;
+	uint8_t *read_buf = NULL;
+
+	LOG_DEBUG("%s: offset=0x%08" PRIx32 ", count=%" PRIu32,
+				__func__, offset, count);
+
+	if (target->state != TARGET_HALTED) {
+		LOG_ERROR("Target not halted");
+		return ERROR_TARGET_NOT_HALTED;
+	}
+
+	if (!nuspi_info->probed) {
+		LOG_ERROR("Flash bank not probed");
+		return ERROR_FLASH_BANK_NOT_PROBED;
+	}
+
+	read_buf = malloc(count);
+	if (!read_buf) {
+		LOG_ERROR("Failed to allocate verify buffer");
+		return ERROR_FAIL;
+	}
+
+	retval = nuspi_read(bank, read_buf, offset, count);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Failed to read flash for verification");
+		goto cleanup;
+	}
+
+	for (uint32_t i = 0; i < count; i++) {
+		if (read_buf[i] != buffer[i]) {
+			LOG_ERROR("Verification failed at offset 0x%08" PRIx32
+						": expected 0x%02x, got 0x%02x",
+						offset + i, buffer[i], read_buf[i]);
+			retval = ERROR_FAIL;
+			goto cleanup;
+		}
+	}
+
+	LOG_DEBUG("Verification successful");
+
+cleanup:
+	free(read_buf);
+	return retval;
 }
 
 /* Return ID of flash device */
@@ -1021,6 +1073,7 @@ const struct flash_driver nuspi_flash = {
 	.protect = nuspi_protect,
 	.write = nuspi_write,
 	.read = nuspi_read,
+	.verify = nuspi_verify,
 	.probe = nuspi_probe,
 	.auto_probe = nuspi_auto_probe,
 	.erase_check = default_flash_blank_check,
