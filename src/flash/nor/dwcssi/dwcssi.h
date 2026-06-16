@@ -13,6 +13,7 @@
 
 #include <flash/nor/imp.h>
 #include <flash/nor/spi.h>
+#include <flash/nor/spi_ext.h>
 #include <jtag/jtag.h>
 #include <target/image.h>
 #include <flash/loader_io.h>

@@ -4,7 +4,7 @@
 int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t* id)
 {
 	dwcssi_info->dev = NULL;
-	LOG_INFO("flash id %"PRIx32, *id);
+
 	for (const struct flash_device *p = flash_devices; p->name; p++) {
 		if (p->device_id == *id) {
 			LOG_INFO("finded name %s", p->name);
@@ -14,10 +14,16 @@ int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t* id)
 		}
 	}
 
+	if (!dwcssi_info->dev)
+		dwcssi_info->dev = lookup_external_flash_id_map(*id);
+
 	if (!dwcssi_info->dev) {
 		LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", *id);
 		LOG_ERROR("Try below command to customize flash device:");
 		LOG_ERROR("flash customize bank_id read_cmd page_prog_cmd page_erase_cmd page_size sector_size chip_size");
+	} else {
+		LOG_INFO("Found flash device \'%s\' (ID 0x%08" PRIx32 ")",
+			dwcssi_info->dev->name, dwcssi_info->dev->device_id);
 	}
 
 	return ERROR_OK;
@@ -107,7 +113,7 @@ uint32_t flash_write_boundary_check(struct flash_bank *bank, uint32_t offset, ui
 	return actual_count;
 }
 
-int flash_addr_mode_check(uint32_t offset, uint32_t count, uint8_t addr_size) 
+int flash_addr_mode_check(uint32_t offset, uint32_t count, uint8_t addr_size)
 {
 	if ((offset + count > 0x1000000) && (addr_size == 3)) {
 		LOG_ERROR("Write exceeds 3-Byte address boundary");

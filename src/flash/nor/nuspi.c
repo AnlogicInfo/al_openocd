@@ -39,6 +39,7 @@
 
 #include "imp.h"
 #include "spi.h"
+#include "spi_ext.h"
 #include <jtag/jtag.h>
 #include <helper/time_support.h>
 #include <flash/loader_io.h>
@@ -618,7 +619,7 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 	int retval = ERROR_OK;
 
-	LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
+	LOG_INFO("%s: from sector %u to sector %u", __func__, first, last);
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -674,11 +675,43 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 			return retval;
 	}
 
-	for (unsigned int sector = first; sector <= last; sector++) {
-		retval = nuspi_erase_sector(bank, sector);
+	if (last - first == bank->num_sectors - 1) {
+		/* Erase whole chip */
+		LOG_INFO("%s: whole chip erase", __func__);
+		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
+			return ERROR_FAIL;
+
+		retval = nuspi_tx(bank, SPIFLASH_WRITE_ENABLE);
 		if (retval != ERROR_OK)
 			goto done;
-		keep_alive();
+		if (nuspi_txwm_wait(bank) != ERROR_OK)
+			goto done;
+
+		retval = nuspi_tx(bank, nuspi_info->dev->chip_erase_cmd);
+		if (retval != ERROR_OK)
+			goto done;
+		retval = nuspi_txwm_wait(bank);
+		if (retval != ERROR_OK)
+			goto done;
+		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
+			return ERROR_FAIL;
+
+		/* poll WIP */
+		if (nuspi_info->simulation)
+			retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
+		else
+			retval = nuspi_wip(bank, NUSPI_PROBE_TIMEOUT);
+
+		if (retval != ERROR_OK)
+			return retval;
+	} else {
+		for (unsigned int sector = first; sector <= last; sector++) {
+			retval = nuspi_erase_sector(bank, sector);
+			if (retval != ERROR_OK)
+				goto done;
+			keep_alive();
+			LOG_PROC(sector - first, last - first);
+		}
 	}
 
 	/* Switch to HW mode before return to prompt */
@@ -1002,8 +1035,14 @@ static int nuspi_probe(struct flash_bank *bank)
 				break;
 			}
 		}
-		if (NULL != nuspi_info->dev)
-			break;
+		if (!nuspi_info->dev) {
+			nuspi_info->dev = lookup_external_flash_id_map(id);
+			if (!nuspi_info->dev) {
+				LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", id);
+				LOG_ERROR("Try below command to customize flash device:");
+				LOG_ERROR("flash customize bank_id read_cmd page_prog_cmd page_erase_cmd page_size sector_size chip_size");
+			}
+		}
 	}
 
 	if (nuspi_enable_hw_mode(bank) != ERROR_OK)
