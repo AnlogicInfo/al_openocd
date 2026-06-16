@@ -815,12 +815,12 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 	if (nuspi_disable_hw_mode(bank) != ERROR_OK)
 		return ERROR_FAIL;
 
-	retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset, count);
+	retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset - NUSPI_XIP_BASE, count);
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("nuspi write sync error");
 		if (0)
-			retval = slow_nuspi_write_buffer(bank, buffer, offset, count);
+			retval = slow_nuspi_write_buffer(bank, buffer, offset - NUSPI_XIP_BASE, count);
 	}
 
 
@@ -843,7 +843,7 @@ static int nuspi_read(struct flash_bank *bank, uint8_t *buffer,
 {
 	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
 		return ERROR_FAIL;
-	return default_flash_read(bank, buffer, NUSPI_XIP_BASE + offset, count);
+	return default_flash_read(bank, buffer, offset, count);
 }
 
 static int nuspi_verify(struct flash_bank *bank, const uint8_t *buffer,
