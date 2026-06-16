@@ -44,6 +44,7 @@
 #include <helper/time_support.h>
 #include <flash/loader_io.h>
 #include <target/algorithm.h>
+#include <target/image.h>
 #include "target/riscv/riscv.h"
 
 /* Register offsets */
@@ -138,6 +139,7 @@
 /* Timeout in ms */
 #define NUSPI_CMD_TIMEOUT			(100)
 #define NUSPI_PROBE_TIMEOUT			(100)
+#define NUSPI_ERASE_TIMEOUT			(300000)
 #define NUSPI_MAX_TIMEOUT			(3000)
 #define NUSPI_SIM_TIMEOUT			(0x7FFFFFFF)
 
@@ -376,15 +378,16 @@ static int nuspi_wip(struct flash_bank *bank, int timeout)
 {
 	int64_t endtime;
 
-	nuspi_set_dir(bank, NUSPI_DIR_RX);
+	nuspi_set_dir(bank, NUSPI_DIR_TX);
 
 	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
 		return ERROR_FAIL;
 	endtime = timeval_ms() + timeout;
 
 	nuspi_tx(bank, SPIFLASH_READ_STATUS);
-	if (nuspi_rx(bank, NULL) != ERROR_OK)
+	if (nuspi_txwm_wait(bank) != ERROR_OK)
 		return ERROR_FAIL;
+	nuspi_set_dir(bank, NUSPI_DIR_RX);
 	do {
 		alive_sleep(1);
 		nuspi_tx(bank, 0);
@@ -399,7 +402,6 @@ static int nuspi_wip(struct flash_bank *bank, int timeout)
 		}
 	} while (timeval_ms() < endtime);
 
-	LOG_ERROR("timeout");
 	return ERROR_FAIL;
 }
 
@@ -678,14 +680,14 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 	if (last - first == bank->num_sectors - 1) {
 		/* Erase whole chip */
 		LOG_INFO("%s: whole chip erase", __func__);
-		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
-			return ERROR_FAIL;
-
 		retval = nuspi_tx(bank, SPIFLASH_WRITE_ENABLE);
 		if (retval != ERROR_OK)
 			goto done;
 		if (nuspi_txwm_wait(bank) != ERROR_OK)
 			goto done;
+
+		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
+			return ERROR_FAIL;
 
 		retval = nuspi_tx(bank, nuspi_info->dev->chip_erase_cmd);
 		if (retval != ERROR_OK)
@@ -700,10 +702,11 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 		if (nuspi_info->simulation)
 			retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
 		else
-			retval = nuspi_wip(bank, NUSPI_PROBE_TIMEOUT);
+			retval = nuspi_wip(bank, NUSPI_ERASE_TIMEOUT);
 
-		if (retval != ERROR_OK)
-			return retval;
+		if (retval != ERROR_OK) {
+			LOG_ERROR("%s: chip erase timeout - flash may be in inconsistent state", __func__);
+		}
 	} else {
 		for (unsigned int sector = first; sector <= last; sector++) {
 			retval = nuspi_erase_sector(bank, sector);
@@ -853,9 +856,16 @@ static int nuspi_verify(struct flash_bank *bank, const uint8_t *buffer,
 	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 	int retval = ERROR_OK;
 	uint8_t *read_buf = NULL;
+	uint32_t crc_buffer, crc_flash;
 
 	LOG_DEBUG("%s: offset=0x%08" PRIx32 ", count=%" PRIu32,
 				__func__, offset, count);
+
+	retval = image_calculate_checksum(buffer, count, &crc_buffer);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Buffer checksum calculation failed");
+		return retval;
+	}
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -879,14 +889,19 @@ static int nuspi_verify(struct flash_bank *bank, const uint8_t *buffer,
 		goto cleanup;
 	}
 
-	for (uint32_t i = 0; i < count; i++) {
-		if (read_buf[i] != buffer[i]) {
-			LOG_ERROR("Verification failed at offset 0x%08" PRIx32
-						": expected 0x%02x, got 0x%02x",
-						offset + i, buffer[i], read_buf[i]);
-			retval = ERROR_FAIL;
-			goto cleanup;
-		}
+	retval = image_calculate_checksum(buffer, count, &crc_flash);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Buffer checksum calculation failed");
+		return retval;
+	}
+
+	if (crc_buffer != crc_flash) {
+		LOG_ERROR("CRC verification failed at offset 0x%08" PRIx32
+					": expected CRC32=0x%08" PRIx32
+					", got CRC32=0x%08" PRIx32,
+					offset, crc_buffer, crc_flash);
+		retval = ERROR_FAIL;
+		goto cleanup;
 	}
 
 	LOG_DEBUG("Verification successful");
