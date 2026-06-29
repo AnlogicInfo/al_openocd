@@ -330,11 +330,10 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
 /*
  * Ship an already-encoded sequence of cycles to the adapter.
  *
- * The STM32 open-usbjtag firmware's direct mode (EP8 byte0 == 0x04) answers
- * every EP6 OUT packet with one same-length EP2 IN packet, so the transport
- * layer always drains EP2. Scan callers ask to keep the sampled TDO bytes;
- * non-scan callers pass rx=NULL so the same EP2 bytes are drained and
- * discarded, which keeps the EP2 stream aligned with EP6.
+ * The real AL-LINK only returns EP2 TDO bytes for cycles that are read back, so
+ * scan callers set readback and keep the sampled bytes while non-scan callers
+ * pass readback=false; those write-only cycles produce no EP2 reply and the
+ * transport skips the EP2 read for them.
  */
 static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 	size_t num_cycles, bool readback, int idle_tms, int idle_tdi)
@@ -352,7 +351,7 @@ static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 		read_buf = rx_buf;
 		read_len = num_cycles;
 	} else {
-		/* TDO is not needed, but EP2 must still be drained (rx=NULL). */
+		/* Write-only cycles produce no EP2 reply; do not read EP2. */
 		read_buf = NULL;
 		read_len = 0;
 	}
@@ -477,16 +476,16 @@ static int al_link_usb_mark_failed(const char *where)
 /*
  * Transfer a logical byte stream using the AL-LINK direct-mode framing.
  *
- * The STM32 open-usbjtag firmware's direct mode (EP8 byte0 == 0x04) replies to
- * EVERY EP6 OUT packet with exactly one same-length EP2 IN packet, whether or
- * not the host cares about the sampled TDO. The device only buffers a couple of
- * 64-byte IN packets, so the host must drain one EP2 packet for every EP6
- * packet, interleaved; otherwise the EP2 stream desyncs and later scans read
- * stale bytes, and large (>2 packets) transfers overflow the device IN buffer.
+ * On the real AL-LINK (Cypress CyUSB / FX2LP) the device only places a TDO
+ * sample packet on EP2 for cycles the host actually reads back. Write-only
+ * traffic (TLR reset, statemove, pathmove, runtest, stableclocks, tms) produces
+ * no EP2 reply, so the host must NOT drain EP2 for those operations; doing so
+ * blocks until the 6000 ms timeout. Only scans request readback.
  *
- * This function therefore always reads back tx_len bytes from EP2, packet by
- * packet, right after writing each EP6 packet. The first rx_len bytes (if any)
- * are stored into the caller's rx buffer and the remainder are discarded.
+ * Each ≤64-byte EP6 packet is written first; EP2 is read back interleaved only
+ * for the portion of the chunk that lies inside the caller's rx window. The
+ * first rx_len bytes are stored into rx and any bytes past that window are
+ * discarded, but no read is issued when the chunk keeps nothing.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 	uint8_t *rx, size_t rx_len, uint8_t idle_byte)
@@ -557,45 +556,47 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 		}
 
 		/*
-		 * EP2 IN: the firmware always returns one same-length packet for the
-		 * EP6 packet we just sent. Determine how much of this packet belongs to
-		 * the caller's rx window; read straight into rx when the whole chunk is
-		 * inside it, otherwise stage into discard_buf and copy the prefix.
+		 * EP2 IN: the device only returns a TDO packet for cycles the host
+		 * reads back. Skip the read entirely for write-only chunks; otherwise
+		 * read straight into rx when the whole chunk is kept, or stage into
+		 * discard_buf and copy the prefix when the chunk straddles rx_len.
 		 */
 		if (rx && offset < rx_len)
 			keep = (offset + chunk <= rx_len) ? chunk : (rx_len - offset);
 		else
 			keep = 0;
 
-		read_target = (keep == chunk) ? (rx + offset) : discard_buf;
+		if (keep > 0) {
+			read_target = (keep == chunk) ? (rx + offset) : discard_buf;
 
-		transferred = 0;
-		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u keep=%u logical_tx=%u logical_rx=%u packet_size=%u",
-			al_link.config.ep_in,
-			(unsigned int)offset,
-			(unsigned int)chunk,
-			(unsigned int)keep,
-			(unsigned int)tx_len,
-			(unsigned int)rx_len,
-			(unsigned int)al_link.config.packet_size);
-		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-			read_target, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
-		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-			retval, transferred);
-		if (retval != 0) {
-			free(discard_buf);
-			return al_link_usb_mark_failed("EP2 read");
-		}
-		if (transferred != (int)chunk) {
-			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-				(unsigned int)chunk, transferred);
-			free(discard_buf);
-			return al_link_usb_mark_failed("EP2 read");
-		}
+			transferred = 0;
+			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u keep=%u logical_tx=%u logical_rx=%u packet_size=%u",
+				al_link.config.ep_in,
+				(unsigned int)offset,
+				(unsigned int)chunk,
+				(unsigned int)keep,
+				(unsigned int)tx_len,
+				(unsigned int)rx_len,
+				(unsigned int)al_link.config.packet_size);
+			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
+				read_target, (int)keep, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+				retval, transferred);
+			if (retval != 0) {
+				free(discard_buf);
+				return al_link_usb_mark_failed("EP2 read");
+			}
+			if (transferred != (int)keep) {
+				LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
+					(unsigned int)keep, transferred);
+				free(discard_buf);
+				return al_link_usb_mark_failed("EP2 read");
+			}
 
-		/* Copy the kept prefix when the chunk straddled the rx window edge. */
-		if (keep > 0 && read_target == discard_buf)
-			memcpy(rx + offset, discard_buf, keep);
+			/* Copy the kept prefix when the chunk straddled the rx window edge. */
+			if (read_target == discard_buf)
+				memcpy(rx + offset, discard_buf, keep);
+		}
 
 		offset += chunk;
 	}
