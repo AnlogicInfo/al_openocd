@@ -330,10 +330,11 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
 /*
  * Ship an already-encoded sequence of cycles to the adapter.
  *
- * Reference firmware maps EP8 mode byte 0x04 to direct I/O control. Scan-style
- * callers that need TDO request matching EP2 readback. Non-scan callers can
- * skip EP2 reads so the queue behavior stays aligned with OpenOCD bitbang
- * semantics during bring-up.
+ * The STM32 open-usbjtag firmware's direct mode (EP8 byte0 == 0x04) answers
+ * every EP6 OUT packet with one same-length EP2 IN packet, so the transport
+ * layer always drains EP2. Scan callers ask to keep the sampled TDO bytes;
+ * non-scan callers pass rx=NULL so the same EP2 bytes are drained and
+ * discarded, which keeps the EP2 stream aligned with EP6.
  */
 static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 	size_t num_cycles, bool readback, int idle_tms, int idle_tdi)
@@ -351,7 +352,7 @@ static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 		read_buf = rx_buf;
 		read_len = num_cycles;
 	} else {
-		/* Non-scan operations only need to drive the outgoing JTAG pins. */
+		/* TDO is not needed, but EP2 must still be drained (rx=NULL). */
 		read_buf = NULL;
 		read_len = 0;
 	}
@@ -476,17 +477,22 @@ static int al_link_usb_mark_failed(const char *where)
 /*
  * Transfer a logical byte stream using the AL-LINK direct-mode framing.
  *
- * In the reference firmware's 0x04 mode the device reads one EP6 packet,
- * processes exactly the received byte count, and queues one same-length EP2
- * packet in response. There is no 64-byte or 512-byte padding requirement.
+ * The STM32 open-usbjtag firmware's direct mode (EP8 byte0 == 0x04) replies to
+ * EVERY EP6 OUT packet with exactly one same-length EP2 IN packet, whether or
+ * not the host cares about the sampled TDO. The device only buffers a couple of
+ * 64-byte IN packets, so the host must drain one EP2 packet for every EP6
+ * packet, interleaved; otherwise the EP2 stream desyncs and later scans read
+ * stale bytes, and large (>2 packets) transfers overflow the device IN buffer.
+ *
+ * This function therefore always reads back tx_len bytes from EP2, packet by
+ * packet, right after writing each EP6 packet. The first rx_len bytes (if any)
+ * are stored into the caller's rx buffer and the remainder are discarded.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 	uint8_t *rx, size_t rx_len, uint8_t idle_byte)
 {
-	size_t tx_offset = 0;
-	size_t rx_offset = 0;
+	size_t offset = 0;
 	uint8_t *discard_buf = NULL;
-	bool should_read = rx != NULL || rx_len != 0;
 	int retval;
 
 	if (!al_link.usb.is_open)
@@ -512,28 +518,31 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 		return ERROR_OK;
 
 	(void)idle_byte;
-	if (should_read) {
-		discard_buf = malloc(al_link.config.packet_size);
-		if (!discard_buf)
-			return ERROR_FAIL;
-	}
 
-	while (tx_offset < tx_len) {
-		size_t chunk = tx_len - tx_offset;
+	/* Scratch buffer for EP2 bytes the caller does not want to keep. */
+	discard_buf = malloc(al_link.config.packet_size);
+	if (!discard_buf)
+		return ERROR_FAIL;
+
+	while (offset < tx_len) {
+		size_t chunk = tx_len - offset;
+		uint8_t *read_target;
+		size_t keep;
 		int transferred = 0;
 
 		if (chunk > al_link.config.packet_size)
 			chunk = al_link.config.packet_size;
 
+		/* EP6 OUT: drive this packet of JTAG cycles. */
 		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u logical_tx=%u logical_rx=%u packet_size=%u",
 			al_link.config.ep_out,
-			(unsigned int)tx_offset,
+			(unsigned int)offset,
 			(unsigned int)chunk,
 			(unsigned int)tx_len,
 			(unsigned int)rx_len,
 			(unsigned int)al_link.config.packet_size);
 		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
-			tx + tx_offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
 		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
 			retval, transferred);
 		if (retval != 0) {
@@ -547,60 +556,48 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 			return al_link_usb_mark_failed("EP6 write");
 		}
 
-		if (!should_read) {
-			LOG_DEBUG("AL-LINK: EP2 read skipped ep=0x%02x offset=%u chunk=%u logical_tx=%u logical_rx=%u",
-				al_link.config.ep_in,
-				(unsigned int)tx_offset,
-				(unsigned int)chunk,
-				(unsigned int)tx_len,
-				(unsigned int)rx_len);
-			tx_offset += chunk;
-			continue;
+		/*
+		 * EP2 IN: the firmware always returns one same-length packet for the
+		 * EP6 packet we just sent. Determine how much of this packet belongs to
+		 * the caller's rx window; read straight into rx when the whole chunk is
+		 * inside it, otherwise stage into discard_buf and copy the prefix.
+		 */
+		if (rx && offset < rx_len)
+			keep = (offset + chunk <= rx_len) ? chunk : (rx_len - offset);
+		else
+			keep = 0;
+
+		read_target = (keep == chunk) ? (rx + offset) : discard_buf;
+
+		transferred = 0;
+		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u keep=%u logical_tx=%u logical_rx=%u packet_size=%u",
+			al_link.config.ep_in,
+			(unsigned int)offset,
+			(unsigned int)chunk,
+			(unsigned int)keep,
+			(unsigned int)tx_len,
+			(unsigned int)rx_len,
+			(unsigned int)al_link.config.packet_size);
+		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
+			read_target, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+			retval, transferred);
+		if (retval != 0) {
+			free(discard_buf);
+			return al_link_usb_mark_failed("EP2 read");
+		}
+		if (transferred != (int)chunk) {
+			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
+				(unsigned int)chunk, transferred);
+			free(discard_buf);
+			return al_link_usb_mark_failed("EP2 read");
 		}
 
-		{
-			size_t keep = 0;
-			uint8_t *read_target = discard_buf;
+		/* Copy the kept prefix when the chunk straddled the rx window edge. */
+		if (keep > 0 && read_target == discard_buf)
+			memcpy(rx + offset, discard_buf, keep);
 
-			if (rx && rx_offset < rx_len) {
-				keep = rx_len - rx_offset;
-				if (keep > chunk)
-					keep = chunk;
-				if (keep == chunk)
-					read_target = rx + rx_offset;
-			}
-
-			transferred = 0;
-			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u request=%u keep=%u logical_tx=%u logical_rx=%u packet_size=%u",
-				al_link.config.ep_in,
-				(unsigned int)tx_offset,
-				(unsigned int)chunk,
-				(unsigned int)keep,
-				(unsigned int)tx_len,
-				(unsigned int)rx_len,
-				(unsigned int)al_link.config.packet_size);
-			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-				read_target, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
-			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-				retval, transferred);
-			if (retval != 0) {
-				free(discard_buf);
-				return al_link_usb_mark_failed("EP2 read");
-			}
-			if (transferred != (int)chunk) {
-				LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-					(unsigned int)chunk, transferred);
-				free(discard_buf);
-				return al_link_usb_mark_failed("EP2 read");
-			}
-
-			if (rx && keep > 0 && read_target == discard_buf)
-				memcpy(rx + rx_offset, discard_buf, keep);
-
-			rx_offset += keep;
-		}
-
-		tx_offset += chunk;
+		offset += chunk;
 	}
 
 	free(discard_buf);
@@ -855,9 +852,6 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	int last_tms = 0;
 	int last_tdi = 0;
 	int scan_size;
-	int path_len = 0;
-	uint8_t tms_path = 0;
-	size_t tx_cycles;
 	size_t tx_index;
 	int retval;
 
@@ -874,19 +868,7 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	}
 
 	scan_size = jtag_build_buffer(cmd->cmd.scan, &buffer);
-	tx_cycles = (size_t)scan_size;
-	if (readback && saved_end_state != shift_state) {
-		path_len = tap_get_tms_path_len(shift_state, saved_end_state);
-		if (path_len < 1) {
-			retval = ERROR_FAIL;
-			goto out;
-		}
-
-		tms_path = tap_get_tms_path(shift_state, saved_end_state);
-		tx_cycles += (size_t)path_len - 1;
-	}
-
-	retval = al_link_alloc_cycles(tx_cycles, &tx_buf, &rx_buf);
+	retval = al_link_alloc_cycles((size_t)scan_size, &tx_buf, &rx_buf);
 	if (retval != ERROR_OK)
 		goto out;
 
@@ -899,22 +881,17 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 		tx_buf[tx_index++] = al_link_encode_cycle(tms, tdi);
 	}
 
-	if (readback && saved_end_state != shift_state) {
-		for (int index = 1; index < path_len; index++) {
-			last_tms = (tms_path >> index) & 0x1;
-			last_tdi = 0;
-			tx_buf[tx_index++] = al_link_encode_cycle(last_tms, last_tdi);
-		}
-	}
-
 	retval = al_link_send_cycles(tx_buf, rx_buf,
-		readback ? tx_cycles : (size_t)scan_size,
+		(size_t)scan_size,
 		readback, last_tms, last_tdi);
 	if (retval != ERROR_OK)
 		goto out;
 
-	if (readback && saved_end_state != shift_state)
-		tap_set_state(saved_end_state);
+	if (saved_end_state != shift_state) {
+		retval = al_link_execute_statemove(1);
+		if (retval != ERROR_OK)
+			goto out;
+	}
 
 	if (readback) {
 		for (int bit = 0; bit < scan_size; bit++)
@@ -924,9 +901,6 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	retval = jtag_read_buffer(buffer, cmd->cmd.scan);
 	if (retval != ERROR_OK)
 		goto out;
-
-	if (!readback && saved_end_state != shift_state)
-		retval = al_link_execute_statemove(1);
 
 out:
 	free(buffer);
