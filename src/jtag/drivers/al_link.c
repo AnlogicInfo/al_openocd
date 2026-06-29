@@ -482,16 +482,16 @@ static int al_link_usb_mark_failed(const char *where)
  * no EP2 reply, so the host must NOT drain EP2 for those operations; doing so
  * blocks until the 6000 ms timeout. Only scans request readback.
  *
- * Each ≤64-byte EP6 packet is written first; EP2 is read back interleaved only
- * for the portion of the chunk that lies inside the caller's rx window. The
- * first rx_len bytes are stored into rx and any bytes past that window are
- * discarded, but no read is issued when the chunk keeps nothing.
+ * Each <=64-byte EP6 packet is written first; once the whole batch is on the
+ * wire the device starts returning TDO samples, which are read back from EP2 in
+ * the same packet order into the caller's rx window. Reading EP2 while the batch
+ * is still streaming out makes the device stall, so the two phases must stay
+ * split: write all of EP6, then read all of EP2.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 	uint8_t *rx, size_t rx_len, uint8_t idle_byte)
 {
 	size_t offset = 0;
-	uint8_t *discard_buf = NULL;
 	int retval;
 
 	if (!al_link.usb.is_open)
@@ -518,21 +518,14 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 
 	(void)idle_byte;
 
-	/* Scratch buffer for EP2 bytes the caller does not want to keep. */
-	discard_buf = malloc(al_link.config.packet_size);
-	if (!discard_buf)
-		return ERROR_FAIL;
-
+	/* Phase 1: push the whole batch on EP6 before reading any EP2 reply. */
 	while (offset < tx_len) {
 		size_t chunk = tx_len - offset;
-		uint8_t *read_target;
-		size_t keep;
 		int transferred = 0;
 
 		if (chunk > al_link.config.packet_size)
 			chunk = al_link.config.packet_size;
 
-		/* EP6 OUT: drive this packet of JTAG cycles. */
 		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u logical_tx=%u logical_rx=%u packet_size=%u",
 			al_link.config.ep_out,
 			(unsigned int)offset,
@@ -544,64 +537,51 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 			tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
 		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
 			retval, transferred);
-		if (retval != 0) {
-			free(discard_buf);
+		if (retval != 0)
 			return al_link_usb_mark_failed("EP6 write");
-		}
 		if (transferred != (int)chunk) {
 			LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
 				(unsigned int)chunk, transferred);
-			free(discard_buf);
 			return al_link_usb_mark_failed("EP6 write");
-		}
-
-		/*
-		 * EP2 IN: the device only returns a TDO packet for cycles the host
-		 * reads back. Skip the read entirely for write-only chunks; otherwise
-		 * read straight into rx when the whole chunk is kept, or stage into
-		 * discard_buf and copy the prefix when the chunk straddles rx_len.
-		 */
-		if (rx && offset < rx_len)
-			keep = (offset + chunk <= rx_len) ? chunk : (rx_len - offset);
-		else
-			keep = 0;
-
-		if (keep > 0) {
-			read_target = (keep == chunk) ? (rx + offset) : discard_buf;
-
-			transferred = 0;
-			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u keep=%u logical_tx=%u logical_rx=%u packet_size=%u",
-				al_link.config.ep_in,
-				(unsigned int)offset,
-				(unsigned int)chunk,
-				(unsigned int)keep,
-				(unsigned int)tx_len,
-				(unsigned int)rx_len,
-				(unsigned int)al_link.config.packet_size);
-			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-				read_target, (int)keep, &transferred, AL_LINK_USB_TIMEOUT_MS);
-			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-				retval, transferred);
-			if (retval != 0) {
-				free(discard_buf);
-				return al_link_usb_mark_failed("EP2 read");
-			}
-			if (transferred != (int)keep) {
-				LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-					(unsigned int)keep, transferred);
-				free(discard_buf);
-				return al_link_usb_mark_failed("EP2 read");
-			}
-
-			/* Copy the kept prefix when the chunk straddled the rx window edge. */
-			if (read_target == discard_buf)
-				memcpy(rx + offset, discard_buf, keep);
 		}
 
 		offset += chunk;
 	}
 
-	free(discard_buf);
+	/*
+	 * Phase 2: only scans need TDO. Write-only traffic (rx_len == 0) produces no
+	 * EP2 reply, so the read loop is skipped. After the full batch is on the
+	 * wire the device returns the samples, which we drain packet by packet.
+	 */
+	offset = 0;
+	while (rx && offset < rx_len) {
+		size_t chunk = rx_len - offset;
+		int transferred = 0;
+
+		if (chunk > al_link.config.packet_size)
+			chunk = al_link.config.packet_size;
+
+		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u logical_tx=%u logical_rx=%u packet_size=%u",
+			al_link.config.ep_in,
+			(unsigned int)offset,
+			(unsigned int)chunk,
+			(unsigned int)tx_len,
+			(unsigned int)rx_len,
+			(unsigned int)al_link.config.packet_size);
+		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
+			rx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
+		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+			retval, transferred);
+		if (retval != 0)
+			return al_link_usb_mark_failed("EP2 read");
+		if (transferred != (int)chunk) {
+			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
+				(unsigned int)chunk, transferred);
+			return al_link_usb_mark_failed("EP2 read");
+		}
+
+		offset += chunk;
+	}
 
 	return ERROR_OK;
 }
