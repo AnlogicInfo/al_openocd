@@ -330,24 +330,23 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
 /*
  * Ship an already-encoded sequence of cycles to the adapter.
  *
- * The firmware's direct IO mode answers every EP6 packet with an equal-length
- * EP2 echo, so the transport must drain EP2 for ALL cycles, not just scans.
- * Scan callers decode the sampled bytes afterwards; write-only callers ignore
- * them, but the echo is still read so the device's single EP2 buffer never
- * backs up. readback therefore no longer gates the EP2 read - it only tells the
- * caller (see al_link_execute_scan) whether to decode rx_buf.
+ * Real AL-LINK (FX2LP) direct IO mode only produces EP2 data for cycles that
+ * are actually sampled; write-only traffic (TLR reset, statemove, pathmove,
+ * tms, stableclocks) returns nothing on EP2, and reading it there blocks until
+ * the 6000 ms timeout. So readback gates the EP2 read: scans pass rx_buf with a
+ * non-zero rx_len; write-only callers pass NULL/0 and the transport skips EP2.
  */
 static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 	size_t num_cycles, bool readback, int idle_tms, int idle_tdi)
 {
 	(void)idle_tms;
 	(void)idle_tdi;
-	(void)readback;
 
 	if (num_cycles == 0)
 		return ERROR_OK;
 
-	return al_link_usb_xfer(tx_buf, num_cycles, rx_buf, num_cycles, 0);
+	return al_link_usb_xfer(tx_buf, num_cycles,
+		readback ? rx_buf : NULL, readback ? num_cycles : 0, 0);
 }
 
 /*
@@ -473,23 +472,18 @@ static int al_link_usb_mark_failed(const char *where)
  * It does this for every packet, including write-only traffic (TLR reset,
  * statemove, pathmove, runtest, stableclocks, tms).
  *
- * The device has a single EP2 IN buffer, so the host MUST read the equal-length
- * echo for each EP6 packet before sending the next one. Writing another packet
- * without draining EP2 leaves the firmware spinning on its (uninitialised) retry
- * counter with the pipe wedged - the root cause of both earlier failures: the
- * "babble" (host read fewer bytes than the reply) and the 6000 ms timeout (the
- * reply was never drained and later reads found the pipe stalled).
- *
- * Hence this transport is strictly 1:1 per packet: write one <= packet_size
- * chunk on EP6, then immediately read the same number of bytes on EP2. Scan
- * callers keep the sampled bytes and decode them afterwards; write-only callers
- * still read the echo but discard it. When rx is NULL or shorter than tx_len the
- * echo for the uncovered chunk lands in a scratch buffer so EP2 never backs up.
+ * The transport alternates per packet: write one <= packet_size chunk on EP6,
+ * then read back only the bytes of that chunk that the caller asked to sample
+ * (keep). Scans pass rx_len == tx_len so keep == chunk and every 64B write is
+ * paired with a 64B read; write-only callers pass rx_len == 0 so keep == 0 and
+ * EP2 is never touched (the device produces no reply for them and reading it
+ * would block until the 6000 ms timeout). Because at most one chunk is read at
+ * a time, the device's single EP2 IN buffer never holds more than one packet,
+ * which avoids both the babble and the stall seen when batching transfers.
  */
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 	uint8_t *rx, size_t rx_len, uint8_t idle_byte)
 {
-	uint8_t discard[512];
 	size_t offset = 0;
 	int transferred = 0;
 	int retval;
@@ -513,26 +507,22 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 		return ERROR_FAIL;
 	}
 
-	if ((size_t)al_link.config.packet_size > sizeof(discard)) {
-		LOG_ERROR("AL-LINK: packet_size %u exceeds internal scratch limit %u",
-			(unsigned int)al_link.config.packet_size,
-			(unsigned int)sizeof(discard));
-		return ERROR_FAIL;
-	}
-
 	if (tx_len == 0)
 		return ERROR_OK;
 
 	(void)idle_byte;
 
 	/*
-	 * Strict 1:1 framing: each EP6 OUT packet is answered by one equal-length
-	 * EP2 IN packet, so write one chunk and immediately read the same number of
-	 * bytes back before advancing to the next chunk.
+	 * Alternating per-packet framing: write one <= packet_size chunk on EP6,
+	 * then read back only the bytes of that chunk that fall inside the caller's
+	 * rx window (keep). Scans set rx_len == tx_len so keep == chunk; write-only
+	 * callers pass rx_len == 0 so keep == 0 and EP2 is skipped. Reading at most
+	 * one chunk keeps the device's single EP2 IN buffer from holding more than
+	 * one packet, avoiding both the babble and the stall seen when batching.
 	 */
 	while (offset < tx_len) {
 		size_t chunk = tx_len - offset;
-		uint8_t *dst;
+		size_t keep;
 
 		if (chunk > al_link.config.packet_size)
 			chunk = al_link.config.packet_size;
@@ -558,33 +548,35 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 		}
 
 		/*
-		 * Read the equal-length echo immediately. Keep it in the caller's rx
-		 * window when it covers this chunk; otherwise drain into the scratch
-		 * buffer so the device's single EP2 buffer never backs up.
+		 * Only read back the portion of this chunk that lands inside [0, rx_len).
+		 * Write-only transfers pass rx == NULL / rx_len == 0, so keep == 0 and the
+		 * EP2 read is skipped entirely (the device has no reply for them).
 		 */
-		if (rx && offset + chunk <= rx_len)
-			dst = rx + offset;
-		else
-			dst = discard;
+		keep = (rx && offset < rx_len) ? (rx_len - offset) : 0;
+		if (keep > chunk)
+			keep = chunk;
 
-		transferred = 0;
-		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u chunk=%u logical_tx=%u logical_rx=%u packet_size=%u",
-			al_link.config.ep_in,
-			(unsigned int)offset,
-			(unsigned int)chunk,
-			(unsigned int)tx_len,
-			(unsigned int)rx_len,
-			(unsigned int)al_link.config.packet_size);
-		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-			dst, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
-		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-			retval, transferred);
-		if (retval != 0)
-			return al_link_usb_mark_failed("EP2 read");
-		if (transferred != (int)chunk) {
-			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-				(unsigned int)chunk, transferred);
-			return al_link_usb_mark_failed("EP2 read");
+		if (keep > 0) {
+			transferred = 0;
+			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u keep=%u chunk=%u logical_tx=%u logical_rx=%u packet_size=%u",
+				al_link.config.ep_in,
+				(unsigned int)offset,
+				(unsigned int)keep,
+				(unsigned int)chunk,
+				(unsigned int)tx_len,
+				(unsigned int)rx_len,
+				(unsigned int)al_link.config.packet_size);
+			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
+				rx + offset, (int)keep, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+				retval, transferred);
+			if (retval != 0)
+				return al_link_usb_mark_failed("EP2 read");
+			if (transferred != (int)keep) {
+				LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
+					(unsigned int)keep, transferred);
+				return al_link_usb_mark_failed("EP2 read");
+			}
 		}
 
 		offset += chunk;
