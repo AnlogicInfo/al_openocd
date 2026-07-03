@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "al_link_cyusb.h"
@@ -87,6 +88,9 @@ struct al_link_config {
 	uint8_t speed_byte;
 	bool sample_high_nibble;
 	bool speed_byte_overridden;
+	/* Temporary diagnostic: histogram every raw EP2 response bit instead of
+	 * only trusting the configured TDO sample position. Off by default. */
+	bool dump_raw_rx;
 };
 
 /* Transport state owned by the driver instance. */
@@ -480,6 +484,13 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 	uint8_t *rx_packet = NULL;
 	int transferred = 0;
 	int retval;
+	/* Temporary diagnostic accumulators; only populated when
+	 * al_link_dump_raw_rx is enabled. See the histogram dump right before
+	 * this function returns in the rx_len > 0 path. */
+	size_t dbg_bit_ones[8] = {0};
+	size_t dbg_bit_total = 0;
+	uint8_t dbg_first_bytes[16];
+	size_t dbg_first_bytes_len = 0;
 
 	if (!al_link.usb.is_open)
 		return ERROR_FAIL;
@@ -620,9 +631,45 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 
 		if (keep > 0) {
 			memcpy(rx + offset, rx_packet, keep);
+
+			if (al_link.config.dump_raw_rx) {
+				for (size_t i = 0; i < keep; i++) {
+					uint8_t byte = rx_packet[i];
+
+					for (int bit = 0; bit < 8; bit++) {
+						if ((byte >> bit) & 0x1)
+							dbg_bit_ones[bit]++;
+					}
+					dbg_bit_total++;
+
+					if (dbg_first_bytes_len < sizeof(dbg_first_bytes))
+						dbg_first_bytes[dbg_first_bytes_len++] = byte;
+				}
+			}
 		}
 
 		offset += real_chunk;
+	}
+
+	if (al_link.config.dump_raw_rx && dbg_bit_total > 0) {
+		LOG_INFO("AL-LINK: raw EP2 bit histogram over %u valid bytes: "
+			"bit0=%u bit1=%u bit2=%u bit3=%u bit4=%u bit5=%u bit6=%u bit7=%u (ones out of %u)",
+			(unsigned int)dbg_bit_total,
+			(unsigned int)dbg_bit_ones[0], (unsigned int)dbg_bit_ones[1],
+			(unsigned int)dbg_bit_ones[2], (unsigned int)dbg_bit_ones[3],
+			(unsigned int)dbg_bit_ones[4], (unsigned int)dbg_bit_ones[5],
+			(unsigned int)dbg_bit_ones[6], (unsigned int)dbg_bit_ones[7],
+			(unsigned int)dbg_bit_total);
+
+		char hex[sizeof(dbg_first_bytes) * 3 + 1];
+		size_t hex_pos = 0;
+
+		for (size_t i = 0; i < dbg_first_bytes_len; i++)
+			hex_pos += (size_t)snprintf(hex + hex_pos, sizeof(hex) - hex_pos,
+				"%02x ", dbg_first_bytes[i]);
+
+		LOG_INFO("AL-LINK: raw EP2 first %u bytes: %s",
+			(unsigned int)dbg_first_bytes_len, hex);
 	}
 
 	free(tx_packet);
@@ -1241,6 +1288,27 @@ COMMAND_HANDLER(al_link_handle_sample_nibble_command)
 	return ERROR_OK;
 }
 
+/*
+ * Temporary bring-up diagnostic: instead of trusting the configured TDO
+ * sample position, histogram every bit of every raw EP2 response byte across
+ * a whole scan/readback transfer. This helps tell whether some other bit
+ * (not the currently assumed bit0/bit4) is the one that actually changes.
+ */
+COMMAND_HANDLER(al_link_handle_dump_raw_rx_command)
+{
+	if (CMD_ARGC != 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	if (strcmp(CMD_ARGV[0], "on") == 0)
+		al_link.config.dump_raw_rx = true;
+	else if (strcmp(CMD_ARGV[0], "off") == 0)
+		al_link.config.dump_raw_rx = false;
+	else
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	return ERROR_OK;
+}
+
 /* AL-LINK-specific command namespace. */
 static const struct command_registration al_link_subcommand_handlers[] = {
 	{
@@ -1309,6 +1377,13 @@ static const struct command_registration al_link_command_handlers[] = {
 		.mode = COMMAND_CONFIG,
 		.help = "choose which returned nibble is treated as TDO sample",
 		.usage = "(high | low)",
+	},
+	{
+		.name = "al_link_dump_raw_rx",
+		.handler = al_link_handle_dump_raw_rx_command,
+		.mode = COMMAND_ANY,
+		.help = "temporary diagnostic: histogram all 8 bits of every raw EP2 response byte",
+		.usage = "(on | off)",
 	},
 	COMMAND_REGISTRATION_DONE,
 };
