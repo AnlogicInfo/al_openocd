@@ -42,8 +42,16 @@
 #define AL_LINK_EP_DATA_OUT 0x06
 #define AL_LINK_EP_CFG_OUT  0x08
 
-/* Legacy name kept for compatibility; 0x04 selects the direct I/O control mode. */
-#define AL_LINK_MODE_DIRECT 0x04
+/*
+ * Ground truth from a real, successful Anlogic vendor-tool capture
+ * (Wireshark/USBPcap on the same AL-Link probe, VID:PID 336C:1001): the EP8
+ * mode-config packet it sends is { 0x01, speed_byte }, not { 0x04, speed_byte
+ * }. The 0x04 "direct I/O" assumption was reverse-engineered from an
+ * unrelated STM32-based reference firmware and was never verified against
+ * real FX2LP traffic. Name kept for compatibility even though the value no
+ * longer matches the old "direct I/O" description.
+ */
+#define AL_LINK_MODE_DIRECT 0x01
 
 #define AL_LINK_SPEED_12M   0x00
 #define AL_LINK_SPEED_6M    0x04
@@ -486,9 +494,9 @@ static void al_link_usb_close(void)
  *   byte0 = mode selector
  *   byte1 = speed byte
  *
- * Reference material names mode byte 0x04 as direct I/O control. Real FX2LP
- * hardware behavior is still being characterized; current code only reads EP2
- * for scan/readback transfers.
+ * Verified 2026-07-07 against a real Anlogic vendor-tool USB capture: the
+ * real mode byte is 0x01 (see AL_LINK_MODE_DIRECT), not the previously
+ * assumed 0x04.
  */
 static int al_link_usb_set_speed(uint8_t speed_byte)
 {
