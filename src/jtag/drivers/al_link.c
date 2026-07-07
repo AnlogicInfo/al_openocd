@@ -230,9 +230,23 @@ static inline uint8_t al_link_encode_cycle(int tms, int tdi)
 		al_link_frame(true, tdi, tms));
 }
 
+/*
+ * Encode a padding/no-op cycle used only to fill out packet-aligned transfers.
+ *
+ * Ground truth from a real, successful Anlogic vendor-tool capture (Bus Hound
+ * / USBPcap on the same AL-Link probe, VID:PID 336C:1001) shows that its tail
+ * padding bytes are a distinct 0x44 sentinel (both nibbles encode tck=1),
+ * never the tck=0 setup/clock split used by real cycles (see
+ * al_link_encode_cycle). Real cycles always have tck=0 in the low nibble, so
+ * a tck=1 low nibble is otherwise unreachable and lets the adapter tell "this
+ * byte is padding, do not clock it" apart from "this byte is a real TMS/TDI
+ * cycle". Our previous idle encoding used tck=false in both nibbles, which is
+ * indistinguishable from a real cycle's low nibble and was likely being
+ * executed as an extra, unwanted clock by the adapter.
+ */
 static inline uint8_t al_link_encode_idle(int tms, int tdi)
 {
-	uint8_t frame = al_link_frame(false, tdi, tms);
+	uint8_t frame = al_link_frame(true, tdi, tms);
 
 	return al_link_pack(frame, frame);
 }
