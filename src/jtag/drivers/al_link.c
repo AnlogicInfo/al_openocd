@@ -538,6 +538,13 @@ static int al_link_usb_mark_failed(const char *where)
  * packet_size-aligned EP6/EP2 pairs; any tail padding uses idle_byte (TCK held
  * low) and the corresponding EP2 bytes are discarded.
  */
+/* Diagnostic only (dump_raw_rx): running count of REAL cycle bytes pushed to
+ * EP6 this session, including write-only ops that never read EP2 back. Used to
+ * test the "traditional-mode 512-batch alignment" hypothesis: if the firmware
+ * batches TDO across operations, the real readback data inside each 512-byte
+ * EP2 window should start near (al_link_dbg_tx_total % packet_size). */
+static unsigned int al_link_dbg_tx_total;
+
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 	uint8_t *rx, size_t rx_len, uint8_t idle_byte)
 {
@@ -607,6 +614,7 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 				return al_link_usb_mark_failed("EP6 write");
 			}
 
+			al_link_dbg_tx_total += (unsigned int)chunk;
 			offset += chunk;
 		}
 
@@ -627,6 +635,7 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 		size_t write_len = al_link.config.packet_size;
 		size_t keep = offset < rx_len ? rx_len - offset : 0;
 		size_t pad_len;
+		unsigned int tx_before = al_link_dbg_tx_total;
 
 		if (real_chunk > write_len)
 			real_chunk = write_len;
@@ -664,6 +673,8 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 			return al_link_usb_mark_failed("EP6 write");
 		}
 
+		al_link_dbg_tx_total += (unsigned int)real_chunk;
+
 		transferred = 0;
 		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u read_len=%u keep=%u discard=%u logical_tx=%u logical_rx=%u packet_size=%u",
 			al_link.config.ep_in,
@@ -689,6 +700,51 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 			free(tx_packet);
 			free(rx_packet);
 			return al_link_usb_mark_failed("EP2 read");
+		}
+
+		/* Diagnostic: dump the ENTIRE 512-byte EP2 window (not just the kept
+		 * bytes) so the real readback data's true position within the batch
+		 * can be measured against tx_before %% packet_size (integer modulo).
+		 * See the al_link_dbg_tx_total comment above for the framing model. */
+		if (al_link.config.dump_raw_rx) {
+			size_t full_ones0 = 0, full_ones4 = 0;
+			size_t first_diff = write_len, last_diff = 0;
+			uint8_t base = rx_packet[0];
+			char head[32 * 3 + 1];
+			size_t hpos = 0;
+			size_t hn = write_len < 32 ? write_len : 32;
+
+			for (size_t i = 0; i < write_len; i++) {
+				uint8_t b = rx_packet[i];
+
+				if (b & 0x01)
+					full_ones0++;
+				if (b & 0x10)
+					full_ones4++;
+				if (b != base) {
+					if (i < first_diff)
+						first_diff = i;
+					last_diff = i;
+				}
+			}
+
+			for (size_t i = 0; i < hn; i++)
+				hpos += (size_t)snprintf(head + hpos, sizeof(head) - hpos,
+					"%02x ", rx_packet[i]);
+
+			LOG_INFO("AL-LINK: EP2 FULL win=%u tx_before=%u mod=%u real=%u keep=%u "
+				"bit0=%u bit4=%u first_diff=%d last_diff=%d base=0x%02x head: %s",
+				(unsigned int)write_len,
+				tx_before,
+				tx_before % al_link.config.packet_size,
+				(unsigned int)real_chunk,
+				(unsigned int)keep,
+				(unsigned int)full_ones0,
+				(unsigned int)full_ones4,
+				(first_diff == write_len) ? -1 : (int)first_diff,
+				(first_diff == write_len) ? -1 : (int)last_diff,
+				base,
+				head);
 		}
 
 		if (keep > 0) {
