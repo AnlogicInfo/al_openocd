@@ -99,6 +99,10 @@ struct al_link_config {
 	/* Temporary diagnostic: histogram every raw EP2 response bit instead of
 	 * only trusting the configured TDO sample position. Off by default. */
 	bool dump_raw_rx;
+	/* Temporary diagnostic: dump the raw bytes actually written to EP6 (real
+	 * cycles and idle padding alike) so the driver-emitted stream can be
+	 * compared byte-for-byte against a logic-analyzer capture. Off by default. */
+	bool dump_raw_tx;
 };
 
 /* Transport state owned by the driver instance. */
@@ -549,6 +553,25 @@ static int al_link_usb_mark_failed(const char *where)
 
 
 /*
+ * Temporary bring-up diagnostic: dump the raw bytes actually handed to
+ * al_cyusb_bulk_write() on EP6. Only the leading bytes are printed (capped so
+ * a full packet_size scan does not flood the log), which is enough to confirm
+ * the real-cycle encoding and the real-to-padding transition of a scan.
+ */
+static void al_link_dump_tx_bytes(const char *tag, const uint8_t *buf, size_t len)
+{
+	char hex[64 * 3 + 1];
+	size_t show = len < 64 ? len : 64;
+	size_t pos = 0;
+
+	for (size_t i = 0; i < show; i++)
+		pos += (size_t)snprintf(hex + pos, sizeof(hex) - pos, "%02x ", buf[i]);
+
+	LOG_INFO("AL-LINK: raw TX %s len=%u first %u bytes: %s",
+		tag, (unsigned int)len, (unsigned int)show, hex);
+}
+
+/*
  * Transfer a logical byte stream using the AL-LINK direct-mode framing.
  *
  * Write-only callers pass rx_len == 0 and are sent at their real length with no
@@ -615,6 +638,8 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 				(unsigned int)tx_len,
 				(unsigned int)rx_len,
 				(unsigned int)al_link.config.packet_size);
+			if (al_link.config.dump_raw_tx)
+				al_link_dump_tx_bytes("write-only", tx + offset, chunk);
 			retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
 				tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
 			LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
@@ -688,6 +713,8 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 			(unsigned int)data_start,
 			(unsigned int)tx_len,
 			(unsigned int)rx_len);
+		if (al_link.config.dump_raw_tx)
+			al_link_dump_tx_bytes("scan", tx_packet, write_len);
 		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
 			tx_packet, (int)write_len, &transferred, AL_LINK_USB_TIMEOUT_MS);
 		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
@@ -1443,6 +1470,27 @@ COMMAND_HANDLER(al_link_handle_dump_raw_rx_command)
 	return ERROR_OK;
 }
 
+/*
+ * Temporary bring-up diagnostic: dump the raw bytes actually written to EP6
+ * (both write-only ops and scan/readback ops, including idle padding). Pairs
+ * with al_link_dump_raw_rx so the emitted TX stream can be checked against a
+ * logic-analyzer capture of TMS/TDI/TCK/TDO.
+ */
+COMMAND_HANDLER(al_link_handle_dump_raw_tx_command)
+{
+	if (CMD_ARGC != 1)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	if (strcmp(CMD_ARGV[0], "on") == 0)
+		al_link.config.dump_raw_tx = true;
+	else if (strcmp(CMD_ARGV[0], "off") == 0)
+		al_link.config.dump_raw_tx = false;
+	else
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	return ERROR_OK;
+}
+
 /* AL-LINK-specific command namespace. */
 static const struct command_registration al_link_subcommand_handlers[] = {
 	{
@@ -1517,6 +1565,13 @@ static const struct command_registration al_link_command_handlers[] = {
 		.handler = al_link_handle_dump_raw_rx_command,
 		.mode = COMMAND_ANY,
 		.help = "temporary diagnostic: histogram all 8 bits of every raw EP2 response byte",
+		.usage = "(on | off)",
+	},
+	{
+		.name = "al_link_dump_raw_tx",
+		.handler = al_link_handle_dump_raw_tx_command,
+		.mode = COMMAND_ANY,
+		.help = "temporary diagnostic: dump the raw bytes written to EP6 (real cycles and idle padding)",
 		.usage = "(on | off)",
 	},
 	COMMAND_REGISTRATION_DONE,
