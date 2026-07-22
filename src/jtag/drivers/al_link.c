@@ -161,8 +161,32 @@ static int al_link_usb_open(void);
 static void al_link_usb_close(void);
 static void al_link_usb_drain_ep2(void);
 static int al_link_usb_set_speed(uint8_t speed_byte);
-static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
-	uint8_t *rx, size_t rx_len, uint8_t idle_byte);
+static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte);
+
+struct al_link_capture {
+	size_t stream_offset;
+	int num_bits;
+	uint8_t *scan_buffer;
+	struct scan_command *scan;
+	bool readback;
+};
+
+struct al_link_batch {
+	uint8_t *tx;
+	size_t tx_len;
+	size_t tx_capacity;
+	struct al_link_capture *captures;
+	size_t capture_count;
+	size_t capture_capacity;
+	uint8_t idle_byte;
+};
+
+static struct al_link_batch al_link_batch;
+static int al_link_batch_append(const uint8_t *tx, size_t tx_len, uint8_t idle_byte);
+static int al_link_batch_add_capture(size_t stream_offset, int num_bits,
+	uint8_t *scan_buffer, struct scan_command *scan, bool readback);
+static int al_link_batch_flush(void);
+static void al_link_batch_clear(void);
 
 static int al_link_execute_stableclocks(struct jtag_command *cmd);
 static int al_link_execute_runtest(struct jtag_command *cmd);
@@ -233,8 +257,9 @@ static inline uint8_t al_link_pack(uint8_t low_frame, uint8_t high_frame)
  *   high nibble = clock half-step,  TCK=1
  *
  * This gives the driver a useful transport invariant: one logical JTAG bit
- * becomes one USB byte on EP6. Only scan/readback transfers consume matching
- * EP2 response bytes; write-only transfers skip EP2 entirely.
+ * becomes one USB byte on EP6 and produces one matching sample byte on EP2.
+ * The bridge has no JTAG-state awareness, so every EP2 byte must be consumed;
+ * callers only decide whether the sample is retained or discarded.
  */
 static inline uint8_t al_link_encode_cycle(int tms, int tdi)
 {
@@ -362,22 +387,116 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
 /*
  * Ship an already-encoded sequence of cycles to the adapter.
  *
- * Real AL-LINK (FX2LP) direct IO mode only produces EP2 data for cycles that
- * are actually sampled; write-only traffic (TLR reset, statemove, pathmove,
- * tms, stableclocks) returns nothing on EP2, and reading it there blocks until
- * the 6000 ms timeout. So readback gates the EP2 read: scans pass rx_buf with a
- * non-zero rx_len; write-only callers pass NULL/0 and the transport skips EP2.
+ * AL-LINK is a USB-to-IO bridge and returns one EP2 sample byte for every EP6
+ * output byte regardless of the JTAG state. The readback flag therefore only
+ * controls whether samples are retained; the transport always drains EP2.
  */
 static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
 	size_t num_cycles, bool readback, int idle_tms, int idle_tdi)
 {
 	uint8_t idle_byte = al_link_encode_idle(idle_tms, idle_tdi);
+	(void)rx_buf;
+	(void)readback;
 
 	if (num_cycles == 0)
 		return ERROR_OK;
 
-	return al_link_usb_xfer(tx_buf, num_cycles,
-		readback ? rx_buf : NULL, readback ? num_cycles : 0, idle_byte);
+	return al_link_batch_append(tx_buf, num_cycles, idle_byte);
+}
+
+static int al_link_batch_reserve_tx(size_t extra)
+{
+	if (extra > SIZE_MAX - al_link_batch.tx_len)
+		return ERROR_FAIL;
+
+	size_t needed = al_link_batch.tx_len + extra;
+	if (needed <= al_link_batch.tx_capacity)
+		return ERROR_OK;
+
+	size_t capacity = al_link_batch.tx_capacity ? al_link_batch.tx_capacity :
+		AL_LINK_DEFAULT_PACKET_SIZE;
+	while (capacity < needed) {
+		if (capacity > SIZE_MAX / 2) {
+			capacity = needed;
+			break;
+		}
+		capacity *= 2;
+	}
+
+	uint8_t *new_tx = realloc(al_link_batch.tx, capacity);
+	if (!new_tx)
+		return ERROR_FAIL;
+
+	al_link_batch.tx = new_tx;
+	al_link_batch.tx_capacity = capacity;
+	return ERROR_OK;
+}
+
+static int al_link_batch_append(const uint8_t *tx, size_t tx_len, uint8_t idle_byte)
+{
+	int retval = al_link_batch_reserve_tx(tx_len);
+	if (retval != ERROR_OK)
+		return retval;
+
+	memcpy(al_link_batch.tx + al_link_batch.tx_len, tx, tx_len);
+	al_link_batch.tx_len += tx_len;
+	al_link_batch.idle_byte = idle_byte;
+	return ERROR_OK;
+}
+
+static int al_link_batch_add_capture(size_t stream_offset, int num_bits,
+	uint8_t *scan_buffer, struct scan_command *scan, bool readback)
+{
+	if (al_link_batch.capture_count == al_link_batch.capture_capacity) {
+		size_t capacity = al_link_batch.capture_capacity ?
+			al_link_batch.capture_capacity * 2 : 8;
+		struct al_link_capture *captures = realloc(al_link_batch.captures,
+			capacity * sizeof(*captures));
+		if (!captures)
+			return ERROR_FAIL;
+		al_link_batch.captures = captures;
+		al_link_batch.capture_capacity = capacity;
+	}
+
+	struct al_link_capture *capture =
+		&al_link_batch.captures[al_link_batch.capture_count++];
+	capture->stream_offset = stream_offset;
+	capture->num_bits = num_bits;
+	capture->scan_buffer = scan_buffer;
+	capture->scan = scan;
+	capture->readback = readback;
+	return ERROR_OK;
+}
+
+static void al_link_batch_clear(void)
+{
+	for (size_t i = 0; i < al_link_batch.capture_count; i++)
+		free(al_link_batch.captures[i].scan_buffer);
+
+	free(al_link_batch.tx);
+	free(al_link_batch.captures);
+	memset(&al_link_batch, 0, sizeof(al_link_batch));
+}
+
+static int al_link_batch_flush(void)
+{
+	if (al_link_batch.tx_len == 0)
+		return ERROR_OK;
+
+	int retval = al_link_usb_xfer(al_link_batch.tx, al_link_batch.tx_len,
+		al_link_batch.idle_byte);
+	if (retval == ERROR_OK) {
+		for (size_t i = 0; i < al_link_batch.capture_count; i++) {
+			struct al_link_capture *capture = &al_link_batch.captures[i];
+
+			retval = jtag_read_buffer(capture->scan_buffer, capture->scan);
+			if (retval != ERROR_OK)
+				break;
+		}
+	}
+
+	al_link_batch_clear();
+	return retval;
 }
 
 /*
@@ -412,19 +531,6 @@ static int al_link_execute_tlr_reset(void)
 }
 
 /*
- * Session byte-stream accounting for EP2 readback alignment.
- *
- * The FX2LP firmware returns exactly one EP2 byte for every EP6 byte it
- * receives (real cycles, idle padding, and write-only traffic alike). Because
- * write-only operations never read their EP2 bytes back, those bytes pile up in
- * the device FIFO and would otherwise displace real readback data. stream_w
- * counts every byte written to EP6, stream_r every byte read from EP2; both are
- * reset to zero when a fresh session opens (after the EP2 drain).
- */
-static uint64_t al_link_stream_w;
-static uint64_t al_link_stream_r;
-
-/*
  * Open the adapter via the CyUSB driver and reset endpoint pipes.
  *
  * The driver opens a CyUSB device interface directly, so there is no explicit
@@ -456,11 +562,6 @@ static int al_link_usb_open(void)
 	 * observes stale data.
 	 */
 	al_link_usb_drain_ep2();
-
-	/* Fresh session: the device FIFO was just drained, so our byte-stream
-	 * accounting starts from zero. */
-	al_link_stream_w = 0;
-	al_link_stream_r = 0;
 
 	al_link.usb.is_open = true;
 	al_link.usb.io_failed = false;
@@ -574,24 +675,18 @@ static void al_link_dump_tx_bytes(const char *tag, const uint8_t *buf, size_t le
 /*
  * Transfer a logical byte stream using the AL-LINK direct-mode framing.
  *
- * Write-only callers pass rx_len == 0 and are sent at their real length with no
- * EP2 read. Scan/readback callers pass rx_len > 0 and are transferred in
- * packet_size-aligned EP6/EP2 pairs. The write is padded with idle_byte up to a
- * packet_size boundary so every readback byte lands inside a released EP2 batch;
- * bytes belonging to preceding write-only ops (and this scan's padding) are read
- * and discarded, keeping the EP2 stream aligned with EP6 (see al_link_stream_w).
+ * Every logical operation is padded to a USB2 high-speed packet boundary. Each
+ * 512-byte EP6 write is immediately followed by one 512-byte EP2 read. Only the
+ * samples inside registered SHIFT-IR/DR capture windows are decoded directly;
+ * write-only, SCAN_OUT, and padding samples are consumed and discarded.
  */
-static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
-	uint8_t *rx, size_t rx_len, uint8_t idle_byte)
+static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte)
 {
 	size_t offset = 0;
-	uint8_t *tx_packet = NULL;
-	uint8_t *rx_packet = NULL;
-	int transferred = 0;
-	int retval;
-	/* Temporary diagnostic accumulators; only populated when
-	 * al_link_dump_raw_rx is enabled. See the histogram dump right before
-	 * this function returns in the rx_len > 0 path. */
+	size_t ps = al_link.config.packet_size;
+	uint8_t *tx_packet;
+	uint8_t *rx_packet;
+	/* Temporary diagnostic accumulators for samples retained by capture windows. */
 	size_t dbg_bit_ones[8] = {0};
 	size_t dbg_bit_total = 0;
 	uint8_t dbg_first_bytes[16];
@@ -605,68 +700,20 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 		return ERROR_FAIL;
 	}
 
-	if (tx_len > (size_t)INT_MAX || rx_len > (size_t)INT_MAX) {
-		LOG_ERROR("AL-LINK: transfer too large for CyUSB API (tx=%u rx=%u)",
-			(unsigned int)tx_len, (unsigned int)rx_len);
-		return ERROR_FAIL;
-	}
-
-	if (rx_len > tx_len) {
-		LOG_ERROR("AL-LINK: EP2 readback length exceeds EP6 transfer length");
-		return ERROR_FAIL;
-	}
-	if (rx_len > 0 && !rx) {
-		LOG_ERROR("AL-LINK: EP2 readback requested without a destination buffer");
+	if (tx_len > (size_t)INT_MAX) {
+		LOG_ERROR("AL-LINK: transfer too large for CyUSB API (tx=%u)",
+			(unsigned int)tx_len);
 		return ERROR_FAIL;
 	}
 
 	if (tx_len == 0)
 		return ERROR_OK;
-
-	if (rx_len == 0) {
-		while (offset < tx_len) {
-			size_t chunk = tx_len - offset;
-
-			if (chunk > al_link.config.packet_size)
-				chunk = al_link.config.packet_size;
-
-			transferred = 0;
-			LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u chunk=%u logical_tx=%u logical_rx=%u packet_size=%u",
-				al_link.config.ep_out,
-				(unsigned int)offset,
-				(unsigned int)chunk,
-				(unsigned int)tx_len,
-				(unsigned int)rx_len,
-				(unsigned int)al_link.config.packet_size);
-			if (al_link.config.dump_raw_tx)
-				al_link_dump_tx_bytes("write-only", tx + offset, chunk);
-			retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
-				tx + offset, (int)chunk, &transferred, AL_LINK_USB_TIMEOUT_MS);
-			LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
-				retval, transferred);
-			if (retval != 0)
-				return al_link_usb_mark_failed("EP6 write");
-			if (transferred != (int)chunk) {
-				LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
-					(unsigned int)chunk, transferred);
-				return al_link_usb_mark_failed("EP6 write");
-			}
-
-			al_link_stream_w += (uint64_t)chunk;
-			offset += chunk;
-		}
-
-		return ERROR_OK;
+	if (ps == 0 || ps > (size_t)INT_MAX) {
+		LOG_ERROR("AL-LINK: invalid USB packet size %u", (unsigned int)ps);
+		return ERROR_FAIL;
 	}
 
-	size_t ps = al_link.config.packet_size;
-
-	/*
-	 * Padding can push a single write up to just under two packets, so the TX
-	 * scratch buffer must hold 2 * packet_size. EP2 is drained one packet_size
-	 * batch at a time into rx_packet.
-	 */
-	tx_packet = malloc(ps * 2);
+	tx_packet = malloc(ps);
 	rx_packet = malloc(ps);
 	if (!tx_packet || !rx_packet) {
 		free(tx_packet);
@@ -677,46 +724,25 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 
 	while (offset < tx_len) {
 		size_t real_chunk = tx_len - offset;
-		size_t keep = offset < rx_len ? rx_len - offset : 0;
-		uint64_t data_start = al_link_stream_w;
-		uint64_t end;
-		size_t write_len;
-		size_t pad_len;
+		size_t captured = 0;
+		int transferred = 0;
+		int retval;
 
 		if (real_chunk > ps)
 			real_chunk = ps;
-		if (keep > real_chunk)
-			keep = real_chunk;
-
-		/*
-		 * Pad the write up to the next packet_size boundary so this scan's
-		 * bytes all fall inside released EP2 batches (no straddle). The
-		 * padding is appended after the scan has already exited to a stable
-		 * end state, so the extra idle cycles are harmless.
-		 */
-		end = data_start + real_chunk;
-		if (end % ps)
-			end += ps - (end % ps);
-		write_len = (size_t)(end - data_start);
-		pad_len = write_len - real_chunk;
-
-		memset(tx_packet, idle_byte, write_len);
+		memset(tx_packet, idle_byte, ps);
 		memcpy(tx_packet, tx + offset, real_chunk);
 
-		transferred = 0;
-		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u real_chunk=%u write_len=%u pad_len=%u data_start=%u logical_tx=%u logical_rx=%u",
+		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u real=%u padded=%u logical_tx=%u",
 			al_link.config.ep_out,
 			(unsigned int)offset,
 			(unsigned int)real_chunk,
-			(unsigned int)write_len,
-			(unsigned int)pad_len,
-			(unsigned int)data_start,
-			(unsigned int)tx_len,
-			(unsigned int)rx_len);
+			(unsigned int)ps,
+			(unsigned int)tx_len);
 		if (al_link.config.dump_raw_tx)
-			al_link_dump_tx_bytes("scan", tx_packet, write_len);
+			al_link_dump_tx_bytes("batch", tx_packet, ps);
 		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
-			tx_packet, (int)write_len, &transferred, AL_LINK_USB_TIMEOUT_MS);
+			tx_packet, (int)ps, &transferred, AL_LINK_USB_TIMEOUT_MS);
 		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
 			retval, transferred);
 		if (retval != 0) {
@@ -724,90 +750,74 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len,
 			free(rx_packet);
 			return al_link_usb_mark_failed("EP6 write");
 		}
-		if (transferred != (int)write_len) {
+		if (transferred != (int)ps) {
 			LOG_ERROR("AL-LINK: short EP6 write, expected %u bytes, wrote %d",
-				(unsigned int)write_len, transferred);
+				(unsigned int)ps, transferred);
 			free(tx_packet);
 			free(rx_packet);
 			return al_link_usb_mark_failed("EP6 write");
 		}
 
-		al_link_stream_w = end;
+		transferred = 0;
+		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u read_len=%u",
+			al_link.config.ep_in, (unsigned int)offset,
+			(unsigned int)ps);
+		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
+			rx_packet, (int)ps, &transferred, AL_LINK_USB_TIMEOUT_MS);
+		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
+			retval, transferred);
+		if (retval != 0) {
+			free(tx_packet);
+			free(rx_packet);
+			return al_link_usb_mark_failed("EP2 read");
+		}
+		if (transferred != (int)ps) {
+			LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
+				(unsigned int)ps, transferred);
+			free(tx_packet);
+			free(rx_packet);
+			return al_link_usb_mark_failed("EP2 read");
+		}
 
-		/*
-		 * Drain every full batch the device has now released (up to end),
-		 * copying only the bytes that belong to this scan's readback window
-		 * [data_start, data_start + keep). Leading bytes are the unread EP2
-		 * responses of preceding write-only operations and are discarded.
-		 */
-		while (al_link_stream_r < end) {
-			uint64_t batch_start = al_link_stream_r;
-			uint64_t batch_end = batch_start + ps;
+		for (size_t capture_index = 0;
+			capture_index < al_link_batch.capture_count; capture_index++) {
+			struct al_link_capture *capture =
+				&al_link_batch.captures[capture_index];
+			size_t capture_start = capture->stream_offset;
+			size_t capture_end = capture_start + (size_t)capture->num_bits;
+			size_t frame_end = offset + real_chunk;
+			size_t overlap_start = capture_start > offset ? capture_start : offset;
+			size_t overlap_end = capture_end < frame_end ? capture_end : frame_end;
 
-			transferred = 0;
-			LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x batch_start=%u read_len=%u keep=%u",
-				al_link.config.ep_in,
-				(unsigned int)batch_start,
-				(unsigned int)ps,
-				(unsigned int)keep);
-			retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-				rx_packet, (int)ps, &transferred, AL_LINK_USB_TIMEOUT_MS);
-			LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-				retval, transferred);
-			if (retval != 0) {
-				free(tx_packet);
-				free(rx_packet);
-				return al_link_usb_mark_failed("EP2 read");
-			}
-			if (transferred != (int)ps) {
-				LOG_ERROR("AL-LINK: short EP2 read, expected %u bytes, got %d",
-					(unsigned int)ps, transferred);
-				free(tx_packet);
-				free(rx_packet);
-				return al_link_usb_mark_failed("EP2 read");
-			}
+			if (!capture->readback || overlap_start >= overlap_end)
+				continue;
 
-			al_link_stream_r = batch_end;
+			for (size_t stream_index = overlap_start;
+				stream_index < overlap_end; stream_index++) {
+				size_t source_index = stream_index - offset;
+				size_t bit_index = stream_index - capture_start;
+				uint8_t sample = rx_packet[source_index];
 
-			if (keep > 0) {
-				uint64_t want_start = data_start;
-				uint64_t want_end = data_start + keep;
-				uint64_t ov_start = want_start > batch_start ? want_start : batch_start;
-				uint64_t ov_end = want_end < batch_end ? want_end : batch_end;
+				al_link_set_bit(capture->scan_buffer, (unsigned int)bit_index,
+					al_link_decode_tdo(sample));
+				captured++;
 
-				if (ov_start < ov_end) {
-					size_t n = (size_t)(ov_end - ov_start);
-					size_t dst = offset + (size_t)(ov_start - want_start);
-					size_t src = (size_t)(ov_start - batch_start);
-
-					memcpy(rx + dst, rx_packet + src, n);
-
-					if (al_link.config.dump_raw_rx) {
-						for (size_t i = 0; i < n; i++) {
-							uint8_t byte = rx_packet[src + i];
-
-							for (int bit = 0; bit < 8; bit++) {
-								if ((byte >> bit) & 0x1)
-									dbg_bit_ones[bit]++;
-							}
-							dbg_bit_total++;
-
-							if (dbg_first_bytes_len < sizeof(dbg_first_bytes))
-								dbg_first_bytes[dbg_first_bytes_len++] = byte;
-						}
+				if (al_link.config.dump_raw_rx) {
+					for (int bit = 0; bit < 8; bit++) {
+						if ((sample >> bit) & 0x1)
+							dbg_bit_ones[bit]++;
 					}
+					dbg_bit_total++;
+					if (dbg_first_bytes_len < sizeof(dbg_first_bytes))
+						dbg_first_bytes[dbg_first_bytes_len++] = sample;
 				}
 			}
 		}
 
 		if (al_link.config.dump_raw_rx)
-			LOG_INFO("AL-LINK: readback pkt data_start=%u real=%u keep=%u write_len=%u stream_w=%u stream_r=%u",
-				(unsigned int)data_start,
-				(unsigned int)real_chunk,
-				(unsigned int)keep,
-				(unsigned int)write_len,
-				(unsigned int)al_link_stream_w,
-				(unsigned int)al_link_stream_r);
+			LOG_INFO("AL-LINK: frame offset=%u real=%u captured=%u discarded=%u",
+				(unsigned int)offset, (unsigned int)real_chunk,
+				(unsigned int)captured, (unsigned int)(ps - captured));
 
 		offset += real_chunk;
 	}
@@ -1069,10 +1079,9 @@ static int al_link_execute_pathmove(struct jtag_command *cmd)
  * 1. Move into the correct shift state if needed.
  * 2. Ask OpenOCD to build the outgoing TDI buffer.
  * 3. Encode each scan bit into one AL-LINK byte.
- * 4. Read the matching response bytes and decode TDO if required.
- * 5. Let jtag_read_buffer() distribute the captured bits back to the original
- *    scan fields.
- * 6. If the scan exits shift state, finish the remaining TAP path.
+ * 4. Record the scan's byte-stream window for deferred EP2 extraction.
+ * 5. If the scan exits shift state, append the remaining TAP path.
+ * 6. Decode TDO and call jtag_read_buffer() when the queue batch is flushed.
  */
 static int al_link_execute_scan(struct jtag_command *cmd)
 {
@@ -1086,6 +1095,7 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	int last_tms = 0;
 	int last_tdi = 0;
 	int scan_size;
+	size_t stream_offset;
 	size_t tx_index;
 	int retval;
 
@@ -1115,26 +1125,24 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 		tx_buf[tx_index++] = al_link_encode_cycle(tms, tdi);
 	}
 
+	stream_offset = al_link_batch.tx_len;
 	retval = al_link_send_cycles(tx_buf, rx_buf,
 		(size_t)scan_size,
 		readback, last_tms, last_tdi);
 	if (retval != ERROR_OK)
 		goto out;
 
+	retval = al_link_batch_add_capture(stream_offset, scan_size, buffer,
+		cmd->cmd.scan, readback);
+	if (retval != ERROR_OK)
+		goto out;
+	buffer = NULL;
+
 	if (saved_end_state != shift_state) {
 		retval = al_link_execute_statemove(1);
 		if (retval != ERROR_OK)
 			goto out;
 	}
-
-	if (readback) {
-		for (int bit = 0; bit < scan_size; bit++)
-			al_link_set_bit(buffer, (unsigned int)bit, al_link_decode_tdo(rx_buf[bit]));
-	}
-
-	retval = jtag_read_buffer(buffer, cmd->cmd.scan);
-	if (retval != ERROR_OK)
-		goto out;
 
 out:
 	free(buffer);
@@ -1213,8 +1221,9 @@ static int al_link_execute_queue(void)
 			retval = al_link_execute_scan(cmd);
 			break;
 		case JTAG_SLEEP:
-			jtag_sleep(cmd->cmd.sleep->us);
-			retval = ERROR_OK;
+			retval = al_link_batch_flush();
+			if (retval == ERROR_OK)
+				jtag_sleep(cmd->cmd.sleep->us);
 			break;
 		case JTAG_STABLECLOCKS:
 			retval = al_link_execute_stableclocks(cmd);
@@ -1228,13 +1237,15 @@ static int al_link_execute_queue(void)
 			break;
 		}
 
-		if (retval != ERROR_OK)
+		if (retval != ERROR_OK) {
+			al_link_batch_clear();
 			return retval;
+		}
 
 		cmd = cmd->next;
 	}
 
-	return ERROR_OK;
+	return al_link_batch_flush();
 }
 
 /*
@@ -1272,6 +1283,7 @@ static int al_link_init(void)
 /* Driver teardown. */
 static int al_link_quit(void)
 {
+	al_link_batch_clear();
 	al_link_usb_close();
 	return ERROR_OK;
 }
@@ -1293,7 +1305,13 @@ static int al_link_reset(int srst, int trst)
 		.cmd.reset = &reset,
 	};
 
-	return al_link_execute_reset(&cmd);
+	int retval = al_link_execute_reset(&cmd);
+	if (retval != ERROR_OK) {
+		al_link_batch_clear();
+		return retval;
+	}
+
+	return al_link_batch_flush();
 }
 
 /*
@@ -1403,9 +1421,9 @@ COMMAND_HANDLER(al_link_handle_interface_command)
 /*
  * Set the maximum chunk size used by the transport layer.
  *
- * This is transport metadata rather than protocol metadata; the queue compiler
- * itself does not care whether the underlying endpoint size is 64 bytes or 512
- * bytes.
+ * Real AL-Link transfers are fixed to one USB2 high-speed packet per EP6/EP2
+ * operation. Keep the command for configuration compatibility, but reject any
+ * value other than 512.
  */
 COMMAND_HANDLER(al_link_handle_packet_size_command)
 {
@@ -1415,8 +1433,11 @@ COMMAND_HANDLER(al_link_handle_packet_size_command)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	COMMAND_PARSE_NUMBER(u16, CMD_ARGV[0], packet_size);
-	if (packet_size == 0)
-		return ERROR_COMMAND_SYNTAX_ERROR;
+	if (packet_size != AL_LINK_DEFAULT_PACKET_SIZE) {
+		LOG_ERROR("AL-LINK: packet size is fixed at %u bytes",
+			AL_LINK_DEFAULT_PACKET_SIZE);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
+	}
 
 	al_link.config.packet_size = packet_size;
 	return ERROR_OK;
