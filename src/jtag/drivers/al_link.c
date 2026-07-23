@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "al_link_cyusb.h"
@@ -42,15 +41,7 @@
 #define AL_LINK_EP_DATA_OUT 0x06
 #define AL_LINK_EP_CFG_OUT  0x08
 
-/*
- * Ground truth from a real, successful Anlogic vendor-tool capture
- * (Wireshark/USBPcap on the same AL-Link probe, VID:PID 336C:1001): the EP8
- * mode-config packet it sends is { 0x01, speed_byte }, not { 0x04, speed_byte
- * }. The 0x04 "direct I/O" assumption was reverse-engineered from an
- * unrelated STM32-based reference firmware and was never verified against
- * real FX2LP traffic. Name kept for compatibility even though the value no
- * longer matches the old "direct I/O" description.
- */
+/* Mode byte verified against a successful Anlogic vendor-tool USB capture. */
 #define AL_LINK_MODE_DIRECT 0x01
 
 #define AL_LINK_SPEED_12M   0x00
@@ -96,13 +87,6 @@ struct al_link_config {
 	uint8_t speed_byte;
 	bool sample_high_nibble;
 	bool speed_byte_overridden;
-	/* Temporary diagnostic: histogram every raw EP2 response bit instead of
-	 * only trusting the configured TDO sample position. Off by default. */
-	bool dump_raw_rx;
-	/* Temporary diagnostic: dump the raw bytes actually written to EP6 (real
-	 * cycles and idle padding alike) so the driver-emitted stream can be
-	 * compared byte-for-byte against a logic-analyzer capture. Off by default. */
-	bool dump_raw_tx;
 };
 
 /* Transport state owned by the driver instance. */
@@ -270,16 +254,8 @@ static inline uint8_t al_link_encode_cycle(int tms, int tdi)
 /*
  * Encode a padding/no-op cycle used only to fill out packet-aligned transfers.
  *
- * Ground truth from a real, successful Anlogic vendor-tool capture (Bus Hound
- * / USBPcap on the same AL-Link probe, VID:PID 336C:1001) shows that its tail
- * padding bytes are a distinct 0x44 sentinel (both nibbles encode tck=1),
- * never the tck=0 setup/clock split used by real cycles (see
- * al_link_encode_cycle). Real cycles always have tck=0 in the low nibble, so
- * a tck=1 low nibble is otherwise unreachable and lets the adapter tell "this
- * byte is padding, do not clock it" apart from "this byte is a real TMS/TDI
- * cycle". Our previous idle encoding used tck=false in both nibbles, which is
- * indistinguishable from a real cycle's low nibble and was likely being
- * executed as an extra, unwanted clock by the adapter.
+ * Vendor-tool captures use a distinct sentinel with TCK set in both nibbles.
+ * This cannot collide with a real cycle, whose low-nibble TCK is always clear.
  */
 static inline uint8_t al_link_encode_idle(int tms, int tdi)
 {
@@ -291,10 +267,8 @@ static inline uint8_t al_link_encode_idle(int tms, int tdi)
 /*
  * Decode the effective TDO sample for one logical cycle.
  *
- * The initial assumption is that the high-nibble sample aligns better with the
- * actual JTAG clock edge, because it corresponds to the second half-step where
- * TCK is high. This is configurable because real hardware may prove that the
- * low-nibble sample is the correct one.
+ * High-nibble sampling is verified on current hardware. The configurable low
+ * sample remains available for compatibility with other adapter revisions.
  */
 static inline int al_link_decode_tdo(uint8_t rx_byte)
 {
@@ -353,17 +327,10 @@ static int al_link_map_khz(uint8_t speed_byte)
 	return 2000;
 }
 
-/*
- * Allocate parallel TX/RX buffers for a sequence of logical cycles.
- *
- * Each logical cycle maps to one outgoing byte. Allocating the optional RX
- * buffer here keeps scan readback paths straightforward, while non-scan paths
- * can pass readback=false and avoid waiting for EP2 data.
- */
-static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **rx_buf)
+/* Allocate the encoded TX buffer for a sequence of logical cycles. */
+static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf)
 {
 	*tx_buf = NULL;
-	*rx_buf = NULL;
 
 	if (num_cycles == 0)
 		return ERROR_OK;
@@ -372,14 +339,8 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
 		return ERROR_FAIL;
 
 	*tx_buf = malloc(num_cycles);
-	*rx_buf = calloc(num_cycles, 1);
-	if (!*tx_buf || !*rx_buf) {
-		free(*tx_buf);
-		free(*rx_buf);
-		*tx_buf = NULL;
-		*rx_buf = NULL;
+	if (!*tx_buf)
 		return ERROR_FAIL;
-	}
 
 	return ERROR_OK;
 }
@@ -387,16 +348,13 @@ static int al_link_alloc_cycles(size_t num_cycles, uint8_t **tx_buf, uint8_t **r
 /*
  * Ship an already-encoded sequence of cycles to the adapter.
  *
- * AL-LINK is a USB-to-IO bridge and returns one EP2 sample byte for every EP6
- * output byte regardless of the JTAG state. The readback flag therefore only
- * controls whether samples are retained; the transport always drains EP2.
+ * AL-LINK returns one EP2 sample for every EP6 byte. Capture windows determine
+ * which samples are retained when the accumulated batch is transferred.
  */
-static int al_link_send_cycles(uint8_t *tx_buf, uint8_t *rx_buf,
-	size_t num_cycles, bool readback, int idle_tms, int idle_tdi)
+static int al_link_send_cycles(const uint8_t *tx_buf, size_t num_cycles,
+	int idle_tms, int idle_tdi)
 {
 	uint8_t idle_byte = al_link_encode_idle(idle_tms, idle_tdi);
-	(void)rx_buf;
-	(void)readback;
 
 	if (num_cycles == 0)
 		return ERROR_OK;
@@ -509,20 +467,17 @@ static int al_link_batch_flush(void)
 static int al_link_execute_tlr_reset(void)
 {
 	uint8_t *tx_buf;
-	uint8_t *rx_buf;
 	int retval;
 
-	retval = al_link_alloc_cycles(AL_LINK_TLR_RESET_CYCLES, &tx_buf, &rx_buf);
+	retval = al_link_alloc_cycles(AL_LINK_TLR_RESET_CYCLES, &tx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
 	for (size_t index = 0; index < AL_LINK_TLR_RESET_CYCLES; index++)
 		tx_buf[index] = al_link_encode_cycle(1, 0);
 
-	retval = al_link_send_cycles(tx_buf, rx_buf,
-		AL_LINK_TLR_RESET_CYCLES, false, 1, 0);
+	retval = al_link_send_cycles(tx_buf, AL_LINK_TLR_RESET_CYCLES, 1, 0);
 	free(tx_buf);
-	free(rx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -652,26 +607,6 @@ static int al_link_usb_mark_failed(const char *where)
 	return ERROR_FAIL;
 }
 
-
-/*
- * Temporary bring-up diagnostic: dump the raw bytes actually handed to
- * al_cyusb_bulk_write() on EP6. Only the leading bytes are printed (capped so
- * a full packet_size scan does not flood the log), which is enough to confirm
- * the real-cycle encoding and the real-to-padding transition of a scan.
- */
-static void al_link_dump_tx_bytes(const char *tag, const uint8_t *buf, size_t len)
-{
-	char hex[64 * 3 + 1];
-	size_t show = len < 64 ? len : 64;
-	size_t pos = 0;
-
-	for (size_t i = 0; i < show; i++)
-		pos += (size_t)snprintf(hex + pos, sizeof(hex) - pos, "%02x ", buf[i]);
-
-	LOG_INFO("AL-LINK: raw TX %s len=%u first %u bytes: %s",
-		tag, (unsigned int)len, (unsigned int)show, hex);
-}
-
 /*
  * Transfer a logical byte stream using the AL-LINK direct-mode framing.
  *
@@ -686,11 +621,7 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte)
 	size_t ps = al_link.config.packet_size;
 	uint8_t *tx_packet;
 	uint8_t *rx_packet;
-	/* Temporary diagnostic accumulators for samples retained by capture windows. */
-	size_t dbg_bit_ones[8] = {0};
-	size_t dbg_bit_total = 0;
-	uint8_t dbg_first_bytes[16];
-	size_t dbg_first_bytes_len = 0;
+	size_t packet_count = 0;
 
 	if (!al_link.usb.is_open)
 		return ERROR_FAIL;
@@ -724,7 +655,6 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte)
 
 	while (offset < tx_len) {
 		size_t real_chunk = tx_len - offset;
-		size_t captured = 0;
 		int transferred = 0;
 		int retval;
 
@@ -733,18 +663,8 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte)
 		memset(tx_packet, idle_byte, ps);
 		memcpy(tx_packet, tx + offset, real_chunk);
 
-		LOG_DEBUG("AL-LINK: EP6 write begin ep=0x%02x offset=%u real=%u padded=%u logical_tx=%u",
-			al_link.config.ep_out,
-			(unsigned int)offset,
-			(unsigned int)real_chunk,
-			(unsigned int)ps,
-			(unsigned int)tx_len);
-		if (al_link.config.dump_raw_tx)
-			al_link_dump_tx_bytes("batch", tx_packet, ps);
 		retval = al_cyusb_bulk_write(&al_link.usb.cyusb, al_link.config.ep_out,
 			tx_packet, (int)ps, &transferred, AL_LINK_USB_TIMEOUT_MS);
-		LOG_DEBUG("AL-LINK: EP6 write done retval=%d transferred=%d",
-			retval, transferred);
 		if (retval != 0) {
 			free(tx_packet);
 			free(rx_packet);
@@ -759,13 +679,8 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte)
 		}
 
 		transferred = 0;
-		LOG_DEBUG("AL-LINK: EP2 read begin ep=0x%02x offset=%u read_len=%u",
-			al_link.config.ep_in, (unsigned int)offset,
-			(unsigned int)ps);
 		retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
 			rx_packet, (int)ps, &transferred, AL_LINK_USB_TIMEOUT_MS);
-		LOG_DEBUG("AL-LINK: EP2 read done retval=%d transferred=%d",
-			retval, transferred);
 		if (retval != 0) {
 			free(tx_packet);
 			free(rx_packet);
@@ -800,48 +715,15 @@ static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte)
 
 				al_link_set_bit(capture->scan_buffer, (unsigned int)bit_index,
 					al_link_decode_tdo(sample));
-				captured++;
-
-				if (al_link.config.dump_raw_rx) {
-					for (int bit = 0; bit < 8; bit++) {
-						if ((sample >> bit) & 0x1)
-							dbg_bit_ones[bit]++;
-					}
-					dbg_bit_total++;
-					if (dbg_first_bytes_len < sizeof(dbg_first_bytes))
-						dbg_first_bytes[dbg_first_bytes_len++] = sample;
-				}
 			}
 		}
 
-		if (al_link.config.dump_raw_rx)
-			LOG_INFO("AL-LINK: frame offset=%u real=%u captured=%u discarded=%u",
-				(unsigned int)offset, (unsigned int)real_chunk,
-				(unsigned int)captured, (unsigned int)(ps - captured));
-
 		offset += real_chunk;
+		packet_count++;
 	}
 
-	if (al_link.config.dump_raw_rx && dbg_bit_total > 0) {
-		LOG_INFO("AL-LINK: raw EP2 bit histogram over %u valid bytes: "
-			"bit0=%u bit1=%u bit2=%u bit3=%u bit4=%u bit5=%u bit6=%u bit7=%u (ones out of %u)",
-			(unsigned int)dbg_bit_total,
-			(unsigned int)dbg_bit_ones[0], (unsigned int)dbg_bit_ones[1],
-			(unsigned int)dbg_bit_ones[2], (unsigned int)dbg_bit_ones[3],
-			(unsigned int)dbg_bit_ones[4], (unsigned int)dbg_bit_ones[5],
-			(unsigned int)dbg_bit_ones[6], (unsigned int)dbg_bit_ones[7],
-			(unsigned int)dbg_bit_total);
-
-		char hex[sizeof(dbg_first_bytes) * 3 + 1];
-		size_t hex_pos = 0;
-
-		for (size_t i = 0; i < dbg_first_bytes_len; i++)
-			hex_pos += (size_t)snprintf(hex + hex_pos, sizeof(hex) - hex_pos,
-				"%02x ", dbg_first_bytes[i]);
-
-		LOG_INFO("AL-LINK: raw EP2 first %u bytes: %s",
-			(unsigned int)dbg_first_bytes_len, hex);
-	}
+	LOG_DEBUG("AL-LINK: transferred %u logical byte(s) in %u packet(s)",
+		(unsigned int)tx_len, (unsigned int)packet_count);
 
 	free(tx_packet);
 	free(rx_packet);
@@ -880,13 +762,12 @@ static int al_link_execute_statemove(size_t skip)
 	int tms_count = tap_get_tms_path_len(tap_get_state(), tap_get_end_state());
 	int last_tms = 0;
 	uint8_t *tx_buf;
-	uint8_t *rx_buf;
 	int retval;
 
 	if ((size_t)tms_count < skip)
 		return ERROR_FAIL;
 
-	retval = al_link_alloc_cycles((size_t)tms_count - skip, &tx_buf, &rx_buf);
+	retval = al_link_alloc_cycles((size_t)tms_count - skip, &tx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -895,10 +776,8 @@ static int al_link_execute_statemove(size_t skip)
 		tx_buf[index - (int)skip] = al_link_encode_cycle(last_tms, 0);
 	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf,
-		(size_t)tms_count - skip, false, last_tms, 0);
+	retval = al_link_send_cycles(tx_buf, (size_t)tms_count - skip, last_tms, 0);
 	free(tx_buf);
-	free(rx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -919,10 +798,9 @@ static int al_link_execute_tms(struct jtag_command *cmd)
 	const uint8_t *bits = cmd->cmd.tms->bits;
 	int last_tms = 0;
 	uint8_t *tx_buf;
-	uint8_t *rx_buf;
 	int retval;
 
-	retval = al_link_alloc_cycles(num_bits, &tx_buf, &rx_buf);
+	retval = al_link_alloc_cycles(num_bits, &tx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -931,9 +809,8 @@ static int al_link_execute_tms(struct jtag_command *cmd)
 		tx_buf[bit] = al_link_encode_cycle(last_tms, 0);
 	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf, num_bits, false, last_tms, 0);
+	retval = al_link_send_cycles(tx_buf, num_bits, last_tms, 0);
 	free(tx_buf);
-	free(rx_buf);
 	return retval;
 }
 
@@ -948,7 +825,6 @@ static int al_link_execute_stableclocks(struct jtag_command *cmd)
 	int tms;
 	int retval;
 	uint8_t *tx_buf;
-	uint8_t *rx_buf;
 	int num_cycles = cmd->cmd.stableclocks->num_cycles;
 
 	switch (tap_get_state()) {
@@ -968,17 +844,15 @@ static int al_link_execute_stableclocks(struct jtag_command *cmd)
 		return ERROR_JTAG_QUEUE_FAILED;
 	}
 
-	retval = al_link_alloc_cycles((size_t)num_cycles, &tx_buf, &rx_buf);
+	retval = al_link_alloc_cycles((size_t)num_cycles, &tx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
 	for (int index = 0; index < num_cycles; index++)
 		tx_buf[index] = al_link_encode_cycle(tms, 0);
 
-	retval = al_link_send_cycles(tx_buf, rx_buf,
-		(size_t)num_cycles, false, tms, 0);
+	retval = al_link_send_cycles(tx_buf, (size_t)num_cycles, tms, 0);
 	free(tx_buf);
-	free(rx_buf);
 	return retval;
 }
 
@@ -1032,10 +906,9 @@ static int al_link_execute_pathmove(struct jtag_command *cmd)
 	tap_state_t current_state = tap_get_state();
 	int last_tms = 0;
 	uint8_t *tx_buf;
-	uint8_t *rx_buf;
 	int retval;
 
-	retval = al_link_alloc_cycles((size_t)num_states, &tx_buf, &rx_buf);
+	retval = al_link_alloc_cycles((size_t)num_states, &tx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -1051,7 +924,6 @@ static int al_link_execute_pathmove(struct jtag_command *cmd)
 				tap_state_name(current_state),
 				tap_state_name(path[index]));
 			free(tx_buf);
-			free(rx_buf);
 			return ERROR_JTAG_QUEUE_FAILED;
 		}
 
@@ -1060,10 +932,8 @@ static int al_link_execute_pathmove(struct jtag_command *cmd)
 		current_state = path[index];
 	}
 
-	retval = al_link_send_cycles(tx_buf, rx_buf,
-		(size_t)num_states, false, last_tms, 0);
+	retval = al_link_send_cycles(tx_buf, (size_t)num_states, last_tms, 0);
 	free(tx_buf);
-	free(rx_buf);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -1090,7 +960,6 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	tap_state_t saved_end_state = cmd->cmd.scan->end_state;
 	uint8_t *buffer = NULL;
 	uint8_t *tx_buf = NULL;
-	uint8_t *rx_buf = NULL;
 	bool readback = type != SCAN_OUT;
 	int last_tms = 0;
 	int last_tdi = 0;
@@ -1112,7 +981,7 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	}
 
 	scan_size = jtag_build_buffer(cmd->cmd.scan, &buffer);
-	retval = al_link_alloc_cycles((size_t)scan_size, &tx_buf, &rx_buf);
+	retval = al_link_alloc_cycles((size_t)scan_size, &tx_buf);
 	if (retval != ERROR_OK)
 		goto out;
 
@@ -1126,9 +995,7 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 	}
 
 	stream_offset = al_link_batch.tx_len;
-	retval = al_link_send_cycles(tx_buf, rx_buf,
-		(size_t)scan_size,
-		readback, last_tms, last_tdi);
+	retval = al_link_send_cycles(tx_buf, (size_t)scan_size, last_tms, last_tdi);
 	if (retval != ERROR_OK)
 		goto out;
 
@@ -1147,7 +1014,6 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 out:
 	free(buffer);
 	free(tx_buf);
-	free(rx_buf);
 	return retval;
 }
 
@@ -1184,9 +1050,8 @@ static int al_link_execute_reset(struct jtag_command *cmd)
 /*
  * Top-level queue dispatcher.
  *
- * This function stays intentionally simple: each queue item is translated by a
- * specialized helper and the first failure aborts the whole batch. That keeps
- * early bring-up behavior explicit and easy to debug.
+ * Each queue item is translated by a specialized helper, and the first failure
+ * aborts and clears the accumulated batch.
  */
 static int al_link_execute_queue(void)
 {
@@ -1251,13 +1116,10 @@ static int al_link_execute_queue(void)
 /*
  * Driver initialization.
  *
- * The minimal contract here is:
+ * Initialization performs the adapter transport setup:
  * 1. open the USB device,
  * 2. reset/prepare the endpoint pipes,
- * 3. switch the adapter into the legacy 0x04 bit-bang mode via EP8.
- *
- * A future smoke-test step can be inserted here once the hardware is available,
- * for example one fully padded 512-byte traditional-mode batch.
+ * 3. configure mode 0x01 and the selected speed through EP8.
  */
 static int al_link_init(void)
 {
@@ -1333,9 +1195,7 @@ static int al_link_speed(int speed)
 }
 
 /*
- * For now we expose a direct identity mapping between OpenOCD kHz requests and
- * the driver's abstract speed value. Accurate frequency reporting will need
- * real hardware measurements.
+ * Map an OpenOCD kHz request to the closest supported adapter speed byte.
  */
 static int al_link_khz(int khz, int *jtag_speed)
 {
@@ -1454,7 +1314,7 @@ COMMAND_HANDLER(al_link_handle_speed_byte_command)
 	return ERROR_OK;
 }
 
-/* Choose whether TDO is decoded from the low or high nibble response sample. */
+/* Choose the TDO sample position for compatibility with adapter revisions. */
 COMMAND_HANDLER(al_link_handle_sample_nibble_command)
 {
 	if (CMD_ARGC != 1)
@@ -1464,48 +1324,6 @@ COMMAND_HANDLER(al_link_handle_sample_nibble_command)
 		al_link.config.sample_high_nibble = true;
 	else if (strcmp(CMD_ARGV[0], "low") == 0)
 		al_link.config.sample_high_nibble = false;
-	else
-		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	return ERROR_OK;
-}
-
-/*
- * Temporary bring-up diagnostic: instead of trusting the configured TDO
- * sample position, histogram every bit of every raw EP2 response byte across
- * a whole scan/readback transfer. This helps tell whether some other bit
- * (not the currently assumed bit0/bit4) is the one that actually changes.
- */
-COMMAND_HANDLER(al_link_handle_dump_raw_rx_command)
-{
-	if (CMD_ARGC != 1)
-		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	if (strcmp(CMD_ARGV[0], "on") == 0)
-		al_link.config.dump_raw_rx = true;
-	else if (strcmp(CMD_ARGV[0], "off") == 0)
-		al_link.config.dump_raw_rx = false;
-	else
-		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	return ERROR_OK;
-}
-
-/*
- * Temporary bring-up diagnostic: dump the raw bytes actually written to EP6
- * (both write-only ops and scan/readback ops, including idle padding). Pairs
- * with al_link_dump_raw_rx so the emitted TX stream can be checked against a
- * logic-analyzer capture of TMS/TDI/TCK/TDO.
- */
-COMMAND_HANDLER(al_link_handle_dump_raw_tx_command)
-{
-	if (CMD_ARGC != 1)
-		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	if (strcmp(CMD_ARGV[0], "on") == 0)
-		al_link.config.dump_raw_tx = true;
-	else if (strcmp(CMD_ARGV[0], "off") == 0)
-		al_link.config.dump_raw_tx = false;
 	else
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
@@ -1527,9 +1345,8 @@ static const struct command_registration al_link_subcommand_handlers[] = {
 /*
  * Public command set exposed by the driver.
  *
- * The commands focus on bring-up flexibility: they allow the transport details
- * and the most important protocol assumption, the TDO sample point, to be tuned
- * from a config file without rebuilding OpenOCD.
+ * The commands expose transport settings and compatibility overrides that may
+ * vary between adapter revisions.
  */
 static const struct command_registration al_link_command_handlers[] = {
 	{
@@ -1581,20 +1398,6 @@ static const struct command_registration al_link_command_handlers[] = {
 		.help = "choose which returned nibble is treated as TDO sample",
 		.usage = "(high | low)",
 	},
-	{
-		.name = "al_link_dump_raw_rx",
-		.handler = al_link_handle_dump_raw_rx_command,
-		.mode = COMMAND_ANY,
-		.help = "temporary diagnostic: histogram all 8 bits of every raw EP2 response byte",
-		.usage = "(on | off)",
-	},
-	{
-		.name = "al_link_dump_raw_tx",
-		.handler = al_link_handle_dump_raw_tx_command,
-		.mode = COMMAND_ANY,
-		.help = "temporary diagnostic: dump the raw bytes written to EP6 (real cycles and idle padding)",
-		.usage = "(on | off)",
-	},
 	COMMAND_REGISTRATION_DONE,
 };
 
@@ -1604,7 +1407,7 @@ static struct jtag_interface al_link_interface = {
 	.execute_queue = al_link_execute_queue,
 };
 
-/* Adapter driver descriptor that will be registered once the build wiring is added. */
+/* Adapter driver descriptor registered by the OpenOCD adapter core. */
 struct adapter_driver al_link_adapter_driver = {
 	.name = "al_link",
 	.transports = jtag_only,
