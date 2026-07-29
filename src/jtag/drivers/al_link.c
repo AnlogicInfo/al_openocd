@@ -44,14 +44,14 @@
 /* Mode byte verified against a successful Anlogic vendor-tool USB capture. */
 #define AL_LINK_MODE_DIRECT 0x01
 
-#define AL_LINK_SPEED_12M   0x00
+#define AL_LINK_SPEED_12M   0x01 //0x00
 #define AL_LINK_SPEED_6M    0x04
 #define AL_LINK_SPEED_4M    0x08
 #define AL_LINK_SPEED_2M    0x14
 #define AL_LINK_SPEED_1200K 0x24
 #define AL_LINK_SPEED_800K  0x38
 #define AL_LINK_SPEED_500K  0x5c
-#define AL_LINK_SPEED_200K  0x80
+#define AL_LINK_SPEED_200K  0xe8 //0x80
 #define AL_LINK_SPEED_180K  0xff
 
 /* FX2LP USB2.0 high-speed bulk endpoints use 512-byte packets. */
