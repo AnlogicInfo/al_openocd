@@ -44,7 +44,7 @@
 /* Mode byte verified against a successful Anlogic vendor-tool USB capture. */
 #define AL_LINK_MODE_DIRECT 0x01
 
-#define AL_LINK_SPEED_12M   0x01 //0x00
+#define AL_LINK_SPEED_16M   0x00
 #define AL_LINK_SPEED_6M    0x04
 #define AL_LINK_SPEED_4M    0x08
 #define AL_LINK_SPEED_2M    0x14
@@ -122,7 +122,7 @@ struct al_link_speed_entry {
 };
 
 static const struct al_link_speed_entry al_link_speed_table[] = {
-	{ 12000, AL_LINK_SPEED_12M },
+	{ 16000, AL_LINK_SPEED_16M },
 	{  6000, AL_LINK_SPEED_6M },
 	{  4000, AL_LINK_SPEED_4M },
 	{  2000, AL_LINK_SPEED_2M },
@@ -283,7 +283,7 @@ static inline int al_link_decode_tdo(uint8_t rx_byte)
  *
  * The mapping follows the legacy speed table taken from the original AL-LINK
  * tooling:
- *   12000 kHz -> 0x00
+ *   16000 kHz -> 0x00
  *    6000 kHz -> 0x04
  *    4000 kHz -> 0x08
  *    2000 kHz -> 0x14
