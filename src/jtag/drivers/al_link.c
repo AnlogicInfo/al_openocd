@@ -153,6 +153,7 @@ struct al_link_capture {
 	uint8_t *scan_buffer;
 	struct scan_command *scan;
 	bool readback;
+	bool owns_buffer;
 };
 
 struct al_link_batch {
@@ -168,13 +169,15 @@ struct al_link_batch {
 static struct al_link_batch al_link_batch;
 static int al_link_batch_append(const uint8_t *tx, size_t tx_len, uint8_t idle_byte);
 static int al_link_batch_add_capture(size_t stream_offset, int num_bits,
-	uint8_t *scan_buffer, struct scan_command *scan, bool readback);
+	uint8_t *scan_buffer, struct scan_command *scan, bool readback,
+	bool owns_buffer);
 static int al_link_batch_flush(void);
 static void al_link_batch_clear(void);
 
 static int al_link_execute_stableclocks(struct jtag_command *cmd);
 static int al_link_execute_runtest(struct jtag_command *cmd);
 static int al_link_execute_scan(struct jtag_command *cmd);
+static int al_link_execute_tdi(struct jtag_command *cmd);
 static int al_link_execute_pathmove(struct jtag_command *cmd);
 static int al_link_execute_tms(struct jtag_command *cmd);
 static int al_link_execute_statemove(size_t skip);
@@ -290,7 +293,7 @@ static inline int al_link_decode_tdo(uint8_t rx_byte)
  *    1200 kHz -> 0x24
  *     800 kHz -> 0x38
  *     500 kHz -> 0x5c
- *     200 kHz -> 0x80
+ *     200 kHz -> 0xe8
  *     180 kHz -> 0xff
  *
  * The selected entry never exceeds the requested speed. That matches the usual
@@ -403,7 +406,8 @@ static int al_link_batch_append(const uint8_t *tx, size_t tx_len, uint8_t idle_b
 }
 
 static int al_link_batch_add_capture(size_t stream_offset, int num_bits,
-	uint8_t *scan_buffer, struct scan_command *scan, bool readback)
+	uint8_t *scan_buffer, struct scan_command *scan, bool readback,
+	bool owns_buffer)
 {
 	if (al_link_batch.capture_count == al_link_batch.capture_capacity) {
 		size_t capacity = al_link_batch.capture_capacity ?
@@ -423,13 +427,16 @@ static int al_link_batch_add_capture(size_t stream_offset, int num_bits,
 	capture->scan_buffer = scan_buffer;
 	capture->scan = scan;
 	capture->readback = readback;
+	capture->owns_buffer = owns_buffer;
 	return ERROR_OK;
 }
 
 static void al_link_batch_clear(void)
 {
-	for (size_t i = 0; i < al_link_batch.capture_count; i++)
-		free(al_link_batch.captures[i].scan_buffer);
+	for (size_t i = 0; i < al_link_batch.capture_count; i++) {
+		if (al_link_batch.captures[i].owns_buffer)
+			free(al_link_batch.captures[i].scan_buffer);
+	}
 
 	free(al_link_batch.tx);
 	free(al_link_batch.captures);
@@ -446,6 +453,9 @@ static int al_link_batch_flush(void)
 	if (retval == ERROR_OK) {
 		for (size_t i = 0; i < al_link_batch.capture_count; i++) {
 			struct al_link_capture *capture = &al_link_batch.captures[i];
+
+			if (!capture->scan)
+				continue;
 
 			retval = jtag_read_buffer(capture->scan_buffer, capture->scan);
 			if (retval != ERROR_OK)
@@ -1000,7 +1010,7 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 		goto out;
 
 	retval = al_link_batch_add_capture(stream_offset, scan_size, buffer,
-		cmd->cmd.scan, readback);
+		cmd->cmd.scan, readback, true);
 	if (retval != ERROR_OK)
 		goto out;
 	buffer = NULL;
@@ -1013,6 +1023,54 @@ static int al_link_execute_scan(struct jtag_command *cmd)
 
 out:
 	free(buffer);
+	free(tx_buf);
+	return retval;
+}
+
+/*
+ * Execute a raw TDI sequence without adding TAP state transitions.
+ *
+ * The caller owns the TAP path. TMS stays low for the sequence except when
+ * the requested end state requires the final clock to leave SHIFT or PAUSE.
+ * TDO, when requested, is decoded directly into the caller's input buffer.
+ */
+static int al_link_execute_tdi(struct jtag_command *cmd)
+{
+	struct scan_field *field = cmd->cmd.scan->fields;
+	tap_state_t end_state = cmd->cmd.scan->end_state;
+	uint8_t *tx_buf = NULL;
+	bool exit_on_last;
+	int last_tms = 0;
+	int last_tdi = 0;
+	int retval;
+
+	if (field->num_bits == 0)
+		return ERROR_OK;
+	if (field->num_bits < 0 || !field->out_value) {
+		LOG_ERROR("AL-LINK: invalid raw TDI sequence");
+		return ERROR_JTAG_QUEUE_FAILED;
+	}
+
+	exit_on_last = end_state == TAP_DREXIT1 || end_state == TAP_IREXIT1 ||
+		end_state == TAP_DREXIT2 || end_state == TAP_IREXIT2;
+
+	retval = al_link_alloc_cycles((size_t)field->num_bits, &tx_buf);
+	if (retval != ERROR_OK)
+		return retval;
+
+	for (int bit = 0; bit < field->num_bits; bit++) {
+		last_tms = exit_on_last && bit == field->num_bits - 1;
+		last_tdi = al_link_get_bit(field->out_value, (unsigned int)bit);
+		tx_buf[bit] = al_link_encode_cycle(last_tms, last_tdi);
+	}
+
+	size_t stream_offset = al_link_batch.tx_len;
+	retval = al_link_send_cycles(tx_buf, (size_t)field->num_bits,
+		last_tms, last_tdi);
+	if (retval == ERROR_OK && field->in_value)
+		retval = al_link_batch_add_capture(stream_offset, field->num_bits,
+			field->in_value, NULL, true, false);
+
 	free(tx_buf);
 	return retval;
 }
@@ -1084,6 +1142,9 @@ static int al_link_execute_queue(void)
 			break;
 		case JTAG_SCAN:
 			retval = al_link_execute_scan(cmd);
+			break;
+		case JTAG_TDI:
+			retval = al_link_execute_tdi(cmd);
 			break;
 		case JTAG_SLEEP:
 			retval = al_link_batch_flush();
