@@ -889,7 +889,12 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
     //     goto out;
     // }
 
-	retval = loader_flash_write_pp(loader, local_srcs, staging_buffer, block_addr, image_size, driver_priv->io_location, driver_priv->clk_phase);
+	driver_priv->params.flash_addr = block_addr;
+	driver_priv->params.image_size = image_size;
+	driver_priv->params.bank_id = driver_priv->io_location;
+	driver_priv->params.clk_param = driver_priv->clk_phase;
+
+	retval = loader_flash_write_pp(loader, local_srcs, staging_buffer, &(driver_priv->params));
 
 out:
     if (mailbox_owned) {
@@ -948,10 +953,16 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t a
         crc_srcs[0], crc_srcs[1], crc_srcs[2]
     };
     bool elf_loaded = (dwcmshc_try_load_elf_code_src(driver_priv, CRC_CHECK, arch_index, local_srcs) == ERROR_OK);
-    if (!elf_loaded)
+    if (!elf_loaded) {
         return ERROR_FAIL;
+	}
 
-    retval = loader_flash_crc_mem_parm(loader, local_srcs, block_addr, driver_priv->io_location, crc, driver_priv->clk_phase);
+	driver_priv->params.flash_addr = block_addr;
+	driver_priv->params.image_size = loader->image_size;
+	driver_priv->params.bank_id = driver_priv->io_location;
+	driver_priv->params.clk_param = driver_priv->clk_phase;
+
+    retval = loader_flash_crc_mem_parm(loader, local_srcs, crc, &(driver_priv->params));
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
     return retval;

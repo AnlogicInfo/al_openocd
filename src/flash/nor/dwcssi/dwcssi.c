@@ -1377,8 +1377,16 @@ static int dwcssi_read_loader(struct flash_bank *bank, uint8_t *buffer, uint32_t
 		return ERROR_FAIL;
 	}
 
-	retval = loader_flash_read_pp(loader, async_pp_read_srcs,
-		buffer, offset, count, bank->bank_number, driver_priv->sample_delay);
+	driver_priv->params.flash_addr = offset;
+	driver_priv->params.image_size = count;
+	driver_priv->params.bank_id = bank->bank_number;
+	driver_priv->params.clk_param = driver_priv->sample_delay;
+	driver_priv->params.flash_id = driver_priv->dev->device_id;
+	driver_priv->params.sector_size = driver_priv->dev->sectorsize;
+	driver_priv->params.sector_num = (driver_priv->dev->size_in_bytes / driver_priv->dev->sectorsize);
+	driver_priv->params.page_size = driver_priv->dev->pagesize;
+
+	retval = loader_flash_read_pp(loader, async_pp_read_srcs, buffer, &(driver_priv->params));
 
 	return retval;
 }
@@ -1439,7 +1447,12 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
         return ERROR_FAIL;
     }
 
-	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, address, bank->bank_number, crc, driver_priv->sample_delay);
+	driver_priv->params.flash_addr = address;
+	driver_priv->params.image_size = loader->image_size;
+	driver_priv->params.bank_id = bank->bank_number;
+	driver_priv->params.clk_param = driver_priv->sample_delay;
+
+	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, crc, &(driver_priv->params));
 	return retval;
 }
 
@@ -1539,8 +1552,16 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
 
 	target_set_mailbox_sections(&buf_offset_blocks, &section_start_addr, &size_blocks, 1);
 
-	retval = loader_flash_write_pp(loader, async_pp_srcs,
-		staging_buffer, offset, count, bank->bank_number, driver_priv->sample_delay);
+	driver_priv->params.flash_addr = offset;
+	driver_priv->params.image_size = count;
+	driver_priv->params.bank_id = bank->bank_number;
+	driver_priv->params.clk_param = driver_priv->sample_delay;
+	driver_priv->params.flash_id = driver_priv->dev->device_id;
+	driver_priv->params.sector_size = driver_priv->dev->sectorsize;
+	driver_priv->params.sector_num = (driver_priv->dev->size_in_bytes / driver_priv->dev->sectorsize);
+	driver_priv->params.page_size = driver_priv->dev->pagesize;
+
+	retval = loader_flash_write_pp(loader, async_pp_srcs, staging_buffer, &(driver_priv->params));
 
 	target_set_mailbox_sections(NULL, NULL, NULL, 0);
 

@@ -1031,7 +1031,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
     int retval;
 
     pp->buf_size = buffer_size - block_size;
-    pp->half_size = pp->buf_size / 2;
+    pp->half_size = (pp->buf_size / 2) & 0xFFFFFE00;
 
     pp->buf0_flag_addr = buffer_start;
     pp->buf1_flag_addr = buffer_start + 0x40;

@@ -5,6 +5,7 @@ FLASH_BANK_COMMAND_HANDLER(dr91_flash_bank_command)
 {
 	struct dwcssi_flash_bank *driver_priv;
 	target_addr_t base;
+	uint8_t sample_delay;
 	LOG_DEBUG("%s", __func__);
 
 	if (CMD_ARGC < 6)
@@ -19,18 +20,27 @@ FLASH_BANK_COMMAND_HANDLER(dr91_flash_bank_command)
 	if (CMD_ARGC >= 7) {
 		COMMAND_PARSE_ADDRESS(CMD_ARGV[6], base);
 		LOG_DEBUG("ASSUMING DWCSSI device at ctrl_base = " TARGET_ADDR_FMT,
-				base); 
+				base);
 	}
+
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[7], sample_delay);
 
 	bank->driver_priv = driver_priv;
 
 	driver_priv->probed = false;
 	driver_priv->ctrl_base = base;
+	driver_priv->sample_delay = sample_delay;
 	driver_priv->loader.dev_info = (struct dwcssi_flash_bank *) driver_priv;
 	driver_priv->loader.set_params_priv = NULL;
 	driver_priv->loader.exec_target = bank->target;
 	driver_priv->loader.copy_area  = NULL;
 	driver_priv->loader.ctrl_base = base;
+	driver_priv->elf_dir = NULL;
+	if (CMD_ARGC >= 9) {
+		LOG_INFO("elf_dir %s", CMD_ARGV[8]);
+		driver_priv->elf_dir = strdup(CMD_ARGV[8]);
+	}
+
 	return ERROR_OK;
 }
 
