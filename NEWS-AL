@@ -2,6 +2,31 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1125
+1. fix ph1a400 cfg params and loader func
+2. fix loader trans params
+3. support qspi loader flash info trans
+4. update loader elf(mmu norm_noncache)
+5. update loader elf dir
+6. fix loader buf align to 0x100
+7. support smp debug with cfg rtos hwthread
+
+v0.1124
+1. update loader 35/90/91 elf(disable mmu)
+2. support emmc loader trans rx clk phase
+3. support qspi loader trans sample_delay
+4. add dwcssi_35 mio params cfg while probe
+5. sel trans target with pstap
+6. fix erase bulk timeout
+7. support FM25Q256I3 with 4B mode
+8. increase erase and crc check timeout val
+9. fix bank voltage check error
+10. fix pjtag enable error
+11. modify load target from exec to trans
+12. update build script
+13. fix nuspi enter 4 byte mode condition
+14. support ext flash map
+
 v0.1122
 1. emmc loader update: ping-pong fifo, ddr mode, elf mode
 2. add emmc erase command
@@ -11,7 +36,7 @@ v0.1122
 6. add speed setting in rbb server
 7. fix rbb pvt sensor read issue
 8. update rbb debug print
-9. add instr_wr command for aarch64 
+9. add instr_wr command for aarch64
 
 
 v0.1121
@@ -25,7 +50,7 @@ v0.1120
 1. add xip support for qspi
 2. add usb driver scan
 3. update proc print
-4. add rbb port config 
+4. add rbb port config
 5. add jtag2apb driver
 6. fix clk div bug in nuspi probe
 7. enable bit writer for dr1 device
