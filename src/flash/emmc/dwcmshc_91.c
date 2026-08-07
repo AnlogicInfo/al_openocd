@@ -27,12 +27,11 @@ EMMC_DEVICE_COMMAND_HANDLER(dr91_dwcmshc_emmc_device_command)
 	dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller *) dwcmshc_emmc;
 	dwcmshc_emmc->flash_loader.set_params_priv = NULL;
 	dwcmshc_emmc->flash_loader.exec_target = emmc->target;
-    dwcmshc_emmc->flash_loader.copy_area = NULL;
-    dwcmshc_emmc->flash_loader.ctrl_base = base;
-    dwcmshc_emmc->elf_dir = NULL;
-    if (CMD_ARGC >= 6) {
-        dwcmshc_emmc->elf_dir = strdup(CMD_ARGV[5]);
-    }
+	dwcmshc_emmc->flash_loader.copy_area = NULL;
+	dwcmshc_emmc->flash_loader.ctrl_base = base;
+	dwcmshc_emmc->elf_dir = NULL;
+	if (CMD_ARGC >= 6)
+		dwcmshc_emmc->elf_dir = strdup(CMD_ARGV[5]);
 
 	return ERROR_OK;
 }

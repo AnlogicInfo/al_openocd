@@ -319,19 +319,6 @@ static void loader_set_mem_parms(struct flash_loader *loader, void *params)
 	target_addr_t base = loader->exec_target->loader_buf_start;
 
 	target_write_buffer(loader->trans_target, base, 0x100, params);
-
-	// target_write_u32(loader->exec_target,
-	// 		base + offsetof(struct loader_shmem_map, params.flash_addr),
-	// 		addr);
-	// target_write_u32(loader->exec_target,
-	// 		base + offsetof(struct loader_shmem_map, params.image_size),
-	// 		image_size);
-	// target_write_u32(loader->exec_target,
-	// 		base + offsetof(struct loader_shmem_map, params.bank_id),
-	// 		bank_number);
-	// target_write_u32(loader->exec_target,
-	// 		base + offsetof(struct loader_shmem_map, params.clk_param),
-	// 		clk_param);
 }
 
 
