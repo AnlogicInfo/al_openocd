@@ -10,6 +10,7 @@ v0.1125
 5. update loader elf dir
 6. fix loader buf align to 0x100
 7. support smp debug with cfg rtos hwthread
+8. support freertos smp debug
 
 v0.1124
 1. update loader 35/90/91 elf(disable mmu)
