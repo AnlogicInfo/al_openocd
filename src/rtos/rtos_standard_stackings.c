@@ -22,6 +22,7 @@
 
 #include "rtos.h"
 #include "target/armv7m.h"
+#include "target/armv8.h"
 #include "target/riscv/riscv.h"
 
 static const struct stack_register_offset rtos_standard_cortex_m3_stack_offsets[ARMV7M_NUM_CORE_REGS] = {
@@ -82,6 +83,87 @@ static const struct stack_register_offset rtos_standard_cortex_m4f_fpu_stack_off
 	{ ARMV7M_R14,  0x78, 32 },		/* lr   */
 	{ ARMV7M_PC,   0x7c, 32 },		/* pc   */
 	{ ARMV7M_xPSR, 0x80, 32 },		/* xPSR */
+};
+
+
+static const struct stack_register_offset rtos_standard_cortex_a_fpu_stack_offsets[] = {
+	{ ARMV8_R0,   0x320, 64 },
+	{ ARMV8_R1,   0x328, 64 },
+	{ ARMV8_R2,   0x310, 64 },
+	{ ARMV8_R3,   0x318, 64 },
+	{ ARMV8_R4,   0x300, 64 },
+	{ ARMV8_R5,   0x308, 64 },
+	{ ARMV8_R6,   0x2F0, 64 },
+	{ ARMV8_R7,   0x2F8, 64 },
+	{ ARMV8_R8,   0x2E0, 64 },
+	{ ARMV8_R9,   0x2E8, 64 },
+	{ ARMV8_R10,  0x2D0, 64 },
+	{ ARMV8_R11,  0x2D8, 64 },
+	{ ARMV8_R12,  0x2C0, 64 },
+	{ ARMV8_R13,  0x2C8, 64 },
+	{ ARMV8_R14,  0x2B0, 64 },
+	{ ARMV8_R15,  0x2B8, 64 },
+	{ ARMV8_R16,  0x2A0, 64 },
+	{ ARMV8_R17,  0x2A8, 64 },
+	{ ARMV8_R18,  0x290, 64 },
+	{ ARMV8_R19,  0x298, 64 },
+	{ ARMV8_R20,  0x280, 64 },
+	{ ARMV8_R21,  0x288, 64 },
+	{ ARMV8_R22,  0x270, 64 },
+	{ ARMV8_R23,  0x278, 64 },
+	{ ARMV8_R24,  0x260, 64 },
+	{ ARMV8_R25,  0x268, 64 },
+	{ ARMV8_R26,  0x250, 64 },
+	{ ARMV8_R27,  0x258, 64 },
+	{ ARMV8_R28,  0x240, 64 },
+	{ ARMV8_R29,  0x248, 64 },
+	{ ARMV8_R30,  0x230, 64 },
+	{ ARMV8_SP,   -2,    64 },
+	{ ARMV8_PC,   0x220, 64 },
+	{ ARMV8_xPSR, 0x228, 32 },
+	{ ARMV8_V0,   0x200, 128 },
+	{ ARMV8_V1,   0x210, 128 },
+	{ ARMV8_V2,   0x1E0, 128 },
+	{ ARMV8_V3,   0x1F0, 128 },
+	{ ARMV8_V4,   0x1C0, 128 },
+	{ ARMV8_V5,   0x1D0, 128 },
+	{ ARMV8_V6,   0x1A0, 128 },
+	{ ARMV8_V7,   0x1B0, 128 },
+	{ ARMV8_V8,   0x180, 128 },
+	{ ARMV8_V9,   0x190, 128 },
+	{ ARMV8_V10,  0x160, 128 },
+	{ ARMV8_V11,  0x170, 128 },
+	{ ARMV8_V12,  0x140, 128 },
+	{ ARMV8_V13,  0x150, 128 },
+	{ ARMV8_V14,  0x120, 128 },
+	{ ARMV8_V15,  0x130, 128 },
+	{ ARMV8_V16,  0x100, 128 },
+	{ ARMV8_V17,  0x110, 128 },
+	{ ARMV8_V18,  0x0E0, 128 },
+	{ ARMV8_V19,  0x0F0, 128 },
+	{ ARMV8_V20,  0x0C0, 128 },
+	{ ARMV8_V21,  0x0D0, 128 },
+	{ ARMV8_V22,  0x0A0, 128 },
+	{ ARMV8_V23,  0x0B0, 128 },
+	{ ARMV8_V24,  0x080, 128 },
+	{ ARMV8_V25,  0x090, 128 },
+	{ ARMV8_V26,  0x060, 128 },
+	{ ARMV8_V27,  0x070, 128 },
+	{ ARMV8_V28,  0x040, 128 },
+	{ ARMV8_V29,  0x050, 128 },
+	{ ARMV8_V30,  0x020, 128 },
+	{ ARMV8_V31,  0x030, 128 },
+	{ ARMV8_FPSR, 0x018, 64 },
+	{ ARMV8_FPCR, 0x010, 64 },
+	{ ARMV8_ELR_EL1,  0x220, 64 },
+	{ ARMV8_ESR_EL1, -1,    64 },
+	{ ARMV8_SPSR_EL1, 0x228, 64 },
+	{ ARMV8_ELR_EL2,  0x220, 64 },
+	{ ARMV8_ESR_EL2, -1,    64 },
+	{ ARMV8_SPSR_EL2, 0x228, 64 },
+	{ ARMV8_ELR_EL3,  0x220, 64 },
+	{ ARMV8_ESR_EL3, -1,    64 },
+	{ ARMV8_SPSR_EL3, 0x228, 64 },
 };
 
 
@@ -414,6 +496,27 @@ static target_addr_t rtos_standard_cortex_m4f_fpu_stack_align(struct target *tar
 		stack_ptr, XPSR_OFFSET);
 }
 
+static target_addr_t rtos_standard_cortex_a_fpu_stack_align(
+	struct target *target,
+	const uint8_t *stack_data,
+	const struct rtos_register_stacking *stacking,
+	target_addr_t stack_ptr)
+{
+	target_addr_t new_stack_ptr;
+	int64_t frame_delta;
+
+	/* Calculate the base address of the stacked register frame.
+	 * stack_growth_direction is typically -1 (downward growth). */
+	frame_delta = (int64_t)stacking->stack_growth_direction *
+		(int64_t)stacking->stack_registers_size;
+	new_stack_ptr = (target_addr_t)((int64_t)stack_ptr - frame_delta);
+
+	LOG_DEBUG("Cortex-A AArch64 stack align: stack_ptr=0x%" TARGET_PRIxADDR
+				", frame_base=0x%" TARGET_PRIxADDR,
+				stack_ptr, new_stack_ptr);
+
+	return new_stack_ptr;
+}
 
 const struct rtos_register_stacking rtos_standard_cortex_m3_stacking = {
 	.stack_registers_size = 0x40,
@@ -437,6 +540,15 @@ const struct rtos_register_stacking rtos_standard_cortex_m4f_fpu_stacking = {
 	.num_output_registers = ARMV7M_NUM_CORE_REGS,
 	.calculate_process_stack = rtos_standard_cortex_m4f_fpu_stack_align,
 	.register_offsets = rtos_standard_cortex_m4f_fpu_stack_offsets
+};
+
+const struct rtos_register_stacking rtos_standard_cortex_a_fpu_stacking = {
+	.stack_registers_size = 0x330,
+	.stack_growth_direction = -1,
+	.num_output_registers = ARMV8_xPSR + 1,
+	.calculate_process_stack = rtos_standard_cortex_a_fpu_stack_align,
+	.register_offsets = rtos_standard_cortex_a_fpu_stack_offsets,
+	.total_register_count = ARRAY_SIZE(rtos_standard_cortex_a_fpu_stack_offsets)
 };
 
 const struct rtos_register_stacking rtos_standard_cortex_r4_stacking = {
