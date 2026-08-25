@@ -95,6 +95,7 @@ static int os_alloc(struct target *target, struct rtos_type *ostype,
 	os->current_thread = 0;
 	os->symbols = NULL;
 	os->target = target;
+	os->halted_target = NULL;
 
 	/* RTOS drivers can override the packet handler in _create(). */
 	os->gdb_thread_packet = rtos_thread_packet;
@@ -142,7 +143,7 @@ int rtos_create(struct jim_getopt_info *goi, struct target *target)
 
 	struct command_context *cmd_ctx = current_command_context(goi->interp);
 
-	os_free(target);
+	rtos_destroy(target);
 
 	e = jim_getopt_string(goi, &cp, NULL);
 	if (e != JIM_OK)
@@ -174,6 +175,8 @@ int rtos_create(struct jim_getopt_info *goi, struct target *target)
 
 void rtos_destroy(struct target *target)
 {
+	if (target->rtos && target->rtos->type && target->rtos->type->clean)
+		target->rtos->type->clean(target);
 	os_free(target);
 }
 

@@ -52,6 +52,8 @@ struct freertos_thread_entry {
 	threadid_t threadid;
 	target_addr_t tcb;
 	int core_id;
+	uint64_t tcb_number_gen;
+	bool tcb_number_valid;
 };
 
 struct FreeRTOS {
@@ -247,7 +249,9 @@ static int freertos_get_thread_reg_value(struct rtos *rtos, threadid_t thread_id
 		uint32_t reg_num, uint32_t *size, uint8_t **value);
 static int freertos_set_reg(struct rtos *rtos, uint32_t reg_num, uint8_t *reg_value);
 static int freertos_smp_init(struct target *target);
+static int freertos_clean(struct target *target);
 static int freertos_get_symbol_list_to_lookup(struct symbol_table_elem *symbol_list[]);
+static bool freertos_needs_fake_step(struct target *target, threadid_t thread_id);
 
 struct rtos_type freertos_rtos = {
 	.name = "FreeRTOS",
@@ -259,6 +263,8 @@ struct rtos_type freertos_rtos = {
 	.get_thread_reg_list = freertos_get_thread_reg_list,
 	.get_thread_reg_value = freertos_get_thread_reg_value,
 	.set_reg = freertos_set_reg,
+	.clean = freertos_clean,
+	.needs_fake_step = freertos_needs_fake_step,
 	.get_symbol_list_to_lookup = freertos_get_symbol_list_to_lookup,
 };
 
@@ -275,6 +281,7 @@ enum freertos_symbol_values {
 	FREERTOS_VAL_UX_CURRENT_NUMBER_OF_TASKS = 9,
 	FREERTOS_VAL_UX_TOP_USED_PRIORITY = 10,
 	FREERTOS_VAL_PX_CURRENT_TCBS = 11,
+	FREERTOS_VAL_OPENOCD_LAYOUT = 12,
 };
 
 struct symbols {
@@ -295,6 +302,7 @@ static const struct symbols freertos_symbol_list[] = {
 	{ "uxCurrentNumberOfTasks", false },
 	{ "uxTopUsedPriority", true }, /* Unavailable since v7.5.3 */
 	{ "pxCurrentTCBs", true }, /* FreeRTOS SMP */
+	{ "FreeRTOSOpenOCDLayout", true },
 	{ NULL, false }
 };
 
@@ -399,6 +407,28 @@ static char *freertos_build_extra_info(struct rtos *rtos,
 	return strdup(buf);
 }
 
+static int freertos_set_synthetic_current_execution(struct rtos *rtos)
+{
+	int64_t saved_threadid = rtos->current_threadid;
+	rtos_free_threadlist(rtos);
+	rtos->current_threadid = saved_threadid;
+	rtos->thread_details = calloc(1, sizeof(struct thread_detail));
+	if (!rtos->thread_details)
+		return ERROR_FAIL;
+
+	rtos->thread_count = 1;
+	rtos->thread_details[0].threadid = 1;
+	rtos->thread_details[0].exists = true;
+	rtos->thread_details[0].thread_name_str = strdup("Current Execution");
+	rtos->thread_details[0].extra_info_str = NULL;
+	rtos->current_thread = 1;
+	if (rtos->current_threadid <= 0)
+		rtos->current_threadid = rtos->current_thread;
+	if (!rtos->thread_details[0].thread_name_str)
+		return ERROR_FAIL;
+	return ERROR_OK;
+}
+
 typedef struct {
 	enum {
 		TYPE_POINTER,
@@ -470,6 +500,86 @@ static unsigned populate_offset_size(struct FreeRTOS *freertos,
 	return offset;
 }
 
+struct freertos_openocd_layout_v1 {
+	uint32_t magic;
+	uint32_t version;
+	uint32_t pointer_size;
+	uint32_t ubasetype_size;
+	uint32_t ticktype_size;
+	uint32_t list_size;
+	uint32_t list_item_size;
+	uint32_t list_ux_items_offset;
+	uint32_t list_next_offset;
+	uint32_t list_elem_next_offset;
+	uint32_t list_elem_owner_offset;
+	uint32_t tcb_sp_offset;
+	uint32_t tcb_priority_offset;
+	uint32_t tcb_name_offset;
+	uint32_t tcb_run_state_offset;
+	uint32_t tcb_critical_nesting_offset;
+	uint32_t tcb_tcb_number_offset;
+	uint32_t tcb_task_number_offset;
+	uint32_t tcb_base_priority_offset;
+};
+
+#define FREERTOS_OPENOCD_LAYOUT_MAGIC 0x4652544fU
+
+static bool freertos_try_apply_layout_descriptor(struct rtos *rtos, struct FreeRTOS *freertos)
+{
+	if (!rtos->symbols)
+		return false;
+
+	symbol_address_t addr = rtos->symbols[FREERTOS_VAL_OPENOCD_LAYOUT].address;
+	if (!addr)
+		return false;
+
+	struct freertos_openocd_layout_v1 d;
+	int retval = target_read_buffer(rtos->target, addr, sizeof(d), (uint8_t *)&d);
+	if (retval != ERROR_OK)
+		return false;
+
+	if (d.magic != FREERTOS_OPENOCD_LAYOUT_MAGIC || d.version != 1)
+		return false;
+
+	if (d.pointer_size == 0 || d.ubasetype_size == 0 || d.ticktype_size == 0)
+		return false;
+
+	freertos->pointer_size = d.pointer_size;
+	freertos->ubasetype_size = d.ubasetype_size;
+	freertos->list_width = d.list_size;
+	freertos->list_item_width = d.list_item_size;
+	freertos->list_uxNumberOfItems_offset = d.list_ux_items_offset;
+	freertos->list_uxNumberOfItems_size = d.ubasetype_size;
+	freertos->list_next_offset = d.list_next_offset;
+	freertos->list_next_size = d.pointer_size;
+	freertos->list_elem_next_offset = d.list_elem_next_offset;
+	freertos->list_elem_next_size = d.pointer_size;
+	freertos->list_elem_content_offset = d.list_elem_owner_offset;
+	freertos->list_elem_content_size = d.pointer_size;
+
+	freertos->thread_stack_offset = d.tcb_sp_offset;
+	freertos->thread_stack_size = d.pointer_size;
+	freertos->thread_priority_offset = d.tcb_priority_offset;
+	freertos->thread_priority_size = d.ubasetype_size;
+	freertos->thread_name_offset = d.tcb_name_offset;
+	freertos->thread_run_state_offset = d.tcb_run_state_offset;
+	freertos->thread_run_state_size = d.ubasetype_size;
+	freertos->thread_critical_nesting_offset = d.tcb_critical_nesting_offset;
+	freertos->thread_critical_nesting_size = d.ubasetype_size;
+	freertos->thread_tcb_number_offset = d.tcb_tcb_number_offset;
+	freertos->thread_tcb_number_size = d.ubasetype_size;
+	freertos->thread_task_number_offset = d.tcb_task_number_offset;
+	freertos->thread_task_number_size = d.ubasetype_size;
+	freertos->thread_base_priority_offset = d.tcb_base_priority_offset;
+	freertos->thread_base_priority_size = d.ubasetype_size;
+
+	LOG_INFO("FreeRTOS: using ABI descriptor FreeRTOSOpenOCDLayout @ 0x%" PRIx64
+		" (ptr=%u, ubase=%u, list=%u, list_item=%u)",
+		addr, freertos->pointer_size, freertos->ubasetype_size,
+		freertos->list_width, freertos->list_item_width);
+	return true;
+}
+
 static void freertos_compute_offsets(struct rtos *rtos)
 {
 	struct FreeRTOS *freertos = (struct FreeRTOS *) rtos->rtos_specific_params;
@@ -479,6 +589,9 @@ static void freertos_compute_offsets(struct rtos *rtos)
 			freertos->pointer_size, freertos->ubasetype_size, freertos->list_width);
 		return;
 	}
+
+	if (freertos_try_apply_layout_descriptor(rtos, freertos))
+		return;
 
 	freertos->pointer_size = 8;
 	freertos->ubasetype_size = 8;
@@ -640,6 +753,39 @@ struct freertos_thread_entry *thread_entry_list_find_by_id(
 			return t;
 	}
 	return NULL;
+}
+
+static int freertos_update_entry_generation(struct rtos *rtos,
+	struct FreeRTOS *freertos,
+	struct freertos_thread_entry *entry)
+{
+	if (!freertos->thread_tcb_number_size || !freertos->thread_tcb_number_offset)
+		return ERROR_OK;
+
+	uint64_t gen = 0;
+	int retval = freertos_read_struct_value(rtos->target, entry->tcb,
+		freertos->thread_tcb_number_offset,
+		freertos->thread_tcb_number_size,
+		&gen);
+	if (retval != ERROR_OK)
+		return retval;
+
+	if (!entry->tcb_number_valid) {
+		entry->tcb_number_gen = gen;
+		entry->tcb_number_valid = true;
+		return ERROR_OK;
+	}
+
+	if (entry->tcb_number_gen != gen) {
+		entry->tcb_number_gen = gen;
+		entry->threadid = ++freertos->last_threadid;
+		entry->core_id = -1;
+		LOG_DEBUG("FreeRTOS: TCB reuse detected at 0x%" TARGET_PRIxADDR
+			" -> new tid=%" PRId64 " (uxTCBNumber=%" PRIu64 ")",
+			entry->tcb, entry->threadid, gen);
+	}
+
+	return ERROR_OK;
 }
 
 static struct freertos_thread_entry *thread_entry_list_get_or_add(
@@ -861,6 +1007,12 @@ static int freertos_update_threads(struct rtos *rtos)
 		return retval;
 	}
 
+	if (thread_list_size > 1024) {
+		LOG_WARNING("FreeRTOS: uxCurrentNumberOfTasks=%" PRIu64
+			" out of expected range, using synthetic Current Execution", thread_list_size);
+		return freertos_set_synthetic_current_execution(rtos);
+	}
+
 	int64_t current_threadid = rtos->current_threadid;
 	rtos_free_threadlist(rtos);
 	rtos->current_threadid = current_threadid;
@@ -903,7 +1055,7 @@ static int freertos_update_threads(struct rtos *rtos)
 
 	unsigned int running_count = 0;
 	if (rtos->target->smp && rtos->symbols[FREERTOS_VAL_PX_CURRENT_TCBS].address != 0) {
-		LOG_INFO("FreeRTOS: using SMP symbol pxCurrentTCBs @ 0x%" PRIx64,
+		LOG_DEBUG("FreeRTOS: using SMP symbol pxCurrentTCBs @ 0x%" PRIx64,
 			rtos->symbols[FREERTOS_VAL_PX_CURRENT_TCBS].address);
 		unsigned int idx = 0;
 		struct target_list *head;
@@ -947,6 +1099,9 @@ static int freertos_update_threads(struct rtos *rtos)
 			running_coreids[0], running_tcbs[0]);
 	}
 	LOG_DEBUG("FreeRTOS: running_count=%u", running_count);
+	int halted_core_id = -1;
+	if (rtos->halted_target)
+		halted_core_id = (int)rtos->halted_target->coreid;
 
 	rtos->current_thread = 0;
 	for (unsigned int i = 0; i < running_count && tasks_found < max_tasks; i++) {
@@ -958,6 +1113,12 @@ static int freertos_update_threads(struct rtos *rtos)
 			free(running_tcbs);
 			free(running_coreids);
 			return ERROR_FAIL;
+		}
+		retval = freertos_update_entry_generation(rtos, freertos, entry);
+		if (retval != ERROR_OK) {
+			free(running_tcbs);
+			free(running_coreids);
+			return retval;
 		}
 
 		entry->core_id = running_coreids[i];
@@ -1009,7 +1170,9 @@ static int freertos_update_threads(struct rtos *rtos)
 			return ERROR_FAIL;
 		}
 
-		if (rtos->current_threadid == entry->threadid || rtos->current_thread == 0)
+		if (entry->core_id == halted_core_id)
+			rtos->current_thread = entry->threadid;
+		else if (rtos->current_threadid == entry->threadid || rtos->current_thread == 0)
 			rtos->current_thread = entry->threadid;
 		tasks_found++;
 	}
@@ -1025,16 +1188,17 @@ static int freertos_update_threads(struct rtos *rtos)
 		if (retval != ERROR_OK) {
 			free(running_tcbs);
 			free(running_coreids);
-			return retval;
+			LOG_WARNING("FreeRTOS: cannot read uxTopUsedPriority, using synthetic Current Execution");
+			return freertos_set_synthetic_current_execution(rtos);
 		}
 	}
 
 	if (top_used_priority > FREERTOS_MAX_PRIORITIES) {
 		free(running_tcbs);
 		free(running_coreids);
-		LOG_ERROR("FreeRTOS top used priority is unreasonably big, not proceeding: %" PRIu64,
-			top_used_priority);
-		return ERROR_FAIL;
+		LOG_WARNING("FreeRTOS top used priority is unreasonably big (%" PRIu64 "), using synthetic Current Execution",
+					top_used_priority);
+		return freertos_set_synthetic_current_execution(rtos);
 	}
 
 	unsigned int config_max_priorities = top_used_priority + 1;
@@ -1052,7 +1216,7 @@ static int freertos_update_threads(struct rtos *rtos)
 	for (num_lists = 0; num_lists < config_max_priorities; num_lists++)
 		list_of_lists[num_lists] = rtos->symbols[FREERTOS_VAL_PX_READY_TASKS_LISTS].address +
 		num_lists * freertos->list_width;
-	LOG_INFO("FreeRTOS: pxReadyTasksLists=0x%" PRIx64 ", list_width=%u, config_max_priorities=%u",
+	LOG_DEBUG("FreeRTOS: pxReadyTasksLists=0x%" PRIx64 ", list_width=%u, config_max_priorities=%u",
 		rtos->symbols[FREERTOS_VAL_PX_READY_TASKS_LISTS].address,
 		freertos->list_width, config_max_priorities);
 
@@ -1141,6 +1305,13 @@ static int freertos_update_threads(struct rtos *rtos)
 				free(running_coreids);
 				return ERROR_FAIL;
 			}
+			retval = freertos_update_entry_generation(rtos, freertos, entry);
+			if (retval != ERROR_OK) {
+				free(list_of_lists);
+				free(running_tcbs);
+				free(running_coreids);
+				return retval;
+			}
 
 			LOG_DEBUG("FreeRTOS: list[%u] elem tcb=0x%" TARGET_PRIxADDR " -> tid=%" PRId64,
 				i, tcb, entry->threadid);
@@ -1173,8 +1344,6 @@ static int freertos_update_threads(struct rtos *rtos)
 					return ERROR_FAIL;
 				}
 
-				if (entry->core_id >= 0)
-					rtos->current_thread = entry->threadid;
 				rtos->thread_details[tasks_found].extra_info_str =
 					freertos_build_extra_info(rtos, freertos, entry, list_state);
 				if (!rtos->thread_details[tasks_found].extra_info_str) {
@@ -1349,14 +1518,40 @@ static int freertos_set_reg(struct rtos *rtos, uint32_t reg_num, uint8_t *reg_va
 {
 	LOG_DEBUG("[%" PRId64 "] reg_num=%" PRId32, rtos->current_threadid, reg_num);
 
-	/* Let the caller write registers directly for the current thread. */
-	if (rtos->current_threadid == rtos->current_thread)
-		return ERROR_FAIL;
+	if (rtos->target->smp && rtos->rtos_specific_params) {
+		struct FreeRTOS *freertos = (struct FreeRTOS *)rtos->rtos_specific_params;
+		const struct freertos_thread_entry *entry =
+			thread_entry_list_find_by_id(&freertos->thread_entry_list, rtos->current_threadid);
+
+		if (entry && entry->core_id >= 0) {
+			struct target *core_target =
+				freertos_find_smp_target_by_coreid(rtos->target, entry->core_id);
+			if (core_target) {
+				struct reg **reg_list;
+				int reg_count;
+				int retval = target_get_gdb_reg_list_noread(core_target, &reg_list, &reg_count,
+					REG_CLASS_ALL);
+				if (retval != ERROR_OK)
+					return retval;
+
+				if ((int)reg_num >= reg_count || !reg_list[reg_num] ||
+					reg_list[reg_num]->exist == false || !reg_list[reg_num]->type ||
+					!reg_list[reg_num]->type->set) {
+					free(reg_list);
+					return ERROR_FAIL;
+				}
+
+				retval = reg_list[reg_num]->type->set(reg_list[reg_num], reg_value);
+				free(reg_list);
+				return retval;
+			}
+		}
+	}
 
 	const struct rtos_register_stacking *stacking_info;
 	target_addr_t stack_ptr;
 	if (freertos_get_stacking_info(rtos, rtos->current_threadid,
-								   &stacking_info, &stack_ptr) != ERROR_OK)
+									&stacking_info, &stack_ptr) != ERROR_OK)
 		return ERROR_FAIL;
 
 	return rtos_generic_stack_write_reg(rtos->target, stacking_info, stack_ptr,
@@ -1375,6 +1570,41 @@ static int freertos_get_symbol_list_to_lookup(struct symbol_table_elem *symbol_l
 	}
 
 	return 0;
+}
+
+static bool freertos_needs_fake_step(struct target *target, threadid_t thread_id)
+{
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos || !rtos->rtos_specific_params)
+		return true;
+
+	struct FreeRTOS *freertos = (struct FreeRTOS *)rtos->rtos_specific_params;
+	struct freertos_thread_entry *entry =
+		thread_entry_list_find_by_id(&freertos->thread_entry_list, thread_id);
+
+	if (entry && entry->core_id >= 0)
+		return false;
+
+	return true;
+}
+
+static int freertos_clean(struct target *target)
+{
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos || !rtos->rtos_specific_params)
+		return ERROR_OK;
+
+	struct FreeRTOS* freertos = (struct FreeRTOS *)rtos->rtos_specific_params;
+	struct freertos_thread_entry *entry, *tmp;
+	list_for_each_entry_safe(entry, tmp, &freertos->thread_entry_list, list) {
+		list_del(&entry->list);
+		free(entry);
+	}
+
+	rtos_free_threadlist(rtos);
+	free(freertos);
+	rtos->rtos_specific_params = NULL;
+	return ERROR_OK;
 }
 
 #if 0
@@ -1398,26 +1628,26 @@ static int freertos_get_thread_ascii_info(struct rtos *rtos, threadid_t thread_i
 	if (!rtos->rtos_specific_params)
 		return -3;
 
-	param = (const struct freertos_params *) rtos->rtos_specific_params;
+	param = (const struct freertos_params *)rtos->rtos_specific_params;
 
 #define FREERTOS_THREAD_NAME_STR_SIZE (200)
 	char tmp_str[FREERTOS_THREAD_NAME_STR_SIZE];
 
 	/* Read the thread name */
 	retval = target_read_buffer(rtos->target,
-			thread_id + param->thread_name_offset,
-			FREERTOS_THREAD_NAME_STR_SIZE,
-			(uint8_t *)&tmp_str);
+		thread_id + param->thread_name_offset,
+		FREERTOS_THREAD_NAME_STR_SIZE,
+		(uint8_t *)&tmp_str);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error reading first thread item location in FreeRTOS thread list");
 		return retval;
 	}
-	tmp_str[FREERTOS_THREAD_NAME_STR_SIZE-1] = '\x00';
+	tmp_str[FREERTOS_THREAD_NAME_STR_SIZE - 1] = '\x00';
 
 	if (tmp_str[0] == '\x00')
 		strcpy(tmp_str, "No Name");
 
-	*info = malloc(strlen(tmp_str)+1);
+	*info = malloc(strlen(tmp_str) + 1);
 	strcpy(*info, tmp_str);
 	return 0;
 }

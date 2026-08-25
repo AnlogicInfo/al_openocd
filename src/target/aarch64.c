@@ -669,7 +669,7 @@ static int aarch64_prepare_restart_one(struct target *target)
 	/* if (retval == ERROR_OK)
 		retval = arm_cti_ungate_channel(armv8->cti, 1);
 	*/
-	
+
 	/* gate channel 0 to isolate the PE from halt event */
 	if (retval == ERROR_OK)
 		retval = arm_cti_gate_channel(armv8->cti, 0);
@@ -685,8 +685,7 @@ static int aarch64_prepare_restart_one(struct target *target)
 		/* clear sticky bits in PRSR, SDR is now 0 */
 		retval = mem_ap_read_atomic_u32(armv8->debug_ap,
 				armv8->debug_base + CPUV8_DBG_PRSR, &tmp);
-		// LOG_DEBUG("mem ap rd addr %" PRIx64 " val %08x", (armv8->debug_base + CPUV8_DBG_PRSR), tmp);		
-
+		/* LOG_DEBUG("mem ap rd addr %" PRIx64 " val %08x", (armv8->debug_base + CPUV8_DBG_PRSR), tmp); */
 	}
 
 	return retval;
@@ -869,6 +868,7 @@ static int aarch64_resume(struct target *target, int current,
 {
 	int retval = 0;
 	uint64_t addr = address;
+	bool resume_only_current_core = target->smp && (current == 2);
 
 	struct armv8_common *armv8 = target_to_armv8(target);
 	armv8->last_run_control_op = ARMV8_RUNCONTROL_RESUME;
@@ -882,7 +882,7 @@ static int aarch64_resume(struct target *target, int current,
 	 * target register context and setting up CTI gates to accept
 	 * resume events from the trigger matrix.
 	 */
-	if (target->smp) {
+	if (target->smp && !resume_only_current_core) {
 		retval = aarch64_prep_restart_smp(target, handle_breakpoints, NULL);
 		if (retval != ERROR_OK)
 			return retval;
@@ -896,7 +896,7 @@ static int aarch64_resume(struct target *target, int current,
 	if (retval != ERROR_OK)
 		return retval;
 
-	if (target->smp) {
+	if (target->smp && !resume_only_current_core) {
 		int64_t then = timeval_ms();
 		for (;;) {
 			struct target *curr = target;
@@ -957,7 +957,8 @@ static int aarch64_resume(struct target *target, int current,
 	if (!debug_execution) {
 		target->state = TARGET_RUNNING;
 		target_call_event_callbacks(target, TARGET_EVENT_RESUMED);
-		LOG_DEBUG("target resumed at 0x%" PRIx64, addr);
+		LOG_DEBUG("target resumed at 0x%" PRIx64 "%s", addr,
+			resume_only_current_core ? " (single-core)" : "");
 	} else {
 		target->state = TARGET_DEBUG_RUNNING;
 		target_call_event_callbacks(target, TARGET_EVENT_DEBUG_RESUMED);
@@ -3006,8 +3007,7 @@ static int aarch64_wait_algorithm(struct target *target,
 	struct aarch64_algorithm *aarch64_algorithm_info = arch_info;
 	int retval = ERROR_OK;
 
-	if(aarch64_algorithm_info->common_magic != AARCH64_COMMON_MAGIC) 
- 	{
+	if (aarch64_algorithm_info->common_magic != AARCH64_COMMON_MAGIC) {
 		LOG_ERROR("current target isn't an AARCH64");
 		return ERROR_TARGET_INVALID;
 	}
@@ -3055,8 +3055,8 @@ static int aarch64_wait_algorithm(struct target *target,
 			LOG_DEBUG("restoring register %s with value 0x%8.8" PRIx64,
 					arm->core_cache->reg_list[i].name,
 				aarch64_algorithm_info->context[i]);
-			
-			buf_set_u64(arm->core_cache->reg_list[i].value, 
+
+			buf_set_u64(arm->core_cache->reg_list[i].value,
 				0, 64, aarch64_algorithm_info->context[i]);
 			arm->core_cache->reg_list[i].valid = true;
 			arm->core_cache->reg_list[i].dirty = true;
@@ -3082,119 +3082,10 @@ static int aarch64_run_algorithm(struct target *target, int num_mem_params,
 	num_reg_params, reg_params, entry_point, exit_point, arch_info);
 
 	if(retval == ERROR_OK)
-		retval = aarch64_wait_algorithm(target, num_mem_params, mem_params, 
+		retval = aarch64_wait_algorithm(target, num_mem_params, mem_params,
 			num_reg_params, reg_params, exit_point, timeout_ms, arch_info);
 	return retval;
 }
-
-// static int aarch64_run_algorithm(struct target *target, int num_mem_params,
-// 		struct mem_param *mem_params, int num_reg_params,
-// 		struct reg_param *reg_params, target_addr_t entry_point,
-// 		target_addr_t exit_point, int timeout_ms, void *arch_info)
-// {
-// 	struct arm *arm = target_to_arm(target);
-// 	int i;
-// 	// check target
-
-// 	if (arm->common_magic != ARM_COMMON_MAGIC) {
-// 		LOG_ERROR("BUG: called for a non-ARM target");
-// 		return ERROR_FAIL;
-// 	}
-
-// 	if(num_mem_params > 0)
-// 	{
-// 		LOG_ERROR("Memory parameters are not supported for AARCH64 algorithms.");
-// 		return ERROR_FAIL;		
-// 	}
-
-// 	if (target->state != TARGET_HALTED) {
-// 		LOG_WARNING("target not halted");
-// 		return ERROR_TARGET_NOT_HALTED;
-// 	}
-// 	// save registers
-// 	struct reg *reg_pc = register_get_by_name(target->reg_cache, "pc", true);
-// 	if (!reg_pc || reg_pc->type->get(reg_pc) != ERROR_OK)
-// 		return ERROR_FAIL;
-// 	uint64_t saved_pc = buf_get_u64(reg_pc->value, 0, reg_pc->size);
-// 	LOG_DEBUG("saved_pc=0x%" PRIx64, saved_pc);
-
-// 	uint64_t saved_regs[31];
-// 	for (i = 0; i < num_reg_params; i++) {
-// 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-// 		if (!r) {
-// 			LOG_ERROR("Couldn't find register named '%s'", reg_params[i].reg_name);
-// 			return ERROR_FAIL;
-// 		}
-
-// 		if (r->size != reg_params[i].size) {
-// 			LOG_ERROR("Register %s is %d bits instead of %d bits.",
-// 					reg_params[i].reg_name, r->size, reg_params[i].size);
-// 			return ERROR_FAIL;
-// 		}
-
-// 		if (r->number > 30) {
-// 			LOG_ERROR("Only GPRs can be use as argument registers.");
-// 			return ERROR_FAIL;
-// 		}
-
-// 		saved_regs[r->number] = buf_get_u64(r->value, 0, r->size);
-// 		LOG_DEBUG("save %s val %" PRIx64 "", reg_params[i].reg_name, saved_regs[r->number]);
-
-// 		if (reg_params[i].direction == PARAM_OUT || reg_params[i].direction == PARAM_IN_OUT) {
-// 			if (r->type->set(r, reg_params[i].value) != ERROR_OK)
-// 				return ERROR_FAIL;
-// 		}
-// 	}
-
-// 	// run algorithm
-// 	if(target_resume(target, 0, entry_point, 1, 1) != ERROR_OK)
-// 		return ERROR_FAIL;
-
-// 	int64_t start = timeval_ms();
-
-// 	while(target->state != TARGET_HALTED)
-// 	{
-// 		int64_t now = timeval_ms();
-// 		if(now - start > timeout_ms)
-// 		{
-// 			LOG_ERROR("Run Algorithm Timeout");
-// 			aarch64_halt(target);
-// 			return ERROR_TARGET_TIMEOUT;
-// 		}
-// 		aarch64_poll(target);
-// 	}
-
-// 	/* Restore registers */
-// 	//restore pc
-// 	uint8_t buf[8] = { 0 };
-// 	buf_set_u64(buf, 0, 64, saved_pc);
-// 	if (reg_pc->type->set(reg_pc, buf) != ERROR_OK)
-// 		return ERROR_FAIL;
-
-// 	LOG_DEBUG("restore pc val %" PRIx64 "",saved_pc);
-
-// 	// restore
-// 	for (i = 0; i < num_reg_params; i++) {
-// 		if (reg_params[i].direction != PARAM_OUT) {
-// 			struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-// 			LOG_DEBUG("update reg_parm %s val %" PRIx64 "", reg_params[i].reg_name, buf_get_u64(r->value, 0, r->size));
-// 			buf_set_u64(reg_params[i].value, 0, 64, buf_get_u64(r->value, 0, 64));
-// 		}
-// 		struct reg *r = register_get_by_name(target->reg_cache, reg_params[i].reg_name, false);
-// 		buf_set_u64(buf, 0, 64, saved_regs[r->number]);
-// 		LOG_DEBUG("restore %s val %" PRIx64 "", r->name, saved_regs[r->number]);
-// 		r->valid = true;
-// 		r->dirty = true;
-// 		// if (r->type->set(r, buf) != ERROR_OK) {
-// 		// 	LOG_ERROR("set(%s) failed", r->name);
-// 		// 	return ERROR_FAIL;
-// 		// }
-// 	}
-
-// 	return ERROR_OK;
-// }
-
-
 
 COMMAND_HANDLER(aarch64_handle_cache_info_command)
 {
@@ -3292,7 +3183,7 @@ COMMAND_HANDLER(aarch64_ap_rw_command)
 
 		COMMAND_PARSE_NUMBER(uint, CMD_ARGV[2], data);
 		retval = mem_ap_write_atomic_u32(armv8->debug_ap, address, data);
-		LOG_INFO("mem ap wr addr %" PRIx64 " val %x", address, data);		
+		LOG_INFO("mem ap wr addr %" PRIx64 " val %x", address, data);
 	}
 	else if(strcmp(CMD_ARGV[0], "rd") == 0)
 	{
@@ -3307,7 +3198,7 @@ COMMAND_HANDLER(aarch64_ap_rw_command)
 	{
 		retval = ERROR_FAIL;
 	}
-		
+
 
 	if(retval != ERROR_OK)
 		return retval;
@@ -3337,7 +3228,7 @@ COMMAND_HANDLER(aarch64_dpm_rw)
 	if(strcmp(CMD_ARGV[0], "wr") == 0)
 	{
 		COMMAND_PARSE_ADDRESS(CMD_ARGV[2], value_64);
-		retval = armv8->write_reg_u64(armv8, regnum, value_64);	
+		retval = armv8->write_reg_u64(armv8, regnum, value_64);
 	}
 	else if(strcmp(CMD_ARGV[0], "rd") == 0)
 	{
