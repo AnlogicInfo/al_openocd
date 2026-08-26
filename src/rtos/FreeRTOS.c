@@ -1391,7 +1391,7 @@ static int freertos_update_threads(struct rtos *rtos)
 		rtos->current_thread = rtos->thread_details[0].threadid;
 	}
 
-	LOG_INFO("FreeRTOS: update_threads done, thread_count=%d, current_thread=%" PRId64,
+	LOG_DEBUG("FreeRTOS: update_threads done, thread_count=%d, current_thread=%" PRId64,
 		rtos->thread_count, rtos->current_thread);
 
 	return ERROR_OK;
@@ -1414,7 +1414,7 @@ static int freertos_get_stacking_info(struct rtos *rtos, threadid_t thread_id,
 	const struct freertos_thread_entry *entry =
 		thread_entry_list_find_by_id(&freertos->thread_entry_list, thread_id);
 	if (!entry) {
-		LOG_ERROR("Unknown thread id: %" PRId64, thread_id);
+		LOG_DEBUG("Unknown thread id: %" PRId64, thread_id);
 		return ERROR_FAIL;
 	}
 

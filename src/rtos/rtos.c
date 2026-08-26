@@ -552,7 +552,7 @@ int rtos_get_gdb_reg(struct connection *connection, int reg_num)
 					&reg_list,
 					&num_regs);
 			if (retval != ERROR_OK) {
-				LOG_ERROR("RTOS: failed to get register list");
+				LOG_DEBUG("RTOS: failed to get register list");
 				return retval;
 			}
 		}
@@ -594,7 +594,7 @@ int rtos_get_gdb_reg_list(struct connection *connection)
 				&reg_list,
 				&num_regs);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("RTOS: failed to get register list");
+			LOG_DEBUG("RTOS: failed to get register list");
 			return retval;
 		}
 
