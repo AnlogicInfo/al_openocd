@@ -1008,7 +1008,7 @@ static int freertos_update_threads(struct rtos *rtos)
 	}
 
 	if (thread_list_size > 1024) {
-		LOG_WARNING("FreeRTOS: uxCurrentNumberOfTasks=%" PRIu64
+		LOG_DEBUG("FreeRTOS: uxCurrentNumberOfTasks=%" PRIu64
 			" out of expected range, using synthetic Current Execution", thread_list_size);
 		return freertos_set_synthetic_current_execution(rtos);
 	}
