@@ -1080,7 +1080,7 @@ static int freertos_update_threads(struct rtos *rtos)
 			idx++;
 		}
 	} else if (rtos->symbols[FREERTOS_VAL_PX_CURRENT_TCB].address != 0) {
-		LOG_INFO("FreeRTOS: using UP symbol pxCurrentTCB @ 0x%" PRIx64,
+		LOG_DEBUG("FreeRTOS: using UP symbol pxCurrentTCB @ 0x%" PRIx64,
 			rtos->symbols[FREERTOS_VAL_PX_CURRENT_TCB].address);
 		target_addr_t pxCurrentTCB = 0;
 		retval = freertos_read_struct_value(rtos->target,
