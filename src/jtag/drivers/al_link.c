@@ -143,7 +143,6 @@ static int al_link_execute_queue(void);
 
 static int al_link_usb_open(void);
 static void al_link_usb_close(void);
-static void al_link_usb_drain_ep2(void);
 static int al_link_usb_set_speed(uint8_t speed_byte);
 static int al_link_usb_xfer(const uint8_t *tx, size_t tx_len, uint8_t idle_byte);
 
@@ -520,48 +519,9 @@ static int al_link_usb_open(void)
 	al_cyusb_reset_pipe(&al_link.usb.cyusb, al_link.config.ep_out);
 	al_cyusb_reset_pipe(&al_link.usb.cyusb, al_link.config.ep_cfg);
 
-	/*
-	 * A host-side pipe reset does not guarantee the FX2LP device itself
-	 * discarded bytes already sitting in its EP2 IN FIFO from a previous
-	 * session. Drain them now so the first real scan of this session never
-	 * observes stale data.
-	 */
-	al_link_usb_drain_ep2();
-
 	al_link.usb.is_open = true;
 	al_link.usb.io_failed = false;
 	return ERROR_OK;
-}
-
-/*
- * Best-effort drain of any stale bytes left in the EP2 IN FIFO from a
- * previous session.
- *
- * Uses a short per-read timeout so an already-empty pipe returns quickly
- * instead of blocking for the full 6000 ms USB timeout. Bounded to a handful
- * of rounds so a genuinely stuck endpoint cannot hang device open.
- */
-static void al_link_usb_drain_ep2(void)
-{
-	uint8_t scratch[512];
-	int drained_total = 0;
-	int rounds = 0;
-
-	while (rounds < 8) {
-		int transferred = 0;
-		int retval = al_cyusb_bulk_read(&al_link.usb.cyusb, al_link.config.ep_in,
-			scratch, (int)sizeof(scratch), &transferred, 50);
-
-		if (retval != 0 || transferred <= 0)
-			break;
-
-		drained_total += transferred;
-		rounds++;
-	}
-
-	if (drained_total > 0)
-		LOG_INFO("AL-LINK: drained %d stale byte(s) from EP2 before session start",
-			drained_total);
 }
 
 /* Close the CyUSB device handle. */
