@@ -13,6 +13,7 @@ v0.1125
 8. support freertos smp debug
 9. fix reseting puzzled log
 10. support at7200 chip debugger console rd/wr
+11. fix ext flash map program bug
 
 v0.1124
 1. update loader 35/90/91 elf(disable mmu)

@@ -9,7 +9,6 @@ int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t* id)
 		if (p->device_id == *id) {
 			LOG_INFO("finded name %s", p->name);
 			dwcssi_info->dev = p;
-			dwcssi_info->probed = true;
 			break;
 		}
 	}
@@ -22,6 +21,7 @@ int flash_id_parse(struct dwcssi_flash_bank *dwcssi_info,  uint32_t* id)
 		LOG_ERROR("Try below command to customize flash device:");
 		LOG_ERROR("flash customize bank_id read_cmd page_prog_cmd page_erase_cmd page_size sector_size chip_size");
 	} else {
+		dwcssi_info->probed = true;
 		LOG_INFO("Found flash device \'%s\' (ID 0x%08" PRIx32 ")",
 			dwcssi_info->dev->name, dwcssi_info->dev->device_id);
 	}

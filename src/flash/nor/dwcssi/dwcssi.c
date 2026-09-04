@@ -962,7 +962,11 @@ int dwcssi_probe(struct flash_bank *bank)
 			qspi_mio5_pull(bank, LOW);
 			bank->x4_en = false;
 		} else {
-			bank->x4_en = true;
+			if (driver_priv->dev->qread_cmd == 0x0) {
+				bank->x4_en = false;
+				LOG_INFO("x4 mode disabled due to qread_cmd 0");
+			} else
+				bank->x4_en = true;
 			retval = ERROR_OK;
 		}
 	}
