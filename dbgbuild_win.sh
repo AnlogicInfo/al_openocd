@@ -15,7 +15,7 @@ export CFLAGS="$CFLAGS -g3 -I$OCDLIB_DIR/libyaml_0_2_2/include -I$OCDLIB_DIR/ftd
 export LDFLAGS="$LDFLAGS -L$OCDLIB_DIR/libyaml_0_2_2/bin  -L$OCDLIB_DIR/libyaml_0_2_2/lib -L$OCDLIB_DIR/ftd2xx_$VER_FTD2XX/amd64 -L$OCDLIB_DIR/libftdi1-$VER_LIBFTDI1/lib64"
 mkdir build-win64
 cd build-win64
-../configure --prefix=${PWD}/../binary-win64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 --enable-cmsis-dap=no --enable-kitprog=no --enable-nulink=no --enable-jtag_vpi --enable-ftdi-cjtag
+../configure --prefix=${PWD}/../binary-win64 --host=x86_64-w64-mingw32 --enable-ftdi --enable-ftdi-oscan1 --enable-cmsis-dap=no --enable-kitprog=no --enable-nulink=no --enable-jtag_vpi --enable-ftdi-cjtag --enable-al-link
 echo '#define HAVE_LIBUSB_GET_PORT_NUMBERS 1' >> config.h
 make -j4
 make install
