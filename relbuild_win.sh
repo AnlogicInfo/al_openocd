@@ -29,7 +29,7 @@ cd build-win64
 ../configure --prefix=${PWD}/../binary-win64 --host=x86_64-w64-mingw32 \
     --enable-ftdi --enable-ftdi-oscan1 --enable-cmsis-dap=no \
     --enable-kitprog=no --enable-nulink=no --enable-jtag_vpi \
-    --enable-ftdi-cjtag
+        --enable-ftdi-cjtag --enable-al-link
 echo '#define HAVE_LIBUSB_GET_PORT_NUMBERS 1' >> config.h
 make -j4
 make install
