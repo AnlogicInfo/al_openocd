@@ -202,7 +202,7 @@ COMMAND_HANDLER(handle_flash_xip_init_command)
 
 	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	
+
 	retval = CALL_COMMAND_HANDLER(flash_command_get_bank_maybe_probe, 0, &p, false);
 	if (retval != ERROR_OK)
 		return retval;
@@ -567,7 +567,7 @@ COMMAND_HANDLER(handle_flash_hw_protect_command)
 	retval = flash_driver_hw_protect(p, set, last, &protected_area);
 
 	if (retval == ERROR_OK) {
-		command_print(CMD, "%s protection for %s" 
+		command_print(CMD, "%s protection for %s"
 			"through %" PRIu32 " on flash bank %d",
 			(set) ? "set" : "cleared",
 			(p->num_prot_blocks) ? "blocks" : "sectors",
@@ -1278,7 +1278,7 @@ COMMAND_HANDLER(handle_flash_padded_value_command)
 static int recv_all(int sockfd, void *buf, size_t len, int timeout_sec) {
     char *ptr = (char *)buf;
     size_t remaining = len;
-    
+
     // 设置接收超时
 #ifdef _WIN32
     DWORD timeout = timeout_sec * 1000; // Convert to milliseconds
@@ -1289,7 +1289,7 @@ static int recv_all(int sockfd, void *buf, size_t len, int timeout_sec) {
     tv.tv_usec = 0;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 #endif
-    
+
     while (remaining > 0) {
 #ifdef _WIN32
         int received = recv(sockfd, ptr, remaining, 0);
@@ -1304,11 +1304,11 @@ static int recv_all(int sockfd, void *buf, size_t len, int timeout_sec) {
             LOG_ERROR("recv failed: %s", strerror(errno));
             return ERROR_FAIL;
         }
-        
+
         ptr += received;
         remaining -= received;
     }
-    
+
     return ERROR_OK;
 }
 
@@ -1415,7 +1415,7 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
-    
+
     if (client_fd < 0) {
         command_print(CMD, "Accept failed: %s", strerror(errno));
 #ifdef _WIN32
@@ -1429,7 +1429,7 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
 
     // 打印客户端信息
     char *client_ip = inet_ntoa(client_addr.sin_addr);
-    command_print(CMD, "flash remote_write: client connected from %s:%d", 
+    command_print(CMD, "flash remote_write: client connected from %s:%d",
                   client_ip, ntohs(client_addr.sin_port));
 
     uint8_t *buffer = NULL;
@@ -1450,7 +1450,7 @@ COMMAND_HANDLER(handle_flash_remote_write_command)
         }
 
         if (file_len > p->size) {
-            command_print(CMD, "flash remote_write: file too large: %u bytes (flash size: %u bytes)", 
+            command_print(CMD, "flash remote_write: file too large: %u bytes (flash size: %u bytes)",
                          file_len, p->size);
             break;
         }
@@ -1711,9 +1711,10 @@ static int flash_init_drivers(struct command_context *cmd_ctx)
 
 COMMAND_HANDLER(handle_flash_bank_command)
 {
-	if (CMD_ARGC < 7) {
+	if (CMD_ARGC < 10) {
 		LOG_ERROR("usage: flash bank <name> <driver> "
-			"<base> <size> <chip_width> <bus_width> <target>");
+			"<data_base> <size> <chip_width> <bus_width> "
+			"<target> <ctrl_base> <sample_delay> <loader_dir>");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 	/* save bank name and advance arguments for compatibility */

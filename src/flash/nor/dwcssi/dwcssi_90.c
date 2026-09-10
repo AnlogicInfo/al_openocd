@@ -5,6 +5,7 @@ FLASH_BANK_COMMAND_HANDLER(dr90_flash_bank_command)
 {
 	struct dwcssi_flash_bank *driver_priv;
 	target_addr_t base;
+	uint8_t sample_delay;
 	LOG_DEBUG("%s", __func__);
 
 	if (CMD_ARGC < 6)
@@ -19,22 +20,25 @@ FLASH_BANK_COMMAND_HANDLER(dr90_flash_bank_command)
 	if (CMD_ARGC >= 7) {
 		COMMAND_PARSE_ADDRESS(CMD_ARGV[6], base);
 		LOG_DEBUG("ASSUMING DWCSSI device at ctrl_base = " TARGET_ADDR_FMT,
-				base); 
+				base);
 	}
+
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[7], sample_delay);
 
 	bank->driver_priv = driver_priv;
 
 	driver_priv->probed = false;
 	driver_priv->ctrl_base = base;
+	driver_priv->sample_delay = sample_delay;
 	driver_priv->loader.dev_info = (struct dwcssi_flash_bank *) driver_priv;
 	driver_priv->loader.set_params_priv = NULL;
 	driver_priv->loader.exec_target = bank->target;
 	driver_priv->loader.copy_area  = NULL;
 	driver_priv->loader.ctrl_base = base;
 	driver_priv->elf_dir = NULL;
-	if (CMD_ARGC >= 8) {
-		LOG_INFO("elf_dir %s", CMD_ARGV[7]);
-		driver_priv->elf_dir = strdup(CMD_ARGV[7]);		
+	if (CMD_ARGC >= 9) {
+		LOG_INFO("elf_dir %s", CMD_ARGV[8]);
+		driver_priv->elf_dir = strdup(CMD_ARGV[8]);
 	}
 
 	return ERROR_OK;
@@ -81,7 +85,7 @@ static int dr90_qspi_mio_init_3v3(struct flash_bank *bank)
 
 		if(target_write_u32(target, MIO_PARA_BASE + (mio_num << 1), mio_parm)!= ERROR_OK)
 			return ERROR_FAIL;
-		
+
 		if(target_write_u32(target, MIO_PARA1_BASE + (mio_num << 1), mio_parm1)!= ERROR_OK)
 			return ERROR_FAIL;
 	}
@@ -138,7 +142,7 @@ static int dr90_clk_reset(struct flash_bank *bank)
 	target_write_u32(bank->target, CPUPLL_CTRL18, 0x01000001);
 
 	cpu_mask_write(bank, CPUPLL_CTRL1, 0x00000200, 0x00000000);
-	
+
 	ret = cpu_pll_waitlock(bank);
 	cpu_mask_write(bank, CLK_SEL, 0x10, 0);
 	return ret;
@@ -146,9 +150,9 @@ static int dr90_clk_reset(struct flash_bank *bank)
 
 static int dr90_mio_init(struct flash_bank *bank)
 {
-	uint32_t io_bank_ref;    
+	uint32_t io_bank_ref;
 
-    target_read_u32(bank->target, MIO_BANK201_REF, &io_bank_ref);
+    target_read_u32(bank->target, MIO_BANK200_REF, &io_bank_ref);
 
 	if(io_bank_ref & 0x1) {
 		if (dr90_qspi_mio_init_1v8(bank) != ERROR_OK) {
@@ -162,7 +166,7 @@ static int dr90_mio_init(struct flash_bank *bank)
 		LOG_ERROR("QSPI MIO not configured");
 		return ERROR_FAIL;
 	}
-    
+
     return ERROR_OK;
 }
 

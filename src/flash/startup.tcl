@@ -17,6 +17,7 @@ proc program_error {description exit} {
 }
 
 proc program {media filename args} {
+	set erase ""
 	set exit 0
 	set needsflash 1
 	set quad_en ""
@@ -26,6 +27,8 @@ proc program {media filename args} {
 			set preverify 1
 		} elseif {[string equal $arg "verify"]} {
 			set verify 1
+		} elseif {[string equal $arg "erase"]} {
+			set erase $arg
 		} elseif {[string equal $arg "reset"]} {
 			set reset 1
 		} elseif {[string equal $arg "exit"]} {
@@ -110,7 +113,26 @@ proc program {media filename args} {
 	return
 }
 
-# set qspi_usage 
+# flash_id_map_load: load from ext dict
+# dict: {id {name ... read ... qread ... pprog ... erase ... chiperase ... pagesize ... sectorsize ... sizeinbyte ...}}
+proc flash_id_map_load {dict} {
+    set ids [dict keys $dict]
+    foreach id $ids {
+        set entry	[dict get $dict $id]
+        set name       [dict get $entry name]
+        set read       [dict get $entry read]
+        set qread      [dict get $entry qread]
+        set pprog      [dict get $entry pprog]
+        set erase      [dict get $entry erase]
+        set chiperase  [dict get $entry chiperase]
+        set pagesize   [dict get $entry pagesize]
+        set sectorsize [dict get $entry sectorsize]
+        set sizeinbyte [dict get $entry sizeinbyte]
+        handle_flash_id_map_add_ext $id $name $read $qread $pprog $erase $chiperase $pagesize $sectorsize $sizeinbyte
+    }
+}
+
+# set qspi_usage
 
 add_help_text program "write an image to flash, address is only required for binary images. verify, reset, exit are optional"
 add_usage_text program " qspi: flash <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n emmc: emmc <filename> \[address\] \[pre-verify\] \[verify\] \[reset\] \[exit\] \n nand: "

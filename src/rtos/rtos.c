@@ -95,6 +95,7 @@ static int os_alloc(struct target *target, struct rtos_type *ostype,
 	os->current_thread = 0;
 	os->symbols = NULL;
 	os->target = target;
+	os->halted_target = NULL;
 
 	/* RTOS drivers can override the packet handler in _create(). */
 	os->gdb_thread_packet = rtos_thread_packet;
@@ -142,7 +143,7 @@ int rtos_create(struct jim_getopt_info *goi, struct target *target)
 
 	struct command_context *cmd_ctx = current_command_context(goi->interp);
 
-	os_free(target);
+	rtos_destroy(target);
 
 	e = jim_getopt_string(goi, &cp, NULL);
 	if (e != JIM_OK)
@@ -174,16 +175,19 @@ int rtos_create(struct jim_getopt_info *goi, struct target *target)
 
 void rtos_destroy(struct target *target)
 {
+	if (target->rtos && target->rtos->type && target->rtos->type->clean)
+		target->rtos->type->clean(target);
 	os_free(target);
 }
 
 int gdb_thread_packet(struct connection *connection, char const *packet, int packet_size)
 {
 	struct target *target = get_target_from_connection(connection);
-	if (!target->rtos)
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
 		return rtos_thread_packet(connection, packet, packet_size);	/* thread not
 										 *found*/
-	return target->rtos->gdb_thread_packet(connection, packet, packet_size);
+	return rtos->gdb_thread_packet(connection, packet, packet_size);
 }
 
 static struct symbol_table_elem *next_symbol(struct rtos *os, char *cur_symbol, uint64_t cur_addr)
@@ -323,19 +327,19 @@ done:
 int rtos_thread_packet(struct connection *connection, char const *packet, int packet_size)
 {
 	struct target *target = get_target_from_connection(connection);
+	struct rtos *rtos = rtos_of_target(target);
 
 	if (strncmp(packet, "qThreadExtraInfo,", 17) == 0) {
-		if ((target->rtos) && (target->rtos->thread_details) &&
-				(target->rtos->thread_count != 0)) {
+		if ((rtos) && (rtos->thread_details) && (rtos->thread_count != 0)) {
 			threadid_t threadid = 0;
 			int found = -1;
 			sscanf(packet, "qThreadExtraInfo,%" SCNx64, &threadid);
 
-			if ((target->rtos) && (target->rtos->thread_details)) {
+			if ((rtos) && (rtos->thread_details)) {
 				int thread_num;
-				for (thread_num = 0; thread_num < target->rtos->thread_count; thread_num++) {
-					if (target->rtos->thread_details[thread_num].threadid == threadid) {
-						if (target->rtos->thread_details[thread_num].exists)
+				for (thread_num = 0; thread_num < rtos->thread_count; thread_num++) {
+					if (rtos->thread_details[thread_num].threadid == threadid) {
+						if (rtos->thread_details[thread_num].exists)
 							found = thread_num;
 					}
 				}
@@ -345,7 +349,7 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 				return ERROR_OK;
 			}
 
-			struct thread_detail *detail = &target->rtos->thread_details[found];
+			struct thread_detail *detail = &rtos->thread_details[found];
 
 			int str_size = 0;
 			if (detail->thread_name_str)
@@ -385,21 +389,23 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 				target->rtos_auto_detect = false;
 				target->rtos->type->create(target);
 			}
-			target->rtos->type->update_threads(target->rtos);
+			rtos = rtos_of_target(target);
+			if (rtos)
+				rtos->type->update_threads(rtos);
 		}
 		return ERROR_OK;
 	} else if (strncmp(packet, "qfThreadInfo", 12) == 0) {
 		int i;
-		if (target->rtos) {
-			if (target->rtos->thread_count == 0) {
+		if (rtos) {
+			if (rtos->thread_count == 0) {
 				gdb_put_packet(connection, "l", 1);
 			} else {
 				/*thread id are 16 char +1 for ',' */
-				char *out_str = malloc(17 * target->rtos->thread_count + 1);
+				char *out_str = malloc(17 * rtos->thread_count + 1);
 				char *tmp_str = out_str;
-				for (i = 0; i < target->rtos->thread_count; i++) {
+				for (i = 0; i < rtos->thread_count; i++) {
 					tmp_str += sprintf(tmp_str, "%c%016" PRIx64, i == 0 ? 'm' : ',',
-										target->rtos->thread_details[i].threadid);
+										rtos->thread_details[i].threadid);
 				}
 				gdb_put_packet(connection, out_str, strlen(out_str));
 				free(out_str);
@@ -423,10 +429,10 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 		 * otherwise it gets incorrectly handled */
 		return GDB_THREAD_PACKET_NOT_CONSUMED;
 	} else if (strncmp(packet, "qC", 2) == 0) {
-		if (target->rtos) {
+		if (rtos) {
 			char buffer[19];
 			int size;
-			size = snprintf(buffer, 19, "QC%016" PRIx64, target->rtos->current_thread);
+			size = snprintf(buffer, 19, "QC%016" PRIx64, rtos->current_thread);
 			gdb_put_packet(connection, buffer, size);
 		} else
 			gdb_put_packet(connection, "QC0", 3);
@@ -435,11 +441,11 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 		threadid_t threadid;
 		int found = -1;
 		sscanf(packet, "T%" SCNx64, &threadid);
-		if ((target->rtos) && (target->rtos->thread_details)) {
+		if ((rtos) && (rtos->thread_details)) {
 			int thread_num;
-			for (thread_num = 0; thread_num < target->rtos->thread_count; thread_num++) {
-				if (target->rtos->thread_details[thread_num].threadid == threadid) {
-					if (target->rtos->thread_details[thread_num].exists)
+			for (thread_num = 0; thread_num < rtos->thread_count; thread_num++) {
+				if (rtos->thread_details[thread_num].threadid == threadid) {
+					if (rtos->thread_details[thread_num].exists)
 						found = thread_num;
 				}
 			}
@@ -451,15 +457,15 @@ int rtos_thread_packet(struct connection *connection, char const *packet, int pa
 		return ERROR_OK;
 	} else if (packet[0] == 'H') {	/* Set current thread ( 'c' for step and continue, 'g' for
 					 * all other operations ) */
-		if ((packet[1] == 'g') && (target->rtos)) {
+		if ((packet[1] == 'g') && (rtos)) {
 			threadid_t threadid;
 			sscanf(packet, "Hg%16" SCNx64, &threadid);
 			LOG_DEBUG("RTOS: GDB requested to set current thread to 0x%" PRIx64, threadid);
 			/* threadid of 0 indicates target should choose */
 			if (threadid == 0)
-				target->rtos->current_threadid = target->rtos->current_thread;
+				rtos->current_threadid = rtos->current_thread;
 			else
-				target->rtos->current_threadid = threadid;
+				rtos->current_threadid = threadid;
 		}
 		gdb_put_packet(connection, "OK", 2);
 		return ERROR_OK;
@@ -495,10 +501,13 @@ static int rtos_put_gdb_reg_list(struct connection *connection,
 int rtos_get_gdb_reg(struct connection *connection, int reg_num)
 {
 	struct target *target = get_target_from_connection(connection);
-	threadid_t current_threadid = target->rtos->current_threadid;
-	if ((target->rtos) && (current_threadid != -1) &&
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
+		return ERROR_FAIL;
+	threadid_t current_threadid = rtos->current_threadid;
+	if ((current_threadid != -1) &&
 			(current_threadid != 0) &&
-			((current_threadid != target->rtos->current_thread) ||
+			((current_threadid != rtos->current_thread) ||
 			(target->smp))) {	/* in smp several current thread are possible */
 		struct rtos_reg *reg_list;
 		int num_regs;
@@ -507,13 +516,13 @@ int rtos_get_gdb_reg(struct connection *connection, int reg_num)
 				  ", target->rtos->current_thread=0x%" PRIx64,
 										reg_num,
 										current_threadid,
-										target->rtos->current_thread);
+										rtos->current_thread);
 
 		int retval;
-		if (target->rtos->type->get_thread_reg_value) {
+		if (rtos->type->get_thread_reg_value) {
 			uint32_t reg_size;
 			uint8_t *reg_value;
-			retval = target->rtos->type->get_thread_reg_value(target->rtos,
+			retval = rtos->type->get_thread_reg_value(rtos,
 					current_threadid, reg_num, &reg_size, &reg_value);
 			if (retval != ERROR_OK) {
 				LOG_ERROR("RTOS: failed to get register %d", reg_num);
@@ -538,12 +547,12 @@ int rtos_get_gdb_reg(struct connection *connection, int reg_num)
 			free(reg_value);
 			num_regs = 1;
 		} else {
-			retval = target->rtos->type->get_thread_reg_list(target->rtos,
+			retval = rtos->type->get_thread_reg_list(rtos,
 					current_threadid,
 					&reg_list,
 					&num_regs);
 			if (retval != ERROR_OK) {
-				LOG_ERROR("RTOS: failed to get register list");
+				LOG_DEBUG("RTOS: failed to get register list");
 				return retval;
 			}
 		}
@@ -565,24 +574,27 @@ int rtos_get_gdb_reg(struct connection *connection, int reg_num)
 int rtos_get_gdb_reg_list(struct connection *connection)
 {
 	struct target *target = get_target_from_connection(connection);
-	int64_t current_threadid = target->rtos->current_threadid;
-	if ((target->rtos) && (current_threadid != -1) &&
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
+		return ERROR_FAIL;
+	int64_t current_threadid = rtos->current_threadid;
+	if ((current_threadid != -1) &&
 			(current_threadid != 0) &&
-			((current_threadid != target->rtos->current_thread) ||
+			((current_threadid != rtos->current_thread) ||
 			(target->smp))) {	/* in smp several current thread are possible */
 		struct rtos_reg *reg_list;
 		int num_regs;
 
 		LOG_TARGET_DEBUG(target, "RTOS: getting register list for thread 0x%" PRIx64
 			  ", target->rtos->current_thread=0x%" PRIx64,
-			  current_threadid, target->rtos->current_thread);
+				current_threadid, rtos->current_thread);
 
-		int retval = target->rtos->type->get_thread_reg_list(target->rtos,
+		int retval = rtos->type->get_thread_reg_list(rtos,
 				current_threadid,
 				&reg_list,
 				&num_regs);
 		if (retval != ERROR_OK) {
-			LOG_ERROR("RTOS: failed to get register list");
+			LOG_DEBUG("RTOS: failed to get register list");
 			return retval;
 		}
 
@@ -598,12 +610,14 @@ int rtos_set_reg(struct connection *connection, int reg_num,
 		uint8_t *reg_value)
 {
 	struct target *target = get_target_from_connection(connection);
-	int64_t current_threadid = target->rtos->current_threadid;
-	if ((target->rtos) &&
-			(target->rtos->type->set_reg) &&
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
+		return ERROR_FAIL;
+	int64_t current_threadid = rtos->current_threadid;
+	if ((rtos->type->set_reg) &&
 			(current_threadid != -1) &&
 			(current_threadid != 0)) {
-		return target->rtos->type->set_reg(target->rtos, reg_num, reg_value);
+		return rtos->type->set_reg(rtos, reg_num, reg_value);
 	}
 	return ERROR_FAIL;
 }
@@ -834,31 +848,43 @@ void rtos_free_threadlist(struct rtos *rtos)
 
 bool rtos_needs_fake_step(struct target *target, int64_t thread_id)
 {
-	if (target->rtos->type->needs_fake_step)
-		return target->rtos->type->needs_fake_step(target, thread_id);
-	return target->rtos->current_thread != thread_id;
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
+		return false;
+	if (rtos->type->needs_fake_step)
+		return rtos->type->needs_fake_step(target, thread_id);
+	return rtos->current_thread != thread_id;
 }
 
 int rtos_read_buffer(struct target *target, target_addr_t address,
 		uint32_t size, uint8_t *buffer)
 {
-	if (target->rtos->type->read_buffer)
-		return target->rtos->type->read_buffer(target->rtos, address, size, buffer);
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
+		return ERROR_NOT_IMPLEMENTED;
+	if (rtos->type->read_buffer)
+		return rtos->type->read_buffer(rtos, address, size, buffer);
 	return ERROR_NOT_IMPLEMENTED;
 }
 
 int rtos_write_buffer(struct target *target, target_addr_t address,
 		uint32_t size, const uint8_t *buffer)
 {
-	if (target->rtos->type->write_buffer)
-		return target->rtos->type->write_buffer(target->rtos, address, size, buffer);
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
+		return ERROR_NOT_IMPLEMENTED;
+	if (rtos->type->write_buffer)
+		return rtos->type->write_buffer(rtos, address, size, buffer);
 	return ERROR_NOT_IMPLEMENTED;
 }
 
 struct target *rtos_swbp_target(struct target *target, target_addr_t address,
 				uint32_t length, enum breakpoint_type type)
 {
-	if (target->rtos->type->swbp_target)
-		return target->rtos->type->swbp_target(target->rtos, address, length, type);
+	struct rtos *rtos = rtos_of_target(target);
+	if (!rtos)
+		return target;
+	if (rtos->type->swbp_target)
+		return rtos->type->swbp_target(rtos, address, length, type);
 	return target;
 }

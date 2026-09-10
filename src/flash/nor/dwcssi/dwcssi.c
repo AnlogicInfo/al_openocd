@@ -46,7 +46,7 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 	if (CMD_ARGC >= 7) {
 		COMMAND_PARSE_ADDRESS(CMD_ARGV[6], base);
 		LOG_DEBUG("ASSUMING DWCSSI device at ctrl_base = " TARGET_ADDR_FMT,
-				base); 
+				base);
 	}
 
 	bank->driver_priv = driver_priv;
@@ -61,7 +61,7 @@ FLASH_BANK_COMMAND_HANDLER(dwcssi_flash_bank_command)
 	driver_priv->elf_dir = NULL;
 	if (CMD_ARGC >= 8) {
 		LOG_INFO("elf_dir %s", CMD_ARGV[7]);
-		driver_priv->elf_dir = strdup(CMD_ARGV[7]);		
+		driver_priv->elf_dir = strdup(CMD_ARGV[7]);
 	}
 
 	return ERROR_OK;
@@ -560,6 +560,8 @@ static int dwcssi_flash_set_4bytes(struct flash_bank *bank, uint8_t enable)
 		case 0x001940ef:
 		case 0x001960ef:
 		case 0x001970ef:
+		/* set FM25Q256I3 4B mode */
+		case 0x001940a1:
 			cmd = enable ? WINBOND_EN4B : WINBOND_EX4B;
 			retval = dwcssi_flash_tx_cmd(bank, &cmd, 1, STANDARD_SPI_MODE);
 			break;
@@ -587,42 +589,42 @@ static int flash_sector_to_bp_bits(uint32_t last, uint32_t* protected_area)
 	/*
 	 * 根据写保护区域最后一个block计算BP[3:0]位值
 	 * 只支持从顶部开始保护模式 (Top/Bottom=1)
-	 * 
+	 *
 	 * 数学规律：
 	 *   BP[3:0]=0: 无保护 (last=0xFFFFFFFF)
 	 *   BP[3:0]=1~10: 保护范围为 0 到 (2^(BP-1) - 1)
 	 *   BP[3:0]=11~15: 全部保护 (last>=1023)
-	 * 
+	 *
 	 * 具体映射：
 	 *   BP=0: None, BP=1: 0:0, BP=2: 1:0, BP=3: 3:0, BP=4: 7:0
 	 *   BP=5: 15:0, BP=6: 31:0, BP=7: 63:0, BP=8: 127:0
 	 *   BP=9: 255:0, BP=10: 511:0, BP=11: 1023:0 (全部)
 	 */
-	
+
 	// Flash总共有1024个64KB扇区 (0-1023)
 	// last参数是写保护区域的最后一个block号
-	
+
 	// 无保护情况
 	if (last == 0xFFFFFFFF) {
 		return 0x00; // BP[3:0] = 0000, 无保护
 	}
-	
+
 	// 全部保护情况
 	if (last >= 1023) {
 		return 0x0B; // BP[3:0] = 1011, 全部保护
 	}
-	
+
 	// 使用数学公式计算BP值
 	// 对于BP=1到10，保护范围是 0 到 (2^(BP-1) - 1)
 	// 即 last = 2^(BP-1) - 1，所以 BP = log2(last + 1) + 1
 	int bp = 0;
 	uint32_t protected_sectors = last + 1; // 保护的扇区数量
-	
+
 	// 计算log2(protected_sectors)，找到最小的BP值使得2^(BP-1) >= protected_sectors
 	while ((1U << bp) < protected_sectors && bp < 10) {
 		bp++;
 	}
-	
+
 	// BP值范围是1-10，对应保护2^0到2^9个扇区
 	bp = bp + 1;
 	return bp;
@@ -654,7 +656,7 @@ int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last, uint3
 	struct dwcssi_flash_bank *driver_priv = bank->driver_priv;
 	uint8_t bp, status_reg, sr;
 	int retval;
-	
+
 	switch(driver_priv->dev->device_id)
 	{
 		case(0x0020ba20):
@@ -664,11 +666,11 @@ int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last, uint3
 		default:
 			LOG_INFO("do not support protect mode for device id %x", driver_priv->dev->device_id);
 			return ERROR_FAIL;
-	
+
 	}
 
-	// 获取BP[3:0]位值, 
-	if(set) 
+	// 获取BP[3:0]位值,
+	if(set)
 	{
 		bp = flash_sector_to_bp_bits(last, protected_area);
 		/*
@@ -681,18 +683,18 @@ int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last, uint3
 		 * Bit 0: Write in progress (0=Ready)
 		 */
 		status_reg = 0x00; // 初始化为0
-		
+
 		// 设置BP[3]位到第6位
 		status_reg |= ((bp & 0x08) >> 3) << 6;
-		
+
 		// 设置BP[2:0]位到位4-2
 		status_reg |= (bp & 0x07) << 2;
-		
+
 		// 设置Top/bottom位为1 (Bottom模式)
 		status_reg |= (1 << 5); // 已经是0，不需要设置
-		
+
 		// 其他位保持默认值0
-		
+
 		qspi_mio5_pull(bank, HIGH);
 		qspi_mio_pull(bank, 4, HIGH);
 
@@ -702,8 +704,8 @@ int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last, uint3
 
 		retval = dwcssi_wr_flash_reg(bank, write_status, 2, STANDARD_SPI_MODE);
 		dwcssi_rd_flash_reg(bank, &sr, 0x05, 1);
-		LOG_DEBUG("wr %x to sr result %x", status_reg, sr);		
-		bank->hw_protected = true;		
+		LOG_DEBUG("wr %x to sr result %x", status_reg, sr);
+		bank->hw_protected = true;
 		qspi_mio_pull(bank, 4, LOW);
 		qspi_mio5_pull(bank, LOW);
 
@@ -713,7 +715,7 @@ int dwcssi_set_hw_protect(struct flash_bank *bank, int set, uint32_t last, uint3
 		qspi_mio_pull(bank, 4, HIGH);
 		retval = dwcssi_unset_protect(bank);
 		qspi_mio_pull(bank, 4, LOW);
-		qspi_mio5_pull(bank, LOW);		
+		qspi_mio5_pull(bank, LOW);
 	}
 
 
@@ -960,7 +962,11 @@ int dwcssi_probe(struct flash_bank *bank)
 			qspi_mio5_pull(bank, LOW);
 			bank->x4_en = false;
 		} else {
-			bank->x4_en = true;
+			if (driver_priv->dev->qread_cmd == 0x0) {
+				bank->x4_en = false;
+				LOG_INFO("x4 mode disabled due to qread_cmd 0");
+			} else
+				bank->x4_en = true;
 			retval = ERROR_OK;
 		}
 	}
@@ -1027,7 +1033,7 @@ static void dwcssi_config_SPI_CTRLR0_XIP(struct flash_bank *bank, uint8_t wait_c
 
 	dwcssi_read_reg(bank, &rd_value, DWCSSI_REG_SPI_CTRLR0);
 	spi_ctrlr0.reg_val = rd_value;
-	
+
 	dwcssi_spi_ctrlr0_clk_stretch_en(&spi_ctrlr0, ENABLE);
 	dwcssi_spi_ctrlr0_wait_cycles(&spi_ctrlr0, wait_cycle);
 	dwcssi_spi_ctrlr0_addr_len(&spi_ctrlr0, ADDR_L24);
@@ -1071,7 +1077,7 @@ static void dwcssi_xip_cnt_time_out(struct flash_bank *bank, uint8_t cnt_timeout
 static void dwcssi_xip_port1_nor_flash_size(struct flash_bank *bank, uint32_t size)
 {
 	struct target *target = bank->target;
-	
+
 	target_write_u32(target, CFG_CTRL_QSPI, size);
 }
 
@@ -1110,7 +1116,7 @@ int dwcssi_xip_init(struct flash_bank *bank)
 	switch(driver_priv->dev->device_id)
 	{
 		case(0x001967c8):
-			dwcssi_flash_setwrap_gd25q256d(bank);		
+			dwcssi_flash_setwrap_gd25q256d(bank);
 			wait_cycle = 4;
 			mode_bits = 0xff;
 			break;
@@ -1195,7 +1201,7 @@ static int dwcssi_erase_bulk(struct flash_bank *bank)
 	dwcssi_disable(bank);
 	dwcssi_config_SER(bank, 1);
 	dwcssi_enable(bank);
-	retval = dwcssi_wait_flash_idle(bank, 90000, &flash_sr);
+	retval = dwcssi_wait_flash_idle(bank, 300000, &flash_sr);
 
 	return retval;
 }
@@ -1247,7 +1253,7 @@ int dwcssi_erase(struct flash_bank *bank, unsigned int first, unsigned int last)
 		dwcssi_unset_protect(bank);
 	qspi_mio5_pull(bank, HIGH);
 	if ((first == 0) && (last == (bank->num_sectors - 1)))
-		dwcssi_erase_bulk(bank);
+		retval = dwcssi_erase_bulk(bank);
 	else {
 		for (sector = first; sector <= last; sector++) {
 			LOG_PROC((sector-first), (last-first));
@@ -1345,7 +1351,7 @@ static int dwcssi_try_load_elf_code_src(struct dwcssi_flash_bank *driver_priv, i
 
 
 
-static struct code_src async_pp_read_srcs[3] = 
+static struct code_src async_pp_read_srcs[3] =
 {
     [RV64_SRC] = {NULL, 0, 0},
     [RV32_SRC] = {NULL, 0, 0},
@@ -1375,8 +1381,16 @@ static int dwcssi_read_loader(struct flash_bank *bank, uint8_t *buffer, uint32_t
 		return ERROR_FAIL;
 	}
 
-	retval = loader_flash_read_pp(loader, async_pp_read_srcs,
-		buffer, offset, count, bank->bank_number);
+	driver_priv->params.flash_addr = offset;
+	driver_priv->params.image_size = count;
+	driver_priv->params.bank_id = bank->bank_number;
+	driver_priv->params.clk_param = driver_priv->sample_delay;
+	driver_priv->params.flash_id = driver_priv->dev->device_id;
+	driver_priv->params.sector_size = driver_priv->dev->sectorsize;
+	driver_priv->params.sector_num = (driver_priv->dev->size_in_bytes / driver_priv->dev->sectorsize);
+	driver_priv->params.page_size = driver_priv->dev->pagesize;
+
+	retval = loader_flash_read_pp(loader, async_pp_read_srcs, buffer, &(driver_priv->params));
 
 	return retval;
 }
@@ -1407,19 +1421,7 @@ int dwcssi_read(struct flash_bank *bank, uint8_t *buffer, uint32_t offset, uint3
 
 
 
-static void dwcssi_checksum_params_priv_x1(struct flash_loader *loader)
-{
-	struct dwcssi_flash_bank  *driver_priv = loader->dev_info;
-	int addr_size = driver_priv->addr_len >> 1;
-
-	buf_set_u64(loader->reg_params[4].value, 0, loader->xlen, driver_priv->dev->read_cmd);
-	buf_set_u64(loader->reg_params[5].value, 0, loader->xlen, addr_size);
-/*	LOG_INFO("checksum x1 cmd %x addr size %x", driver_priv->dev->read_cmd, addr_size);*/
-}
-
-
-
-static struct code_src crc_x1_elf_srcs[3] = 
+static struct code_src crc_x1_elf_srcs[3] =
 {
     [RV64_SRC] = {NULL, 0, 0},
     [RV32_SRC] = {NULL, 0, 0},
@@ -1442,7 +1444,6 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
 	loader->work_mode = CRC_CHECK;
 	loader->block_size = driver_priv->dev->pagesize;
 	loader->image_size = count;
-	loader->param_cnt = 6;
 
     retval = dwcssi_try_load_elf_code_src(driver_priv, arch_index, crc_x1_elf_srcs, "flash_crc_x1_");
     if(retval != ERROR_OK) {
@@ -1450,8 +1451,12 @@ static int dwcssi_checksum_x1(struct flash_bank *bank, target_addr_t address, ui
         return ERROR_FAIL;
     }
 
-	loader->set_params_priv = dwcssi_checksum_params_priv_x1;
-	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, address, bank->bank_number, crc);
+	driver_priv->params.flash_addr = address;
+	driver_priv->params.image_size = loader->image_size;
+	driver_priv->params.bank_id = bank->bank_number;
+	driver_priv->params.clk_param = driver_priv->sample_delay;
+
+	retval = loader_flash_crc_mem_parm(loader, crc_x1_elf_srcs, crc, &(driver_priv->params));
 	return retval;
 }
 
@@ -1495,15 +1500,16 @@ int dwcssi_verify(struct flash_bank *bank, const uint8_t *buffer, uint32_t offse
 		return retval;
 
 	if (~image_crc != ~target_crc) {
+		LOG_ERROR("write failed, find difference");
 		fail_location = find_difference(bank, buffer, count, offset);
 		LOG_ERROR("write failed at location %x", fail_location);
 		retval = ERROR_FAIL;
-	}		
+	}
 
 	return retval;
 }
 
-static struct code_src async_pp_srcs[3] = 
+static struct code_src async_pp_srcs[3] =
 {
     [RV64_SRC] = {NULL, 0, 0},
     [RV32_SRC] = {NULL, 0, 0},
@@ -1536,11 +1542,11 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
 
 	uint32_t image_block_cnt = DIV_ROUND_UP(count, block_size);
 	uint32_t total_bytes = image_block_cnt * block_size;
-	
+
 	uint8_t *staging_buffer = malloc(total_bytes);
 	if (!staging_buffer)
 		return ERROR_FAIL;
-	
+
 	memset(staging_buffer, 0xFF, total_bytes);
 	memcpy(staging_buffer, buffer, count);
 
@@ -1550,8 +1556,16 @@ static int dwcssi_write_loader(struct flash_bank *bank, const uint8_t *buffer, u
 
 	target_set_mailbox_sections(&buf_offset_blocks, &section_start_addr, &size_blocks, 1);
 
-	retval = loader_flash_write_pp(loader, async_pp_srcs,
-		staging_buffer, offset, count, bank->bank_number);
+	driver_priv->params.flash_addr = offset;
+	driver_priv->params.image_size = count;
+	driver_priv->params.bank_id = bank->bank_number;
+	driver_priv->params.clk_param = driver_priv->sample_delay;
+	driver_priv->params.flash_id = driver_priv->dev->device_id;
+	driver_priv->params.sector_size = driver_priv->dev->sectorsize;
+	driver_priv->params.sector_num = (driver_priv->dev->size_in_bytes / driver_priv->dev->sectorsize);
+	driver_priv->params.page_size = driver_priv->dev->pagesize;
+
+	retval = loader_flash_write_pp(loader, async_pp_srcs, staging_buffer, &(driver_priv->params));
 
 	target_set_mailbox_sections(NULL, NULL, NULL, 0);
 

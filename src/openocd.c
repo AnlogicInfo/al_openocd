@@ -33,6 +33,7 @@
 #include <helper/util.h>
 #include <helper/configuration.h>
 #include <flash/nor/core.h>
+#include <flash/nor/spi_ext.h>
 #include <flash/nand/core.h>
 #include <flash/emmc/core.h>
 #include <pld/pld.h>
@@ -321,6 +322,7 @@ static struct command_context *setup_command_handler(Jim_Interp *interp)
 		&adapter_register_commands,
 		&target_register_commands,
 		&flash_register_commands,
+		&flash_ext_map_register_commands,
 		&nand_register_commands,
 		&emmc_register_commands,
 		&pld_register_commands,

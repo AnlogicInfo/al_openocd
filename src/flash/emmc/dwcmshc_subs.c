@@ -781,7 +781,7 @@ int dwcmshc_erase_block_range(struct emmc_device *emmc, uint32_t start_block, ui
 
 
 
-static struct code_src async_srcs[3] = 
+static struct code_src async_srcs[3] =
 {
     [RV64_SRC] = {NULL, 0, 0},
     [RV32_SRC] = {NULL, 0, 0},
@@ -796,7 +796,7 @@ static int dwcmshc_try_load_elf_code_src(struct dwcmshc_emmc_controller *ctrl, e
     const char *arch;
 
     if (mode == ASYNC_TRANS)
-        prefix = "emmc_async_";
+        prefix = "emmc_write_";
     /* sync write removed */
     else
         prefix = "emmc_crc_";
@@ -827,12 +827,22 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
 {
     struct dwcmshc_emmc_controller *driver_priv = emmc->controller_priv;
     struct flash_loader *loader = &driver_priv->flash_loader;
-    int block_addr = addr/emmc->device->block_size;
-    int retval;
+    uint32_t block_size = emmc->device->block_size;
+    uint32_t block_addr = (uint32_t)(addr / block_size);
+    uint32_t image_block_cnt = (uint32_t)((image_size + (int)block_size - 1) / (int)block_size);
+    uint32_t total_bytes = image_block_cnt * block_size;
+    uint8_t *staging_buffer = NULL;
+    bool mailbox_owned = false;
+    int retval = ERROR_OK;
+    unsigned int mailbox_count = target_get_mailbox_section_count();
+    if (image_size <= 0)
+        return ERROR_OK;
+    LOG_INFO("dwcmshc async write start: addr=0x%" TARGET_PRIxADDR " image_size=%d block_size=%u block_addr=%u block_cnt=%u bank=%u mailbox_count=%u clk_phase=%u",
+        addr, image_size, block_size, block_addr, image_block_cnt, driver_priv->io_location, mailbox_count, driver_priv->clk_phase);
     loader->work_mode = ASYNC_TRANS;
-    loader->block_size = emmc->device->block_size;
+    loader->block_size = block_size;
     loader->image_size = image_size;
-    loader->param_cnt = 6;
+    loader->param_cnt = 0;
 
     int arch_index;
     if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
@@ -844,12 +854,53 @@ int dwcmshc_emmc_async_write_image(struct emmc_device* emmc, uint8_t *buffer, ta
         async_srcs[0], async_srcs[1], async_srcs[2]
     };
     bool elf_loaded = (dwcmshc_try_load_elf_code_src(driver_priv, ASYNC_TRANS, arch_index, local_srcs) == ERROR_OK);
-    if (!elf_loaded)
+    if (!elf_loaded) {
+        LOG_ERROR("dwcmshc async write: load elf failed");
         return ERROR_FAIL;
+    }
 
-    dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-    dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-    retval = loader_flash_write_async_pp(loader, local_srcs, buffer, block_addr, image_size);
+    staging_buffer = malloc(total_bytes);
+    if (!staging_buffer) {
+        LOG_ERROR("dwcmshc async write: staging buffer alloc failed, bytes=%u", total_bytes);
+        retval = ERROR_FAIL;
+        goto out;
+    }
+    memset(staging_buffer, 0xFF, total_bytes);
+    memcpy(staging_buffer, buffer, image_size);
+
+    if (mailbox_count == 0) {
+        uint32_t section_start_addr = block_addr;
+        uint32_t size_blocks = image_block_cnt;
+        uint32_t buf_offset_blocks = 0;
+        retval = target_set_mailbox_sections(&buf_offset_blocks, &section_start_addr, &size_blocks, 1);
+        if (retval != ERROR_OK) {
+			LOG_INFO("target_set_mailbox_sections fail");
+            goto out;
+        }
+        mailbox_owned = true;
+    }
+
+    // retval = dwcmshc_emmc_cmd_set_block_length(emmc, block_size);
+    // if (retval != ERROR_OK) {
+    //     goto out;
+    // }
+    // retval = dwcmshc_emmc_cmd_set_block_count(emmc, 1);
+    // if (retval != ERROR_OK) {
+    //     goto out;
+    // }
+
+	driver_priv->params.flash_addr = block_addr;
+	driver_priv->params.image_size = image_size;
+	driver_priv->params.bank_id = driver_priv->io_location;
+	driver_priv->params.clk_param = driver_priv->clk_phase;
+
+	retval = loader_flash_write_pp(loader, local_srcs, staging_buffer, &(driver_priv->params));
+
+out:
+    if (mailbox_owned) {
+        target_set_mailbox_sections(NULL, NULL, NULL, 0);
+    }
+    free(staging_buffer);
     if (elf_loaded)
         free((void *)local_srcs[arch_index].bin);
     return retval;
@@ -873,7 +924,7 @@ int slow_dwcmshc_emmc_read_block(struct emmc_device *emmc, uint32_t *buffer, uin
 }
 
 
-static struct code_src crc_srcs[3] = 
+static struct code_src crc_srcs[3] =
 {
     [RV64_SRC] = {NULL, 0, 0},
     [RV32_SRC] = {NULL, 0, 0},
@@ -888,13 +939,9 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t a
     struct flash_loader *loader = &driver_priv->flash_loader;
     int block_addr = (int)(addr/emmc->device->block_size);
 
-	// dwcmshc_emmc_cmd_set_block_length(emmc, emmc->device->block_size);
-	// dwcmshc_emmc_cmd_set_block_count(emmc, 1);
-
     loader->work_mode = CRC_CHECK;
     loader->block_size = emmc->device->block_size;
     loader->image_size = count;
-    loader->param_cnt = 4;
 
     int arch_index;
     if (strcmp(target_type_name(loader->exec_target), "riscv") == 0) {
@@ -905,12 +952,17 @@ int dwcmshc_checksum(struct emmc_device *emmc, const uint8_t *buffer, uint64_t a
     struct code_src local_srcs[3] = {
         crc_srcs[0], crc_srcs[1], crc_srcs[2]
     };
-    bool elf_loaded = (dwcmshc_try_load_elf_code_src(driver_priv, CRC_CHECK, arch_index, local_srcs) == ERROR_OK);
-    if (!elf_loaded)
-        return ERROR_FAIL;
+	bool elf_loaded = (dwcmshc_try_load_elf_code_src(driver_priv, CRC_CHECK, arch_index, local_srcs) == ERROR_OK);
+	if (!elf_loaded)
+		return ERROR_FAIL;
 
-    retval = loader_flash_crc(loader, local_srcs, block_addr, crc);
-    if (elf_loaded)
-        free((void *)local_srcs[arch_index].bin);
-    return retval;
+	driver_priv->params.flash_addr = block_addr;
+	driver_priv->params.image_size = loader->image_size;
+	driver_priv->params.bank_id = driver_priv->io_location;
+	driver_priv->params.clk_param = driver_priv->clk_phase;
+
+	retval = loader_flash_crc_mem_parm(loader, local_srcs, crc, &(driver_priv->params));
+	if (elf_loaded)
+		free((void *)local_srcs[arch_index].bin);
+	return retval;
 }

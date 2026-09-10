@@ -19,7 +19,7 @@
 #include <flash/loader_io.h>
 
 
-typedef struct dwcmshc_cmd_pkt_t 
+typedef struct dwcmshc_cmd_pkt_t
 {
 	uint8_t       argu_en;
 	uint32_t      argument;
@@ -68,12 +68,24 @@ typedef union
 	} Emmc;
 } AL_MMC_Cmd6ArgUnion;
 
+struct dwcmshc_emmc_params {
+		uint32_t flash_addr;           /*Offset: 0x00		*/
+		uint8_t  _pad0[60];            /*Padding to 0x40	*/
+		uint32_t image_size;           /*Offset: 0x40		*/
+		uint8_t  _pad1[60];            /*Padding to 0x80	*/
+		uint32_t bank_id;              /*Offset: 0x80		*/
+		uint8_t  _pad2[60];            /*Padding to 0xC0	*/
+		uint32_t clk_param;            /*Offset: 0xC0		*/
+		uint8_t  _pad3[60];            /*Padding to 0x100	*/
+};
 struct dwcmshc_emmc_controller {
     uint8_t             io_location;
+	uint8_t				clk_phase;
     target_addr_t       ctrl_base;
     dwcmshc_cmd_pkt_t   ctrl_cmd;
     uint32_t            io_bank_pwr;
     struct flash_loader flash_loader;
+	struct dwcmshc_emmc_params params;
     char               *elf_dir;
 };
 

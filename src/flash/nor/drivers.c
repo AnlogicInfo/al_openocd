@@ -46,6 +46,7 @@ extern const struct flash_driver fm4_flash;
 extern const struct flash_driver fespi_flash;
 extern const struct flash_driver dr90_flash;
 extern const struct flash_driver dr91_flash;
+extern const struct flash_driver dr35_flash;
 extern const struct flash_driver gd32vf103_flash;//TODO DID they just replace this with DWCSSI?
 extern const struct flash_driver jtagspi_flash;
 extern const struct flash_driver kinetis_flash;
@@ -126,6 +127,7 @@ static const struct flash_driver * const flash_drivers[] = {
 	&fespi_flash,
 	&dr90_flash,
 	&dr91_flash,
+	&dr35_flash,
 	&gd32vf103_flash,//TODO DID they just replace this with DWCSSI?
 	&jtagspi_flash,
 	&kinetis_flash,

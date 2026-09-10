@@ -6,6 +6,7 @@ EMMC_DEVICE_COMMAND_HANDLER(dr91_dwcmshc_emmc_device_command)
 	struct dwcmshc_emmc_controller *dwcmshc_emmc;
 	uint32_t base;
 	uint8_t io_location;
+	uint8_t clk_phase;
     if (CMD_ARGC < 4) {
         return ERROR_COMMAND_SYNTAX_ERROR;
     }
@@ -18,18 +19,19 @@ EMMC_DEVICE_COMMAND_HANDLER(dr91_dwcmshc_emmc_device_command)
 
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], base);
 	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[3], io_location);
+	COMMAND_PARSE_NUMBER(u8, CMD_ARGV[4], clk_phase);
 	emmc->controller_priv = dwcmshc_emmc;
 	dwcmshc_emmc->io_location = io_location;
+	dwcmshc_emmc->clk_phase = clk_phase;
 	dwcmshc_emmc->ctrl_base = base;
 	dwcmshc_emmc->flash_loader.dev_info = (struct dwcmshc_emmc_controller *) dwcmshc_emmc;
 	dwcmshc_emmc->flash_loader.set_params_priv = NULL;
 	dwcmshc_emmc->flash_loader.exec_target = emmc->target;
-    dwcmshc_emmc->flash_loader.copy_area = NULL;
-    dwcmshc_emmc->flash_loader.ctrl_base = base;
-    dwcmshc_emmc->elf_dir = NULL;
-    if (CMD_ARGC >= 5) {
-        dwcmshc_emmc->elf_dir = strdup(CMD_ARGV[4]);
-    }
+	dwcmshc_emmc->flash_loader.copy_area = NULL;
+	dwcmshc_emmc->flash_loader.ctrl_base = base;
+	dwcmshc_emmc->elf_dir = NULL;
+	if (CMD_ARGC >= 6)
+		dwcmshc_emmc->elf_dir = strdup(CMD_ARGV[5]);
 
 	return ERROR_OK;
 }

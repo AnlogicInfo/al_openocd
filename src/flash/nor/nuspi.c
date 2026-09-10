@@ -39,10 +39,12 @@
 
 #include "imp.h"
 #include "spi.h"
+#include "spi_ext.h"
 #include <jtag/jtag.h>
 #include <helper/time_support.h>
 #include <flash/loader_io.h>
 #include <target/algorithm.h>
+#include <target/image.h>
 #include "target/riscv/riscv.h"
 
 /* Register offsets */
@@ -137,10 +139,13 @@
 /* Timeout in ms */
 #define NUSPI_CMD_TIMEOUT			(100)
 #define NUSPI_PROBE_TIMEOUT			(100)
+#define NUSPI_ERASE_TIMEOUT			(300000)
 #define NUSPI_MAX_TIMEOUT			(3000)
 #define NUSPI_SIM_TIMEOUT			(0x7FFFFFFF)
 
 #define NUSPI_FLAGS_32B_DAT 		(1 << 0)
+
+#define NUSPI_XIP_BASE			(0x20000000)
 
 struct nuspi_flash_bank {
 	uint32_t version;
@@ -373,15 +378,16 @@ static int nuspi_wip(struct flash_bank *bank, int timeout)
 {
 	int64_t endtime;
 
-	nuspi_set_dir(bank, NUSPI_DIR_RX);
+	nuspi_set_dir(bank, NUSPI_DIR_TX);
 
 	if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
 		return ERROR_FAIL;
 	endtime = timeval_ms() + timeout;
 
 	nuspi_tx(bank, SPIFLASH_READ_STATUS);
-	if (nuspi_rx(bank, NULL) != ERROR_OK)
+	if (nuspi_txwm_wait(bank) != ERROR_OK)
 		return ERROR_FAIL;
+	nuspi_set_dir(bank, NUSPI_DIR_RX);
 	do {
 		alive_sleep(1);
 		nuspi_tx(bank, 0);
@@ -396,7 +402,6 @@ static int nuspi_wip(struct flash_bank *bank, int timeout)
 		}
 	} while (timeval_ms() < endtime);
 
-	LOG_ERROR("timeout");
 	return ERROR_FAIL;
 }
 
@@ -452,11 +457,8 @@ static int nuspi_set_xip_read_cmd(struct flash_bank *bank)
 	} else {
 		temp |= NUSPI_INSN_ADDR_LEN(3);
 	}
-	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
-		temp |= NUSPI_INSN_CMD_CODE(SPIFLASH_4BYTE_FAST_READ);
-	} else {
-		temp |= NUSPI_INSN_CMD_CODE(nuspi_info->dev->read_cmd);
-	}
+	temp |= NUSPI_INSN_CMD_CODE(nuspi_info->dev->read_cmd);
+
 	return nuspi_write_reg(bank, NUSPI_REG_FFMT, temp);
 }
 
@@ -619,7 +621,7 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
 	int retval = ERROR_OK;
 
-	LOG_DEBUG("%s: from sector %u to sector %u", __func__, first, last);
+	LOG_INFO("%s: from sector %u to sector %u", __func__, first, last);
 
 	if (target->state != TARGET_HALTED) {
 		LOG_ERROR("Target not halted");
@@ -669,17 +671,50 @@ static int nuspi_erase(struct flash_bank *bank, unsigned int first,
 	if (retval != ERROR_OK)
 		goto done;
 
-	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+	if (bank->size  > 0x1000000) {
 		retval = nuspi_enter_4byte_address_mode(bank);
 		if (retval != ERROR_OK)
 			return retval;
 	}
 
-	for (unsigned int sector = first; sector <= last; sector++) {
-		retval = nuspi_erase_sector(bank, sector);
+	if (last - first == bank->num_sectors - 1) {
+		/* Erase whole chip */
+		LOG_INFO("%s: whole chip erase", __func__);
+		retval = nuspi_tx(bank, SPIFLASH_WRITE_ENABLE);
 		if (retval != ERROR_OK)
 			goto done;
-		keep_alive();
+		if (nuspi_txwm_wait(bank) != ERROR_OK)
+			goto done;
+
+		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_HOLD) != ERROR_OK)
+			return ERROR_FAIL;
+
+		retval = nuspi_tx(bank, nuspi_info->dev->chip_erase_cmd);
+		if (retval != ERROR_OK)
+			goto done;
+		retval = nuspi_txwm_wait(bank);
+		if (retval != ERROR_OK)
+			goto done;
+		if (nuspi_write_reg(bank, NUSPI_REG_CSMODE, NUSPI_CSMODE_AUTO) != ERROR_OK)
+			return ERROR_FAIL;
+
+		/* poll WIP */
+		if (nuspi_info->simulation)
+			retval = nuspi_wip(bank, NUSPI_SIM_TIMEOUT);
+		else
+			retval = nuspi_wip(bank, NUSPI_ERASE_TIMEOUT);
+
+		if (retval != ERROR_OK) {
+			LOG_ERROR("%s: chip erase timeout - flash may be in inconsistent state", __func__);
+		}
+	} else {
+		for (unsigned int sector = first; sector <= last; sector++) {
+			retval = nuspi_erase_sector(bank, sector);
+			if (retval != ERROR_OK)
+				goto done;
+			keep_alive();
+			LOG_PROC(sector - first, last - first);
+		}
 	}
 
 	/* Switch to HW mode before return to prompt */
@@ -763,7 +798,7 @@ static void nuspi_write_sync_params_priv(struct flash_loader *loader)
 {
 	struct nuspi_flash_bank *nuspi_info = loader->dev_info;
 	buf_set_u64(loader->reg_params[5].value, 0, loader->xlen,
-					nuspi_info->dev->pprog_cmd | (nuspi_info->dev->size_in_bytes > 0x1000000 ? 0x100 : 0));	
+					nuspi_info->dev->pprog_cmd | (nuspi_info->dev->size_in_bytes > 0x1000000 ? 0x100 : 0));
 }
 
 static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
@@ -783,16 +818,16 @@ static int nuspi_write(struct flash_bank *bank, const uint8_t *buffer,
 	if (nuspi_disable_hw_mode(bank) != ERROR_OK)
 		return ERROR_FAIL;
 
-	retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset, count);
+	retval = loader_flash_write_sync(loader, sync_srcs, buffer, offset - NUSPI_XIP_BASE, count);
 
 	if (retval != ERROR_OK) {
 		LOG_ERROR("nuspi write sync error");
 		if (0)
-			retval = slow_nuspi_write_buffer(bank, buffer, offset, count);
+			retval = slow_nuspi_write_buffer(bank, buffer, offset - NUSPI_XIP_BASE, count);
 	}
 
 
-	if ((bank->size  > 0x1000000) & (nuspi_info->dev->erase_cmd == 0xd8)) {
+	if (bank->size  > 0x1000000) {
 		if (nuspi_exit_4byte_address_mode(bank) != ERROR_OK)
 			return ERROR_FAIL;
 	}
@@ -812,6 +847,68 @@ static int nuspi_read(struct flash_bank *bank, uint8_t *buffer,
 	if (nuspi_set_xip_read_cmd(bank) != ERROR_OK)
 		return ERROR_FAIL;
 	return default_flash_read(bank, buffer, offset, count);
+}
+
+static int nuspi_verify(struct flash_bank *bank, const uint8_t *buffer,
+		uint32_t offset, uint32_t count)
+{
+	struct target *target = bank->target;
+	struct nuspi_flash_bank *nuspi_info = bank->driver_priv;
+	int retval = ERROR_OK;
+	uint8_t *read_buf = NULL;
+	uint32_t crc_buffer, crc_flash;
+
+	LOG_DEBUG("%s: offset=0x%08" PRIx32 ", count=%" PRIu32,
+				__func__, offset, count);
+
+	retval = image_calculate_checksum(buffer, count, &crc_buffer);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Buffer checksum calculation failed");
+		return retval;
+	}
+
+	if (target->state != TARGET_HALTED) {
+		LOG_ERROR("Target not halted");
+		return ERROR_TARGET_NOT_HALTED;
+	}
+
+	if (!nuspi_info->probed) {
+		LOG_ERROR("Flash bank not probed");
+		return ERROR_FLASH_BANK_NOT_PROBED;
+	}
+
+	read_buf = malloc(count);
+	if (!read_buf) {
+		LOG_ERROR("Failed to allocate verify buffer");
+		return ERROR_FAIL;
+	}
+
+	retval = nuspi_read(bank, read_buf, offset, count);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Failed to read flash for verification");
+		goto cleanup;
+	}
+
+	retval = image_calculate_checksum(buffer, count, &crc_flash);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Buffer checksum calculation failed");
+		return retval;
+	}
+
+	if (crc_buffer != crc_flash) {
+		LOG_ERROR("CRC verification failed at offset 0x%08" PRIx32
+					": expected CRC32=0x%08" PRIx32
+					", got CRC32=0x%08" PRIx32,
+					offset, crc_buffer, crc_flash);
+		retval = ERROR_FAIL;
+		goto cleanup;
+	}
+
+	LOG_DEBUG("Verification successful");
+
+cleanup:
+	free(read_buf);
+	return retval;
 }
 
 /* Return ID of flash device */
@@ -953,8 +1050,14 @@ static int nuspi_probe(struct flash_bank *bank)
 				break;
 			}
 		}
-		if (NULL != nuspi_info->dev)
-			break;
+		if (!nuspi_info->dev) {
+			nuspi_info->dev = lookup_external_flash_id_map(id);
+			if (!nuspi_info->dev) {
+				LOG_ERROR("Unknown flash device (ID 0x%08" PRIx32 ")", id);
+				LOG_ERROR("Try below command to customize flash device:");
+				LOG_ERROR("flash customize bank_id read_cmd page_prog_cmd page_erase_cmd page_size sector_size chip_size");
+			}
+		}
 	}
 
 	if (nuspi_enable_hw_mode(bank) != ERROR_OK)
@@ -1021,6 +1124,7 @@ const struct flash_driver nuspi_flash = {
 	.protect = nuspi_protect,
 	.write = nuspi_write,
 	.read = nuspi_read,
+	.verify = nuspi_verify,
 	.probe = nuspi_probe,
 	.auto_probe = nuspi_auto_probe,
 	.erase_check = default_flash_blank_check,

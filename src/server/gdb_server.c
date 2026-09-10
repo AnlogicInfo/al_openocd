@@ -789,6 +789,39 @@ static int gdb_output(struct command_context *context, const char *line)
 	return ERROR_OK;
 }
 
+static struct target *gdb_pick_effective_halted_target(struct target *target)
+{
+	if (!target->smp)
+		return target;
+
+	struct target *best = NULL;
+	struct target *fallback = NULL;
+	struct target_list *head;
+	foreach_smp_target(head, target->smp_targets) {
+		struct target *t = head->target;
+		if (!target_was_examined(t) || t->state != TARGET_HALTED)
+			continue;
+
+		if (!fallback)
+			fallback = t;
+
+		if (t->debug_reason == DBG_REASON_BREAKPOINT ||
+			t->debug_reason == DBG_REASON_WATCHPOINT ||
+			t->debug_reason == DBG_REASON_WPTANDBKPT ||
+			t->debug_reason == DBG_REASON_SINGLESTEP ||
+			t->debug_reason == DBG_REASON_EXC_CATCH) {
+			best = t;
+			break;
+		}
+	}
+
+	if (best)
+		return best;
+	if (fallback)
+		return fallback;
+	return target;
+}
+
 static void gdb_signal_reply(struct target *target, struct connection *connection)
 {
 	struct gdb_connection *gdb_connection = connection->priv;
@@ -797,6 +830,11 @@ static void gdb_signal_reply(struct target *target, struct connection *connectio
 	char current_thread[25];
 	int sig_reply_len;
 	int signal_var;
+
+	struct target *signal_target = gdb_pick_effective_halted_target(target);
+	struct rtos *rtos_for_halt = rtos_of_target(target);
+	if (rtos_for_halt)
+		rtos_for_halt->halted_target = signal_target;
 
 	rtos_update_threads(target);
 
@@ -811,7 +849,7 @@ static void gdb_signal_reply(struct target *target, struct connection *connectio
 			rtos->current_threadid = rtos->current_thread;
 			rtos->gdb_target_for_threadid(connection, rtos->current_threadid, &ct);
 		} else {
-			ct = target;
+			ct = signal_target;
 		}
 
 		if (gdb_connection->ctrl_c) {
@@ -1053,12 +1091,11 @@ static int gdb_new_connection(struct connection *connection)
 
 	target_call_event_callbacks(target, TARGET_EVENT_GDB_ATTACH);
 
-	if (target->rtos) {
-		/* clean previous rtos session if supported*/
-		if (target->rtos->type->clean)
-			target->rtos->type->clean(target);
-
-		/* update threads */
+	struct rtos *rtos = rtos_of_target(target);
+	if (rtos) {
+		/* keep RTOS driver private state across attach; only refresh thread snapshot */
+		rtos_free_threadlist(rtos);
+		rtos->halted_target = NULL;
 		rtos_update_threads(target);
 	}
 
@@ -1147,6 +1184,9 @@ static int gdb_connection_closed(struct connection *connection)
 	target_unregister_event_callback(gdb_target_callback_event_handler, connection);
 
 	target_call_event_callbacks(target, TARGET_EVENT_GDB_END);
+	struct rtos *rtos = rtos_of_target(target);
+	if (rtos)
+		rtos->halted_target = NULL;
 
 	target_call_event_callbacks(target, TARGET_EVENT_GDB_DETACH);
 
@@ -3004,18 +3044,36 @@ static bool gdb_handle_vcont_packet(struct connection *connection, const char *p
 
 	/* simple case, a continue packet */
 	if (parse[0] == 'c') {
+		struct target *ct = target;
+		int current_pc = 1;
+
+		if (strncmp(parse, "c:", 2) == 0) {
+			int64_t thread_id;
+			char *endp;
+
+			parse += 2;
+			thread_id = strtoll(parse, &endp, 16);
+
+			if (target->rtos)
+				target->rtos->gdb_target_for_threadid(connection, thread_id, &ct);
+
+			/* For SMP AArch64, current==2 means resume selected core only. */
+			if (ct->smp)
+				current_pc = 2;
+		}
+
 		gdb_running_type = 'c';
-		LOG_DEBUG("target %s continue", target_name(target));
+		LOG_DEBUG("target %s continue (current=%d)", target_name(ct), current_pc);
 		gdb_connection->output_flag = GDB_OUTPUT_ALL;
-		retval = target_resume(target, 1, 0, 0, 0);
+		retval = target_resume(ct, current_pc, 0, 0, 0);
 		if (retval == ERROR_TARGET_NOT_HALTED)
-			LOG_INFO("target %s was not halted when resume was requested", target_name(target));
+			LOG_INFO("target %s was not halted when resume was requested", target_name(ct));
 
 		/* poll target in an attempt to make its internal state consistent */
 		if (retval != ERROR_OK) {
-			retval = target_poll(target);
+			retval = target_poll(ct);
 			if (retval != ERROR_OK)
-				LOG_DEBUG("error polling target %s after failed resume", target_name(target));
+				LOG_DEBUG("error polling target %s after failed resume", target_name(ct));
 		}
 
 		/*
@@ -3024,7 +3082,7 @@ static bool gdb_handle_vcont_packet(struct connection *connection, const char *p
 		 * target state
 		 */
 		gdb_connection->frontend_state = TARGET_RUNNING;
-		target_call_event_callbacks(target, TARGET_EVENT_GDB_START);
+		target_call_event_callbacks(ct, TARGET_EVENT_GDB_START);
 
 		return true;
 	}
@@ -3036,7 +3094,7 @@ static bool gdb_handle_vcont_packet(struct connection *connection, const char *p
 
 		if (strncmp(parse, "s:", 2) == 0) {
 			struct target *ct = target;
-			int current_pc = 1;
+			int current_pc = 2;
 			int64_t thread_id;
 			char *endp;
 
@@ -3083,29 +3141,8 @@ static bool gdb_handle_vcont_packet(struct connection *connection, const char *p
 				--packet_size;
 
 				if (parse[0] == 'c') {
-					parse += 1;
-
-					/* check if thread-id follows */
-					if (parse[0] == ':') {
-						int64_t tid;
-						parse += 1;
-
-						tid = strtoll(parse, &endp, 16);
-						if (tid == thread_id) {
-							/*
-							 * Special case: only step a single thread (core),
-							 * keep the other threads halted. Currently, only
-							 * aarch64 target understands it. Other target types don't
-							 * care (nobody checks the actual value of 'current')
-							 * and it doesn't really matter. This deserves
-							 * a symbolic constant and a formal interface documentation
-							 * at a later time.
-							 */
-							LOG_DEBUG("request to step current core only");
-							/* uncomment after checking that indeed other targets are safe */
-							/*current_pc = 2;*/
-						}
-					}
+					/* vCont;s:<tid>;c => step current thread/core and let peers run */
+					current_pc = 1;
 				}
 			}
 

@@ -896,7 +896,7 @@ int target_run_algorithm(struct target *target,
 	}
 
 	target->running_alg = true;
-	LOG_INFO("target_run_algorithm: entry_point=" TARGET_ADDR_FMT, entry_point);
+	// LOG_INFO("target_run_algorithm: entry_point=" TARGET_ADDR_FMT, entry_point);
 	retval = target->type->run_algorithm(target,
 			num_mem_params, mem_params,
 			num_reg_params, reg_param,
@@ -1031,7 +1031,7 @@ static int target_async_algorithm_init_ping_pong_fifo(
     int retval;
 
     pp->buf_size = buffer_size - block_size;
-    pp->half_size = pp->buf_size / 2;
+    pp->half_size = (pp->buf_size / 2) & 0xFFFFFE00;
 
     pp->buf0_flag_addr = buffer_start;
     pp->buf1_flag_addr = buffer_start + 0x40;
@@ -1053,16 +1053,21 @@ static int target_async_algorithm_init_ping_pong_fifo(
 
     pp->prod_idx = 0;
 
-    LOG_INFO("init pp fifo buf size %x half size %x buf0 start %x buf1 start %x", 
+    LOG_INFO("init pp fifo buf size %x half size %x buf0 start %x buf1 start %x",
 			  pp->buf_size, pp->half_size,
 			  pp->buf0_start, pp->buf1_start);
     // 清零两个标志，表示两个缓冲都空闲
-    retval = target_write_u32(exec_target, pp->buf0_flag_addr, 0);
-	target_write_u32(exec_target, pp->buf0_start_addr, pp->buf0_start);
-    if (retval != ERROR_OK) return retval;
-    retval = target_write_u32(exec_target, pp->buf1_flag_addr, 0);
-	target_write_u32(exec_target, pp->buf1_start_addr, pp->buf1_start);
-	target_write_u32(exec_target, pp->buf2_start_addr, pp->buf2_start);
+    retval = target_write_u32(exec_target, pp->ctrl_flag_addr, 0);
+    retval |= target_write_u32(exec_target, pp->buf0_flag_addr, 0);
+	retval |= target_write_u32(exec_target, pp->buf0_start_addr, pp->buf0_start);
+    retval |= target_write_u32(exec_target, pp->buf1_flag_addr, 0);
+	retval |= target_write_u32(exec_target, pp->buf1_start_addr, pp->buf1_start);
+	retval |= target_write_u32(exec_target, pp->buf2_start_addr, pp->buf2_start);
+
+    if (retval != ERROR_OK) {
+		LOG_ERROR("clean pp buffer fail");
+	}
+
     return retval;
 }
 
@@ -1098,6 +1103,11 @@ int target_set_mailbox_sections(const uint32_t *buf_offset_blocks, const uint32_
     }
     g_mailbox.count = count;
     return ERROR_OK;
+}
+
+unsigned int target_get_mailbox_section_count(void)
+{
+	return g_mailbox.count;
 }
 
 static int target_async_algorithm_trans_data(struct target *trans_target, const uint8_t *buffer, int count, uint32_t block_size, struct async_fifo *fifo)
@@ -1218,7 +1228,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
     int32_t buf_blocks = pp->half_size / block_size;
     unsigned int mb_index = 0;
 
-    while (count > 0) {			
+    while (count > 0) {
 		if (remain_section_blks == 0) {
 			uint32_t ctrl = 1U;
             target_write_u32(trans_target, pp->section_start_ptr, g_mailbox.list[mb_index].section_start_addr);
@@ -1233,13 +1243,13 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 					if (retval != ERROR_OK)
 						break;
 					if (ack != 0U) {
-						alive_sleep(2);
+						alive_sleep(100);
 						if (timeout++ >= 2500) {
 							LOG_ERROR("timeout waiting loader to ack mailbox ctrl_flag");
 							return ERROR_FLASH_OPERATION_FAILED;
 						}
 						if ((timeout & 0x7F) == 0)
-							LOG_INFO("waiting ack ctrl_flag, read %x tries %d", ack, timeout);
+							LOG_INFO("waiting ack ctrl_flag addr 0x%" PRIx32 ", read %x tries %d", pp->ctrl_flag_addr, ack, timeout);
 						continue;
 					}
 					timeout = 0;
@@ -1288,7 +1298,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 			this_blocks = buf_blocks;
 		else
 			this_blocks = remain_section_blks;
-		
+
         int32_t this_bytes  = this_blocks * block_size;
 
         // 写入数据
@@ -1302,18 +1312,18 @@ static int target_ping_pong_trans_data(struct target *trans_target,
             uint32_t verify_flag = 0;
             retval = target_read_u32(trans_target, flag_addr, &verify_flag);
             if (retval != ERROR_OK) break;
-            if (verify_flag != (uint32_t)this_blocks) {
+            if (verify_flag != (uint32_t)this_blocks && verify_flag != 0U) {
                 LOG_WARNING("flag write verify mismatch: wrote %x read %x at %x", this_blocks, verify_flag, flag_addr);
                 retval = target_write_u32(trans_target, flag_addr, this_blocks);
                 if (retval != ERROR_OK) break;
                 retval = target_read_u32(trans_target, flag_addr, &verify_flag);
                 if (retval != ERROR_OK) break;
-                if (verify_flag != (uint32_t)this_blocks) {
+                if (verify_flag != (uint32_t)this_blocks && verify_flag != 0U) {
                     LOG_ERROR("flag write verify failed: wrote %x read %x at %x", this_blocks, verify_flag, flag_addr);
                     return ERROR_FLASH_OPERATION_FAILED;
                 }
             }
-        }		
+        }
 
         // 更新计数与指针，翻转到另一半缓冲
         buffer   += this_bytes;
@@ -1354,7 +1364,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
         target_write_u32(trans_target, pp->buf1_flag_addr, 0xFFFFFFFF);
     } else
 		LOG_PROC(total_cnt, total_cnt);
- 
+
 	return retval;
 }
 
@@ -1399,7 +1409,11 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     size_t total_bytes = (size_t)count * (size_t)block_size;
 
     retval = target_async_algorithm_init_ping_pong_fifo(exec_target, buffer_start, buffer_size, block_size, pp);
-    if (retval != ERROR_OK) { free(pp); return retval; }
+    if (retval != ERROR_OK) {
+		LOG_INFO("target_async_algorithm_init_ping_pong_fifo fail");
+		free(pp);
+		return retval;
+	}
 
     retval = target_start_algorithm(exec_target, num_mem_params, mem_params,
         num_reg_params, reg_params, entry_point, exit_point, arch_info);
@@ -1424,10 +1438,9 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
     duration_measure(&dur_prog);
     if (retval2 != ERROR_OK) retval = retval2;
     if (retval == ERROR_OK) {
-        LOG_DEBUG("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
+        LOG_INFO("Programming completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
             duration_elapsed(&dur_prog), duration_kbps(&dur_prog, total_bytes), (unsigned int)total_bytes);
     }
-
     free(pp);
     return retval;
 }
@@ -1804,7 +1817,7 @@ int target_run_async_algorithm(struct target *trans_target, struct target *exec_
 	if (retval != ERROR_OK) {
 		LOG_ERROR("error starting target flash write algorithm");
 		return retval;
-	}	
+	}
 	retval = target_async_algorithm_trans_data(trans_target, buffer, (int) count, block_size, fifo);
 
 	int retval2 = target_wait_algorithm(exec_target, num_mem_params, mem_params,
@@ -1838,7 +1851,7 @@ int target_read_memory(struct target *target,
 		LOG_ERROR("Target not examined yet");
 		return ERROR_FAIL;
 	}
-	
+
 	if (!target->type->read_memory) {
 		LOG_ERROR("Target %s doesn't support read_memory", target_name(target));
 		return ERROR_FAIL;
@@ -3194,7 +3207,7 @@ int target_read_u8(struct target *target, target_addr_t address, uint8_t *value)
 		LOG_ERROR("Target not examined yet");
 		return ERROR_FAIL;
 	}
-	
+
 	int retval = target_read_memory(target, address, 1, 1, value);
 
 	if (retval == ERROR_OK) {
@@ -3239,7 +3252,7 @@ int target_write_u32(struct target *target, target_addr_t address, uint32_t valu
 		LOG_ERROR("Target not examined yet");
 		return ERROR_FAIL;
 	}
-	
+
 
 	target_buffer_set_u32(target, value_buf, value);
 	retval = target_write_memory(target, address, 4, 1, value_buf);

@@ -50,6 +50,8 @@ struct rtos {
 
 	struct symbol_table_elem *symbols;
 	struct target *target;
+    /* Actual halted core selected from SMP group for current stop reply. */
+	struct target *halted_target;
 	/*  add a context variable instead of global variable */
 	/* The thread currently selected by gdb. */
 	int64_t current_threadid;

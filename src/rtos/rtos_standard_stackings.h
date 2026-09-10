@@ -28,6 +28,7 @@
 extern const struct rtos_register_stacking rtos_standard_cortex_m3_stacking;
 extern const struct rtos_register_stacking rtos_standard_cortex_m4f_stacking;
 extern const struct rtos_register_stacking rtos_standard_cortex_m4f_fpu_stacking;
+extern const struct rtos_register_stacking rtos_standard_cortex_a_fpu_stacking;
 extern const struct rtos_register_stacking rtos_standard_cortex_r4_stacking;
 extern const struct rtos_register_stacking rtos_standard_nds32_n1068_stacking;
 target_addr_t rtos_generic_stack_align8(struct target *target,
