@@ -51,7 +51,7 @@ int flash_sector_init(struct flash_bank *bank, struct dwcssi_flash_bank *dwcssi_
 		sectors[sector].is_protected = 0;
 	}
 
-	if ((dwcssi_info->dev->size_in_bytes > 0x1000000) && (dwcssi_info->dev->pprog_cmd != 0x02))
+	if (dwcssi_info->dev->size_in_bytes > 0x1000000)
 		dwcssi_info->addr_len = ADDR_L32;
 	else
 		dwcssi_info->addr_len = ADDR_L24;
