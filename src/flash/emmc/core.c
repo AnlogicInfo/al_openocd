@@ -30,7 +30,7 @@ void emmc_device_add(struct emmc_device *c)
 * Manufacturer ID, product name, blocksize, chipsize in MegaByte, erase group size, name
  */
 
-static struct emmc_info emmc_flash_ids[] = 
+static struct emmc_info emmc_flash_ids[] =
 {
     {EMMC_MFR_SAMSUNG, 0x414a54443452, 0x200, 16, 0, "Samsung KLMAG1JETD-B041 16GB EMMC "},
     {EMMC_MFR_SAMSUNG, 0x4d4347384743, 0x200, 64, 0, "Samsung KLMCG8GEAC-B031 64GB EMMC "},
@@ -140,13 +140,13 @@ static int emmc_cid_parse(struct emmc_device *emmc, uint32_t* cid_buf)
 			break;
 		}
 	}
-	
+
 	if (!emmc->device) {
-		LOG_ERROR("unknown EMMC device, pid: %" PRIx64 " mrf_id: %x", pnm, mrf_id);
+		LOG_WARNING("unknown EMMC device, pid: %" PRIx64 " mrf_id: %x", pnm, mrf_id);
 		emmc->device = &emmc_flash_ids[i + 1];
 		emmc->num_blocks = 0;
 		for (i = 0; i < 4; i++)
-			LOG_ERROR("cid %d %"PRIx32 , i, cid_buf[i]);
+			LOG_WARNING("cid %d %"PRIx32 , i, cid_buf[i]);
 	}
 
 	return ERROR_OK;
@@ -180,7 +180,7 @@ int emmc_probe(struct emmc_device *emmc)
         emmc->device->block_size = 0x200;
         status = ERROR_OK;
     }
-	else 
+	else
 	{
 		status = emmc_cid_parse(emmc, in_field);
 		emmc_csd_parse(emmc, in_field + 4);
@@ -206,7 +206,7 @@ int emmc_write_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t a
 }
 
 int emmc_read_data_block(struct emmc_device *emmc, uint32_t *buffer, uint32_t addr)
-{ 
+{
 	emmc->controller->read_block_data(emmc, buffer, addr);
     return ERROR_OK;
 }

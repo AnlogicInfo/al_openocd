@@ -24,9 +24,6 @@ struct emmc_flash_controller *emmc_driver_find_by_name(const char *name)
 			LOG_INFO("emmc driver found %s", name);
 			return controller;
 		}
-		else{
-			LOG_ERROR("Driver not found %s", name);
-		}
 	}
 	return NULL;
 }
