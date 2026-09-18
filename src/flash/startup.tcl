@@ -56,14 +56,14 @@ proc program {media filename args} {
 	}
 
 	# make sure init is called
-	if {[catch {init}] != 0} {
-		program_error "** OpenOCD init failed **" 1
-	}
+	# if {[catch {init}] != 0} {
+	# 	program_error "** OpenOCD init failed **" 1
+	# }
 
 	# reset target and call any init scripts
-	if {[catch {reset init}] != 0} {
-		program_error "** Unable to reset target **" $exit
-	}
+	# if {[catch {reset init}] != 0} {
+	# 	program_error "** Unable to reset target **" $exit
+	# }
 
 	# Check whether programming is needed
 	if {[info exists preverify]} {
