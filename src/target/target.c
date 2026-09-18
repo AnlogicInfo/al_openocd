@@ -1234,8 +1234,8 @@ static void target_poll_loader(struct target *exec_target)
 }
 
 static int target_ping_pong_trans_data(struct target *trans_target,
-    struct target *exec_target,
-    const uint8_t *buffer, int count, uint32_t block_size, struct ping_pong_fifo *pp)
+	struct target *exec_target,
+	const uint8_t *buffer, int count, uint32_t block_size, struct ping_pong_fifo *pp)
 {
     int retval = ERROR_OK;
     int timeout = 0;
@@ -1447,8 +1447,8 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
 
     duration_start(&dur_prog);
     duration_start(&dur_trans);
-    retval = target_ping_pong_trans_data(trans_target, exec_target, buffer, count,
-        block_size, pp);
+	retval = target_ping_pong_trans_data(trans_target, exec_target, buffer, count,
+		block_size, pp);
     duration_measure(&dur_trans);
     if (retval == ERROR_OK) {
         LOG_DEBUG("Transfer completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",
