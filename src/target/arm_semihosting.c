@@ -58,10 +58,12 @@
 
 static int arm_semihosting_resume(struct target *target, int *retval)
 {
+	int debug_execution = target->running_alg ? 1 : 0;
+
 	if (is_armv8(target_to_armv8(target))) {
 		struct armv8_common *armv8 = target_to_armv8(target);
 		if (armv8->last_run_control_op == ARMV8_RUNCONTROL_RESUME) {
-			*retval = target_resume(target, 1, 0, 0, 0);
+			*retval = target_resume(target, 1, 0, 0, debug_execution);
 			if (*retval != ERROR_OK) {
 				LOG_ERROR("Failed to resume target");
 				return 0;
@@ -69,7 +71,7 @@ static int arm_semihosting_resume(struct target *target, int *retval)
 		} else if (armv8->last_run_control_op == ARMV8_RUNCONTROL_STEP)
 			target->debug_reason = DBG_REASON_SINGLESTEP;
 	} else {
-		*retval = target_resume(target, 1, 0, 0, 0);
+		*retval = target_resume(target, 1, 0, 0, debug_execution);
 		if (*retval != ERROR_OK) {
 			LOG_ERROR("Failed to resume target");
 			return 0;

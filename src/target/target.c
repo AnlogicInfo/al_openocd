@@ -657,6 +657,9 @@ int target_halt(struct target *target)
 int target_resume(struct target *target, int current, target_addr_t address,
 		int handle_breakpoints, int debug_execution)
 {
+	if (target->running_alg)
+		debug_execution = 1;
+
 	int retval;
 
 	/* We can't poll until after examine */
@@ -1217,7 +1220,21 @@ static int target_async_algorithm_trans_data(struct target *trans_target, const 
 
 }
 
+static void target_poll_loader(struct target *exec_target)
+{
+	enum target_state previous_state = exec_target->state;
+
+	if (target_poll(exec_target) != ERROR_OK)
+		return;
+
+	/* Keep the loader in debug-execution state after a semihosting resume. */
+	if (previous_state == TARGET_DEBUG_RUNNING &&
+		exec_target->state == TARGET_RUNNING)
+		exec_target->state = TARGET_DEBUG_RUNNING;
+}
+
 static int target_ping_pong_trans_data(struct target *trans_target,
+    struct target *exec_target,
     const uint8_t *buffer, int count, uint32_t block_size, struct ping_pong_fifo *pp)
 {
     int retval = ERROR_OK;
@@ -1229,6 +1246,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
     unsigned int mb_index = 0;
 
     while (count > 0) {
+		target_poll_loader(exec_target);
 		if (remain_section_blks == 0) {
 			uint32_t ctrl = 1U;
             target_write_u32(trans_target, pp->section_start_ptr, g_mailbox.list[mb_index].section_start_addr);
@@ -1244,6 +1262,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 						break;
 					if (ack != 0U) {
 						alive_sleep(100);
+						target_poll_loader(exec_target);
 						if (timeout++ >= 2500) {
 							LOG_ERROR("timeout waiting loader to ack mailbox ctrl_flag");
 							return ERROR_FLASH_OPERATION_FAILED;
@@ -1275,6 +1294,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 
             if (flag != 0) {
                 alive_sleep(2);
+				target_poll_loader(exec_target);
                 if (timeout++ >= 2500) {
                     LOG_ERROR("timeout waiting for free ping-pong buffer");
 					LOG_INFO("read flag 0x%" PRIx32 " addr 0x%" PRIx32, flag, flag_addr);
@@ -1342,6 +1362,7 @@ static int target_ping_pong_trans_data(struct target *trans_target,
 				if (retval != ERROR_OK) break;
 				if (wait_flag == 0) break;
 				alive_sleep(2);
+				target_poll_loader(exec_target);
 				if (timeout++ >= 2500) {
 					LOG_ERROR("timeout waiting for loader to consume last section buffer");
 					return ERROR_FLASH_OPERATION_FAILED;
@@ -1426,7 +1447,8 @@ int target_run_async_algorithm_ping_pong(struct target *trans_target, struct tar
 
     duration_start(&dur_prog);
     duration_start(&dur_trans);
-    retval = target_ping_pong_trans_data(trans_target, buffer, count, block_size, pp);
+    retval = target_ping_pong_trans_data(trans_target, exec_target, buffer, count,
+        block_size, pp);
     duration_measure(&dur_trans);
     if (retval == ERROR_OK) {
         LOG_DEBUG("Transfer completed: elapsed %.3fs, throughput %.1f KB/s, total bytes %u",

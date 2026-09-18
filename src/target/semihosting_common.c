@@ -1336,12 +1336,18 @@ int semihosting_common(struct target *target)
 					fileio_info->param_2 = addr;
 					fileio_info->param_3 = len;
 				} else {
+					size_t data_len = len;
+					const char prefix[] = "Semihost : ";
+					size_t prefix_len = sizeof(prefix) - 1;
+					len += prefix_len;
 					uint8_t *buf = malloc(len);
 					if (!buf) {
 						semihosting->result = -1;
 						semihosting->sys_errno = ENOMEM;
 					} else {
-						retval = target_read_buffer(target, addr, len, buf);
+						memcpy(buf, prefix, prefix_len);
+						retval = target_read_buffer(target, addr, data_len,
+							buf + prefix_len);
 						if (retval != ERROR_OK) {
 							free(buf);
 							return retval;
@@ -1354,10 +1360,14 @@ int semihosting_common(struct target *target)
 							len,
 							(int)semihosting->result);
 						if (semihosting->result >= 0) {
-							/* The number of bytes that are NOT written.
-							 * */
-							semihosting->result = len -
-								semihosting->result;
+							size_t payload_written = 0;
+
+							if ((size_t)semihosting->result > prefix_len)
+								payload_written = semihosting->result - prefix_len;
+							if (payload_written > data_len)
+								payload_written = data_len;
+							/* The number of payload bytes that are NOT written. */
+							semihosting->result = data_len - payload_written;
 						}
 
 						free(buf);
