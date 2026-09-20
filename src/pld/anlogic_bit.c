@@ -159,7 +159,7 @@ int anlogic_read_bit_file(struct anlogic_bit_file *bit_file, const char *filenam
 
     LOG_INFO("bitfile start: %s", bit_file->start);
     LOG_INFO("bitfile version: %s", bit_file->version);
-    LOG_INFO("bitfile design_name: %s", bit_file->design_name);    
+    LOG_INFO("bitfile design_name: %s", bit_file->design_name);
     LOG_INFO("bitfile architecture: %s", bit_file->architecture);
 
         // 保存 data 段和 data_len
@@ -193,6 +193,9 @@ int anlogic_check_architecture(struct anlogic_bit_file* bit_file, const char *dr
         }
         // 特殊情况：dr1_90 驱动也可以用于 dr1_300p 架构
         else if (strcmp(drv_name, "dr1_90") == 0 && strcmp(arch, "dr1_300p") == 0) {
+            match = true;
+        }
+        else if (strcmp(drv_name, "dr1_90") == 0 && strcmp(arch, "dr1_35m") == 0) {
             match = true;
         }
     }

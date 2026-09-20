@@ -85,7 +85,7 @@ static int dr1_read_id(struct pld_device *pld_device, uint32_t *idcode)
     dr1_set_ir(dr1_info->tap, 0x06);
     jtag_add_runtest(15, TAP_IDLE);
     dr1_send_32(pld_device, 1, &outvalue, idcode);
-    
+
     return ERROR_OK;
 
 }
@@ -96,7 +96,7 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
     struct anlogic_bit_file bit_file;
     int download_khz = 5000;
     int actual_khz;
-    uint32_t idcode=0;
+    // uint32_t idcode=0;
     status0_t status0;
     int retval;
     long i;
@@ -115,22 +115,22 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
     if (retval != ERROR_OK)
         return retval;
 
-    dr1_read_id(pld_device, &idcode);
-    dr1_set_ir(dr1_info->tap, 0x1);
-    dr1_set_ir(dr1_info->tap, 0xFF);
-    dr1_set_ir(dr1_info->tap, 0x39);
-    jtag_add_runtest(80000, TAP_IDLE);
-    jtag_execute_queue();
-    
-    dr1_set_ir(dr1_info->tap, 0x30);
+    // dr1_read_id(pld_device, &idcode);
+    // dr1_set_ir(dr1_info->tap, 0x1);     // REFRESH
+    // dr1_set_ir(dr1_info->tap, 0xFF);    // BYPASS
+    // dr1_set_ir(dr1_info->tap, 0x39);    // PRGM_SPI
+    // jtag_add_runtest(80000, TAP_IDLE);
+    // jtag_execute_queue();
+
+    dr1_set_ir(dr1_info->tap, 0x30);    // ISC_ENABLE
     jtag_add_runtest(1000, TAP_IDLE);
-    
-    dr1_set_ir(dr1_info->tap, 0x3b);
+
+    dr1_set_ir(dr1_info->tap, 0x3b);    // BURST
     jtag_add_runtest(1000, TAP_IDLE);
-    
+
     for (i = 0; i < bit_file.data_len; i++)
     {
-        bit_file.data[i] = flip_u32(bit_file.data[i], 8); 
+        bit_file.data[i] = flip_u32(bit_file.data[i], 8);
     }
 
     // 一次性写入全部数据
@@ -142,19 +142,20 @@ static int dr1_load(struct pld_device *pld_device, const char *filename)
 
     jtag_add_runtest(1000, TAP_IDLE);
     jtag_execute_queue();
-    dr1_set_ir(dr1_info->tap, 0x32);
+
+    dr1_set_ir(dr1_info->tap, 0x32);    // ISC_DISABLE
     jtag_add_clocks(1500);
-    
-    dr1_set_ir(dr1_info->tap, 0xFF);
+
+    dr1_set_ir(dr1_info->tap, 0xFF);    // BYPASS
     jtag_add_clocks(1000);
-    
-    dr1_set_ir(dr1_info->tap, 0x31);
+
+    dr1_set_ir(dr1_info->tap, 0x31);    // XREAD_ENABLE
     jtag_add_clocks(1000);
-    
-    dr1_set_ir(dr1_info->tap, 0x32);
+
+    dr1_set_ir(dr1_info->tap, 0x32);    // ISC_DISABLE
     jtag_add_clocks(1000);
-    
-    dr1_set_ir(dr1_info->tap, 0xFF);
+
+    dr1_set_ir(dr1_info->tap, 0xFF);    // BYPASS
     jtag_add_clocks(1000);
     jtag_execute_queue();
 
@@ -266,7 +267,7 @@ static int dr1_load_sector(struct pld_device *pld_device, const char *filename)
     jtag_execute_queue();
 
     dr1_set_ir(dr1_info->tap, 0x21);
-    dr1_send_addr(pld_device, &addr, NULL);    
+    dr1_send_addr(pld_device, &addr, NULL);
     jtag_add_runtest(100, TAP_IDLE);
     dr1_set_ir(dr1_info->tap, 0x23);
     jtag_add_runtest(30, TAP_IDLE);
@@ -275,7 +276,7 @@ static int dr1_load_sector(struct pld_device *pld_device, const char *filename)
 
 
     uint8_t *verify_out_buf, *verify_in_buf;
-    size_t verify_len = 324; // 2592 bits / 8 bits per byte 
+    size_t verify_len = 324; // 2592 bits / 8 bits per byte
     verify_in_buf = malloc(verify_len);
     verify_out_buf = malloc(verify_len);
     memset(verify_in_buf, 0, verify_len);
