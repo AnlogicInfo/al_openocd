@@ -2,6 +2,14 @@ This file includes highlights of the changes made in the AL_OpenOCD
 source archive release.
 
 # history
+v0.1126
+1. support ph1a400sa7 and ph1a400sr7
+2. support loader semihost print in openocd
+3. support al-link tool
+4. fix x8 flash init error
+5. fix flash addr32 check condition
+6. fix dr1 program bitstream flow for dr1m35
+
 v0.1125
 1. fix ph1a400 cfg params and loader func
 2. fix loader trans params
