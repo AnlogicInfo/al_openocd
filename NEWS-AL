@@ -9,6 +9,7 @@ v0.1126
 4. fix x8 flash init error
 5. fix flash addr32 check condition
 6. fix dr1 program bitstream flow for dr1m35
+7. disable ocm_ecc while nvm boot mode program flash
 
 v0.1125
 1. fix ph1a400 cfg params and loader func
